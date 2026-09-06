@@ -48,7 +48,7 @@ func TestServer_FullLifecycle(t *testing.T) {
 
 	handler := httpadapter.NewBaseHandler("odoo_go_backend", "0.1.0", logger)
 	hc := health.NewHealthChecker(dummyPinger{})
-	router := httpadapter.NewRouter(handler, hc, nil, nil, logger)
+	router := httpadapter.NewRouter(handler, hc, nil, nil, nil, nil, nil, nil, nil, nil, nil, logger)
 	wm := worker.NewWorkerManager(logger)
 	customResource := &trackCloser{}
 

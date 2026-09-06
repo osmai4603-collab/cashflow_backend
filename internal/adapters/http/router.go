@@ -8,8 +8,15 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 
-	"cashflow_backend/internal/adapters/http/partner"
+	"cashflow_backend/internal/adapters/http/accounting"
+	crmhttp "cashflow_backend/internal/adapters/http/crm"
+	hrhttp "cashflow_backend/internal/adapters/http/hr"
+	partnerhttp "cashflow_backend/internal/adapters/http/partner"
+	paymenthttp "cashflow_backend/internal/adapters/http/payment"
 	producthttp "cashflow_backend/internal/adapters/http/product"
+	purchasehttp "cashflow_backend/internal/adapters/http/purchase"
+	salehttp "cashflow_backend/internal/adapters/http/sale"
+	stockhttp "cashflow_backend/internal/adapters/http/stock"
 	"cashflow_backend/internal/platform/response"
 )
 
@@ -25,6 +32,13 @@ func NewRouter(
 	health HealthRoutes,
 	partnerHandler *partnerhttp.Handler,
 	productHandler *producthttp.Handler,
+	accountingHandler *accountinghttp.Handler,
+	saleHandler *salehttp.Handler,
+	purchaseHandler *purchasehttp.Handler,
+	stockHandler *stockhttp.Handler,
+	crmHandler *crmhttp.Handler,
+	paymentHandler *paymenthttp.Handler,
+	hrHandler *hrhttp.Handler,
 	logger *slog.Logger,
 ) chi.Router {
 	r := chi.NewRouter()
@@ -59,6 +73,27 @@ func NewRouter(
 		}
 		if productHandler != nil {
 			producthttp.RegisterRoutes(v1, productHandler)
+		}
+		if accountingHandler != nil {
+			accountinghttp.RegisterRoutes(v1, accountingHandler)
+		}
+		if saleHandler != nil {
+			salehttp.RegisterRoutes(v1, saleHandler)
+		}
+		if purchaseHandler != nil {
+			purchasehttp.RegisterRoutes(v1, purchaseHandler)
+		}
+		if stockHandler != nil {
+			stockhttp.RegisterRoutes(v1, stockHandler)
+		}
+		if crmHandler != nil {
+			crmhttp.RegisterRoutes(v1, crmHandler)
+		}
+		if paymentHandler != nil {
+			paymenthttp.RegisterRoutes(v1, paymentHandler)
+		}
+		if hrHandler != nil {
+			hrhttp.RegisterRoutes(v1, hrHandler)
 		}
 	})
 
