@@ -7,14 +7,26 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+
+	"cashflow_backend/internal/adapters/http/partner"
+	producthttp "cashflow_backend/internal/adapters/http/product"
+	"cashflow_backend/internal/platform/response"
 )
 
+// HealthRoutes defines the liveness and readiness probe endpoints.
 type HealthRoutes interface {
 	HandleLiveness(w http.ResponseWriter, r *http.Request)
 	HandleReadiness(w http.ResponseWriter, r *http.Request)
 }
 
-func NewRouter(handler *TransactionHandler, health HealthRoutes, logger *slog.Logger) chi.Router {
+// NewRouter initializes and configures the HTTP router with standard middlewares.
+func NewRouter(
+	handler *BaseHandler,
+	health HealthRoutes,
+	partnerHandler *partnerhttp.Handler,
+	productHandler *producthttp.Handler,
+	logger *slog.Logger,
+) chi.Router {
 	r := chi.NewRouter()
 
 	// Global Middlewares
@@ -24,7 +36,7 @@ func NewRouter(handler *TransactionHandler, health HealthRoutes, logger *slog.Lo
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.Timeout(60 * time.Second))
 
-	// Health Endpoints (Phase 4: /livez and /readyz)
+	// Health Endpoints (/livez and /readyz)
 	if health != nil {
 		r.Get("/livez", health.HandleLiveness)
 		r.Get("/readyz", health.HandleReadiness)
@@ -33,12 +45,21 @@ func NewRouter(handler *TransactionHandler, health HealthRoutes, logger *slog.Lo
 	// Root Endpoint
 	r.Get("/", handler.Root)
 
-	// API Endpoints
-	r.Route("/api/v1/transactions", func(cr chi.Router) {
-		cr.Post("/", handler.Create)
-		cr.Get("/", handler.List)
-		cr.Get("/summary", handler.Summary)
-		cr.Get("/{id}", handler.GetByID)
+	// API v1 Mount Point
+	r.Route("/api/v1", func(v1 chi.Router) {
+		v1.Get("/", func(w http.ResponseWriter, r *http.Request) {
+			response.JSON(w, http.StatusOK, map[string]string{
+				"message": "ERP API v1 is online and ready for business modules",
+			})
+		})
+
+		// Business Modules
+		if partnerHandler != nil {
+			partnerhttp.RegisterRoutes(v1, partnerHandler)
+		}
+		if productHandler != nil {
+			producthttp.RegisterRoutes(v1, productHandler)
+		}
 	})
 
 	return r

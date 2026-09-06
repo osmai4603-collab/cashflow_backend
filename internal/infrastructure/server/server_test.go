@@ -11,12 +11,10 @@ import (
 	"time"
 
 	httpadapter "cashflow_backend/internal/adapters/http"
-	"cashflow_backend/internal/adapters/storage"
 	"cashflow_backend/internal/infrastructure/config"
 	"cashflow_backend/internal/infrastructure/health"
 	"cashflow_backend/internal/infrastructure/server"
 	"cashflow_backend/internal/infrastructure/worker"
-	"cashflow_backend/internal/usecase"
 )
 
 type trackCloser struct {
@@ -25,6 +23,12 @@ type trackCloser struct {
 
 func (t *trackCloser) Close() error {
 	t.closed.Store(true)
+	return nil
+}
+
+type dummyPinger struct{}
+
+func (dummyPinger) Ping(ctx context.Context) error {
 	return nil
 }
 
@@ -42,15 +46,13 @@ func TestServer_FullLifecycle(t *testing.T) {
 		MaxHeaderBytes:    1 << 20,
 	}
 
-	repo := storage.NewMemoryTransactionRepo()
-	uc := usecase.NewTransactionUseCase(repo)
-	handler := httpadapter.NewTransactionHandler(uc, logger)
-	hc := health.NewHealthChecker(repo)
-	router := httpadapter.NewRouter(handler, hc, logger)
+	handler := httpadapter.NewBaseHandler("odoo_go_backend", "0.1.0", logger)
+	hc := health.NewHealthChecker(dummyPinger{})
+	router := httpadapter.NewRouter(handler, hc, nil, nil, logger)
 	wm := worker.NewWorkerManager(logger)
 	customResource := &trackCloser{}
 
-	srv := server.NewServer(cfg, router, hc, wm, logger, repo, customResource)
+	srv := server.NewServer(cfg, router, hc, wm, logger, customResource)
 
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {

@@ -1,7 +1,6 @@
 package httpadapter_test
 
 import (
-	"bytes"
 	"encoding/json"
 	"io"
 	"log/slog"
@@ -10,8 +9,13 @@ import (
 	"testing"
 
 	httpadapter "cashflow_backend/internal/adapters/http"
-	"cashflow_backend/internal/adapters/storage"
-	"cashflow_backend/internal/usecase"
+	partnerhttp "cashflow_backend/internal/adapters/http/partner"
+	producthttp "cashflow_backend/internal/adapters/http/product"
+	partnerstorage "cashflow_backend/internal/adapters/storage/partner"
+	productstorage "cashflow_backend/internal/adapters/storage/product"
+	"cashflow_backend/internal/platform/response"
+	partnerusecase "cashflow_backend/internal/usecase/partner"
+	productusecase "cashflow_backend/internal/usecase/product"
 )
 
 type mockHealthRoutes struct{}
@@ -26,25 +30,30 @@ func (m *mockHealthRoutes) HandleReadiness(w http.ResponseWriter, r *http.Reques
 	_, _ = w.Write([]byte(`{"status":"ready"}`))
 }
 
-func setupTestServer() (http.Handler, *storage.MemoryTransactionRepo) {
+func setupTestServer() http.Handler {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	repo := storage.NewMemoryTransactionRepo()
-	uc := usecase.NewTransactionUseCase(repo)
-	handler := httpadapter.NewTransactionHandler(uc, logger)
+	handler := httpadapter.NewBaseHandler("odoo_go_backend", "0.1.0", logger)
 	health := &mockHealthRoutes{}
-	router := httpadapter.NewRouter(handler, health, logger)
-	return router, repo
+	return httpadapter.NewRouter(handler, health, nil, nil, logger)
 }
 
 func TestRouter_Endpoints(t *testing.T) {
-	router, _ := setupTestServer()
+	router := setupTestServer()
 
-	// 1. Root
+	// 1. Root /
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	rr := httptest.NewRecorder()
 	router.ServeHTTP(rr, req)
 	if rr.Code != http.StatusOK {
 		t.Errorf("expected 200 on /, got %d", rr.Code)
+	}
+
+	var rootEnv response.Envelope
+	if err := json.NewDecoder(rr.Body).Decode(&rootEnv); err != nil {
+		t.Fatalf("failed to decode root response: %v", err)
+	}
+	if !rootEnv.Success {
+		t.Errorf("expected success=true on root endpoint")
 	}
 
 	// 2. Health routes
@@ -55,65 +64,71 @@ func TestRouter_Endpoints(t *testing.T) {
 		t.Errorf("expected 200 on /livez, got %d", rr.Code)
 	}
 
-	// 3. Create Transaction
-	body := []byte(`{"amount": 120.50, "type": "income", "description": "Salary"}`)
-	req = httptest.NewRequest(http.MethodPost, "/api/v1/transactions", bytes.NewReader(body))
-	rr = httptest.NewRecorder()
-	router.ServeHTTP(rr, req)
-	if rr.Code != http.StatusCreated {
-		t.Fatalf("expected 201 Created, got %d: %s", rr.Code, rr.Body.String())
-	}
-
-	var created httpadapter.TransactionResponse
-	if err := json.NewDecoder(rr.Body).Decode(&created); err != nil {
-		t.Fatalf("failed to decode response: %v", err)
-	}
-	if created.Amount != 120.50 || created.Type != "income" {
-		t.Errorf("unexpected created transaction: %+v", created)
-	}
-
-	// 4. Get by ID
-	req = httptest.NewRequest(http.MethodGet, "/api/v1/transactions/"+created.ID, nil)
+	req = httptest.NewRequest(http.MethodGet, "/readyz", nil)
 	rr = httptest.NewRecorder()
 	router.ServeHTTP(rr, req)
 	if rr.Code != http.StatusOK {
-		t.Errorf("expected 200 OK, got %d: %s", rr.Code, rr.Body.String())
+		t.Errorf("expected 200 on /readyz, got %d", rr.Code)
 	}
 
-	// 5. Summary
-	req = httptest.NewRequest(http.MethodGet, "/api/v1/transactions/summary", nil)
+	// 3. API v1 mount
+	req = httptest.NewRequest(http.MethodGet, "/api/v1", nil)
 	rr = httptest.NewRecorder()
 	router.ServeHTTP(rr, req)
 	if rr.Code != http.StatusOK {
-		t.Errorf("expected 200 OK, got %d: %s", rr.Code, rr.Body.String())
-	}
-
-	var summary httpadapter.SummaryResponse
-	if err := json.NewDecoder(rr.Body).Decode(&summary); err != nil {
-		t.Fatalf("failed to decode summary: %v", err)
-	}
-	if summary.TotalIncome != 120.50 || summary.Count != 1 {
-		t.Errorf("unexpected summary: %+v", summary)
+		t.Errorf("expected 200 on /api/v1, got %d", rr.Code)
 	}
 }
 
-func TestRouter_ValidationErrors(t *testing.T) {
-	router, _ := setupTestServer()
+func TestRouter_PartnerIntegration(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	baseHandler := httpadapter.NewBaseHandler("odoo_go_backend", "0.1.0", logger)
+	health := &mockHealthRoutes{}
 
-	// Invalid amount
-	body := []byte(`{"amount": -50, "type": "expense", "description": "Coffee"}`)
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/transactions", bytes.NewReader(body))
+	// Setup memory repo and partner handler
+	repo := partnerstorage.NewMemoryRepo()
+	uc := partnerusecase.New(repo, logger)
+	partnerHandler := partnerhttp.NewHandler(uc, logger)
+
+	router := httpadapter.NewRouter(baseHandler, health, partnerHandler, nil, logger)
+
+	// Test GET /api/v1/partners
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/partners", nil)
 	rr := httptest.NewRecorder()
 	router.ServeHTTP(rr, req)
-	if rr.Code != http.StatusBadRequest {
-		t.Errorf("expected 400 Bad Request, got %d", rr.Code)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("expected 200 on /api/v1/partners, got %d", rr.Code)
+	}
+}
+
+func TestRouter_ProductIntegration(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	baseHandler := httpadapter.NewBaseHandler("odoo_go_backend", "0.1.0", logger)
+	health := &mockHealthRoutes{}
+
+	// Setup memory repo and product handler
+	repo := productstorage.NewMemoryRepo()
+	uc := productusecase.New(repo, logger)
+	productHandler := producthttp.NewHandler(uc, logger)
+
+	router := httpadapter.NewRouter(baseHandler, health, nil, productHandler, logger)
+
+	// Test GET /api/v1/products
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/products", nil)
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("expected 200 on /api/v1/products, got %d", rr.Code)
 	}
 
-	// Not found
-	req = httptest.NewRequest(http.MethodGet, "/api/v1/transactions/non-existent-id", nil)
+	// Test GET /api/v1/uom
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/uom", nil)
 	rr = httptest.NewRecorder()
 	router.ServeHTTP(rr, req)
-	if rr.Code != http.StatusNotFound {
-		t.Errorf("expected 404 Not Found, got %d", rr.Code)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("expected 200 on /api/v1/uom, got %d", rr.Code)
 	}
 }
