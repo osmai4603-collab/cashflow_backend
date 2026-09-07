@@ -10,9 +10,9 @@ import (
 	"net/http"
 	"time"
 
-	"cashflow_backend/internal/infrastructure/config"
 	"cashflow_backend/internal/infrastructure/health"
 	"cashflow_backend/internal/infrastructure/worker"
+	platconfig "cashflow_backend/internal/platform/config"
 )
 
 // Server coordinates the complete HTTP server lifecycle across all 7 phases:
@@ -25,7 +25,7 @@ import (
 // Phase 7: Cleanup (reverse order)
 type Server struct {
 	httpServer *http.Server
-	cfg        *config.Config
+	cfg        *platconfig.Configuration
 	logger     *slog.Logger
 	health     *health.HealthChecker
 	workerMgr  *worker.WorkerManager
@@ -36,7 +36,7 @@ type Server struct {
 // NewServer configures a new Server instance.
 // Critical: Always sets all 4 network timeouts (Read, ReadHeader, Write, Idle).
 func NewServer(
-	cfg *config.Config,
+	cfg *platconfig.Configuration,
 	handler http.Handler,
 	healthChecker *health.HealthChecker,
 	workerMgr *worker.WorkerManager,
@@ -44,13 +44,13 @@ func NewServer(
 	resources ...io.Closer,
 ) *Server {
 	srv := &http.Server{
-		Addr:              ":" + cfg.Port,
+		Addr:              cfg.HTTPAddr(),
 		Handler:           handler,
-		ReadTimeout:       cfg.ReadTimeout,
-		ReadHeaderTimeout: cfg.ReadHeaderTimeout,
-		WriteTimeout:      cfg.WriteTimeout,
-		IdleTimeout:       cfg.IdleTimeout,
-		MaxHeaderBytes:    cfg.MaxHeaderBytes,
+		ReadTimeout:       cfg.Server.ReadTimeout,
+		ReadHeaderTimeout: cfg.Server.ReadHeaderTimeout,
+		WriteTimeout:      cfg.Server.WriteTimeout,
+		IdleTimeout:       cfg.Server.IdleTimeout,
+		MaxHeaderBytes:    cfg.Server.MaxHeaderBytes,
 	}
 
 	return &Server{
@@ -118,18 +118,18 @@ func (s *Server) Run(ctx context.Context) error {
 	// ─────────────────────────────────────────────────────────────────────
 	// 5a. Mark not ready so load balancers stop sending new requests
 	s.health.MarkNotReady()
-	s.logger.Info("drain phase: server marked as not ready", "drain_duration", s.cfg.DrainDuration)
+	s.logger.Info("drain phase: server marked as not ready", "drain_duration", s.cfg.Server.DrainDuration)
 
 	// 5b. Wait for load balancer to update routing tables
-	if s.cfg.DrainDuration > 0 {
-		time.Sleep(s.cfg.DrainDuration)
+	if s.cfg.Server.DrainDuration > 0 {
+		time.Sleep(s.cfg.Server.DrainDuration)
 	}
 
 	// ─────────────────────────────────────────────────────────────────────
 	// PHASE 6: Graceful Shutdown
 	// ─────────────────────────────────────────────────────────────────────
-	s.logger.Info("graceful shutdown starting", "timeout", s.cfg.ShutdownTimeout)
-	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), s.cfg.ShutdownTimeout)
+	s.logger.Info("graceful shutdown starting", "timeout", s.cfg.Server.ShutdownTimeout)
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), s.cfg.Server.ShutdownTimeout)
 	defer shutdownCancel()
 
 	if err := s.httpServer.Shutdown(shutdownCtx); err != nil {

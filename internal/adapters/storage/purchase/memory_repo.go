@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"cashflow_backend/internal/domain/purchase"
+	"cashflow_backend/internal/platform/audit"
 	platformerrors "cashflow_backend/internal/platform/errors"
 	"cashflow_backend/internal/platform/filter"
 	"cashflow_backend/internal/platform/pagination"
@@ -39,11 +40,14 @@ func NewMemoryRepo() *MemoryRepo {
 func (r *MemoryRepo) CreateOrder(ctx context.Context, order *purchase.PurchaseOrder) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	if order.CompanyID == nil {
+		order.CompanyID = audit.CompanyIDFromContext(ctx)
+	}
 
 	// Check name uniqueness if not draft placeholder
 	if order.Name != "" && order.Name != "/" {
 		for _, o := range r.orders {
-			if o.Active && strings.EqualFold(o.Name, order.Name) {
+			if o.Active && companyMatches(ctx, o.CompanyID) && strings.EqualFold(o.Name, order.Name) {
 				return platformerrors.Conflict(fmt.Sprintf("purchase order name '%s' already exists", order.Name))
 			}
 		}
@@ -81,7 +85,7 @@ func (r *MemoryRepo) GetOrderByID(ctx context.Context, id int64) (*purchase.Purc
 	defer r.mu.RUnlock()
 
 	order, ok := r.orders[id]
-	if !ok || !order.Active {
+	if !ok || !order.Active || !companyMatches(ctx, order.CompanyID) {
 		return nil, platformerrors.NotFound("purchase order not found")
 	}
 
@@ -94,7 +98,7 @@ func (r *MemoryRepo) GetOrderByName(ctx context.Context, name string) (*purchase
 	defer r.mu.RUnlock()
 
 	for _, o := range r.orders {
-		if o.Active && strings.EqualFold(o.Name, name) {
+		if o.Active && companyMatches(ctx, o.CompanyID) && strings.EqualFold(o.Name, name) {
 			return r.populateOrder(o), nil
 		}
 	}
@@ -107,7 +111,7 @@ func (r *MemoryRepo) UpdateOrder(ctx context.Context, order *purchase.PurchaseOr
 	defer r.mu.Unlock()
 
 	existing, ok := r.orders[order.ID]
-	if !ok || !existing.Active {
+	if !ok || !existing.Active || !companyMatches(ctx, existing.CompanyID) {
 		return platformerrors.NotFound("purchase order not found")
 	}
 
@@ -152,7 +156,7 @@ func (r *MemoryRepo) DeleteOrder(ctx context.Context, id int64) error {
 	defer r.mu.Unlock()
 
 	order, ok := r.orders[id]
-	if !ok || !order.Active {
+	if !ok || !order.Active || !companyMatches(ctx, order.CompanyID) {
 		return platformerrors.NotFound("purchase order not found")
 	}
 
@@ -176,7 +180,7 @@ func (r *MemoryRepo) ListOrders(ctx context.Context, f *filter.Filter, page pagi
 
 	var matching []purchase.PurchaseOrder
 	for _, o := range r.orders {
-		if !o.Active {
+		if !o.Active || !companyMatches(ctx, o.CompanyID) {
 			continue
 		}
 
@@ -230,6 +234,11 @@ func (r *MemoryRepo) ListOrders(ctx context.Context, f *filter.Filter, page pagi
 	}
 
 	return pagination.NewPageResult(matching[offset:end], total, page), nil
+}
+
+func companyMatches(ctx context.Context, companyID *int64) bool {
+	current := audit.CompanyIDFromContext(ctx)
+	return current == nil || (companyID != nil && *companyID == *current)
 }
 
 // NextSequence generates a thread-safe sequence number formatted as "PO/YYYY/NNNNN".

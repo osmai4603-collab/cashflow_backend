@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"cashflow_backend/internal/domain/partner"
+	"cashflow_backend/internal/platform/audit"
 	platformerrors "cashflow_backend/internal/platform/errors"
 	"cashflow_backend/internal/platform/filter"
 	"cashflow_backend/internal/platform/pagination"
@@ -30,6 +31,9 @@ func NewMemoryRepo() *MemoryRepo {
 func (r *MemoryRepo) Create(ctx context.Context, p *partner.Partner) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	if p.CompanyID == nil {
+		p.CompanyID = audit.CompanyIDFromContext(ctx)
+	}
 
 	r.lastID++
 	p.ID = r.lastID
@@ -53,7 +57,7 @@ func (r *MemoryRepo) GetByID(ctx context.Context, id int64) (*partner.Partner, e
 	defer r.mu.RUnlock()
 
 	p, exists := r.partners[id]
-	if !exists || !p.Active {
+	if !exists || !p.Active || !companyMatches(ctx, p.CompanyID) {
 		return nil, platformerrors.NotFound("partner not found")
 	}
 
@@ -66,7 +70,7 @@ func (r *MemoryRepo) Update(ctx context.Context, p *partner.Partner) error {
 	defer r.mu.Unlock()
 
 	existing, exists := r.partners[p.ID]
-	if !exists || !existing.Active {
+	if !exists || !existing.Active || !companyMatches(ctx, existing.CompanyID) {
 		return platformerrors.NotFound("partner not found")
 	}
 
@@ -81,7 +85,7 @@ func (r *MemoryRepo) Delete(ctx context.Context, id int64) error {
 	defer r.mu.Unlock()
 
 	existing, exists := r.partners[id]
-	if !exists || !existing.Active {
+	if !exists || !existing.Active || !companyMatches(ctx, existing.CompanyID) {
 		return platformerrors.NotFound("partner not found")
 	}
 
@@ -96,6 +100,9 @@ func (r *MemoryRepo) List(ctx context.Context, f *filter.Filter, page pagination
 
 	var filtered []*partner.Partner
 	for _, p := range r.partners {
+		if !companyMatches(ctx, p.CompanyID) {
+			continue
+		}
 		if !r.matchesFilter(p, f) {
 			continue
 		}
@@ -139,6 +146,11 @@ func (r *MemoryRepo) List(ctx context.Context, f *filter.Filter, page pagination
 	}
 
 	return pagination.NewPageResult(items, totalItems, page), nil
+}
+
+func companyMatches(ctx context.Context, companyID *int64) bool {
+	current := audit.CompanyIDFromContext(ctx)
+	return current == nil || (companyID != nil && *companyID == *current)
 }
 
 func (r *MemoryRepo) ListCustomers(ctx context.Context, page pagination.PageRequest) (pagination.PageResult[partner.Partner], error) {

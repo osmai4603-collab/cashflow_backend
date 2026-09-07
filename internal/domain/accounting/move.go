@@ -56,8 +56,60 @@ type AccountMoveLine struct {
 	Balance   float64   `json:"balance"` // debit - credit
 	TaxIDs    []int64   `json:"tax_ids,omitempty"`
 	TaxAmount float64   `json:"tax_amount"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	// Reconcile reports whether the underlying account allows reconciliation.
+	Reconcile bool `json:"reconcile"`
+	// Reconciled flags a line whose outstanding balance has been fully settled.
+	Reconciled bool `json:"reconciled"`
+	// AmountResidual is the outstanding amount still to be reconciled (always non-negative).
+	AmountResidual float64 `json:"amount_residual"`
+	// MatchingNumber groups lines participating in the same (full or partial) reconciliation.
+	MatchingNumber *string `json:"matching_number,omitempty"`
+	// StatementLineID links this line to the bank statement line that created/cleared it.
+	StatementLineID *int64  `json:"statement_line_id,omitempty"`
+	// DisplayType classifies generated lines ("" default/product, "cogs" for Anglo-Saxon cost lines).
+	DisplayType string `json:"display_type,omitempty"`
+	// CogsOriginID references the invoiced line that generated a COGS counterpart line.
+	CogsOriginID *int64 `json:"cogs_origin_id,omitempty"`
+	CreatedAt      time.Time `json:"created_at"`
+	UpdatedAt      time.Time `json:"updated_at"`
+}
+
+// IsDebit reports whether the line carries a debit balance.
+func (l *AccountMoveLine) IsDebit() bool {
+	return l.Debit > l.Credit
+}
+
+// AbsBalance returns the absolute value of the line balance.
+func (l *AccountMoveLine) AbsBalance() float64 {
+	if l.Balance < 0 {
+		return -l.Balance
+	}
+	return l.Balance
+}
+
+// ComputeResidual derives the outstanding reconciliation amount from the line balance.
+func (l *AccountMoveLine) ComputeResidual() {
+	if l.Reconcile && !l.Reconciled {
+		l.AmountResidual = roundTo4(math.Max(0, l.AbsBalance()-l.AmountMatched()))
+	} else {
+		l.AmountResidual = 0
+	}
+}
+
+// AmountMatched returns the portion of the line balance already settled by reconciliations.
+func (l *AccountMoveLine) AmountMatched() float64 {
+	if l.Reconcile && l.AmountResidual >= 0 {
+		return roundTo4(l.AbsBalance() - l.AmountResidual)
+	}
+	return 0
+}
+
+// MarkReconciled sets/clears the reconciled flag and zeroes the residual accordingly.
+func (l *AccountMoveLine) MarkReconciled(reconciled bool) {
+	l.Reconciled = reconciled
+	if reconciled {
+		l.AmountResidual = 0
+	}
 }
 
 // AccountMove represents a complete journal entry or invoice (account.move in Odoo).
@@ -81,6 +133,10 @@ type AccountMove struct {
 	Ref             string            `json:"ref,omitempty"`
 	ReversedEntryID *int64            `json:"reversed_entry_id,omitempty"`
 	Lines           []AccountMoveLine `json:"lines,omitempty"`
+	// EDI Fields (ZATCA / Odoo compliant)
+	IsSimplified  bool `json:"is_simplified"`
+	IsSelfBilling bool `json:"is_self_billing"`
+	IsThirdParty  bool `json:"is_third_party"`
 	Active          bool              `json:"active"`
 	Audit           audit.Fields      `json:"audit"`
 }

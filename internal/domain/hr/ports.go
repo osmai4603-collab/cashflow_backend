@@ -53,4 +53,35 @@ type Repository interface {
 	GetApprovedLeaveDays(ctx context.Context, employeeID int64, leaveType string, year int) (float64, error)
 	GetPendingLeaveDays(ctx context.Context, employeeID int64, leaveType string, year int) (float64, error)
 	HasOverlappingLeave(ctx context.Context, employeeID int64, from, to time.Time, excludeID int64) (bool, error)
+
+	// Attendance
+	CreateAttendance(ctx context.Context, att *Attendance) error
+	GetAttendanceByID(ctx context.Context, id int64) (*Attendance, error)
+	UpdateAttendance(ctx context.Context, att *Attendance) error
+	DeleteAttendance(ctx context.Context, id int64) error
+	ListAttendance(ctx context.Context, f *filter.Filter, page pagination.PageRequest) (pagination.PageResult[Attendance], error)
+	GetLastAttendance(ctx context.Context, employeeID int64) (*Attendance, error)
+
+	// Overtime
+	CreateOvertimeLine(ctx context.Context, line *OvertimeLine) error
+	GetOvertimeLineByID(ctx context.Context, id int64) (*OvertimeLine, error)
+	UpdateOvertimeLine(ctx context.Context, line *OvertimeLine) error
+	DeleteOvertimeLine(ctx context.Context, id int64) error
+	ListOvertimeLines(ctx context.Context, f *filter.Filter, page pagination.PageRequest) (pagination.PageResult[OvertimeLine], error)
+
+	CreateOvertimeRule(ctx context.Context, rule *OvertimeRule) error
+	GetOvertimeRuleByID(ctx context.Context, id int64) (*OvertimeRule, error)
+	UpdateOvertimeRule(ctx context.Context, rule *OvertimeRule) error
+	DeleteOvertimeRule(ctx context.Context, id int64) error
+	ListOvertimeRules(ctx context.Context, f *filter.Filter, page pagination.PageRequest) (pagination.PageResult[OvertimeRule], error)
+}
+
+// AttendanceUseCase defines the business logic for attendance and overtime.
+type AttendanceUseCase interface {
+	CheckIn(ctx context.Context, employeeID int64, info Attendance) (*Attendance, error)
+	CheckOut(ctx context.Context, employeeID int64, info Attendance) (*Attendance, error)
+	GetKioskConfig(ctx context.Context, companyID int64) (map[string]any, error)
+	ApproveOvertime(ctx context.Context, lineID int64, managerID int64) error
+	RefuseOvertime(ctx context.Context, lineID int64, managerID int64) error
+	GetAttendanceReport(ctx context.Context, employeeID int64, from, to time.Time) ([]Attendance, error)
 }

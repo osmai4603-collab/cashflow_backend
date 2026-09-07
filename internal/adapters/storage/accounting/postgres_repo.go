@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"strings"
 	"time"
 
@@ -670,28 +671,38 @@ func (r *PostgresRepo) CreateMove(ctx context.Context, m *accounting.AccountMove
 			return platformerrors.Internal("failed to create account move", err)
 		}
 
+		reconcileFlags, err := loadReconcileFlags(ctx, tx, m.Lines)
+		if err != nil {
+			return err
+		}
+
 		lineQuery := `
 			INSERT INTO account_move_lines (
 				move_id, account_id, partner_id, product_id, name,
 				quantity, price_unit, discount, debit, credit, balance,
-				tax_ids, tax_amount, created_at, updated_at
+				tax_ids, tax_amount, reconcile, reconciled, amount_residual,
+				matching_number, statement_line_id, display_type, cogs_origin_id, created_at, updated_at
 			) VALUES (
 				$1, $2, $3, $4, $5,
 				$6, $7, $8, $9, $10, $11,
-				$12, $13, $14, $15
+				$12, $13, $14, $15, $16,
+				$17, $18, $19, $20, NOW(), NOW()
 			) RETURNING id, created_at, updated_at
 		`
 		for i := range m.Lines {
-			m.Lines[i].MoveID = m.ID
-			m.Lines[i].Balance = m.Lines[i].Debit - m.Lines[i].Credit
-			m.Lines[i].CreatedAt = now
-			m.Lines[i].UpdatedAt = now
+			l := &m.Lines[i]
+			l.MoveID = m.ID
+			l.Balance = l.Debit - l.Credit
+			l.CreatedAt = now
+			l.UpdatedAt = now
+			applyReconcileDefaults(l, reconcileFlags[l.AccountID])
 
 			if err := tx.QueryRow(ctx, lineQuery,
-				m.ID, m.Lines[i].AccountID, m.Lines[i].PartnerID, m.Lines[i].ProductID, m.Lines[i].Name,
-				m.Lines[i].Quantity, m.Lines[i].PriceUnit, m.Lines[i].Discount, m.Lines[i].Debit, m.Lines[i].Credit, m.Lines[i].Balance,
-				m.Lines[i].TaxIDs, m.Lines[i].TaxAmount, m.Lines[i].CreatedAt, m.Lines[i].UpdatedAt,
-			).Scan(&m.Lines[i].ID, &m.Lines[i].CreatedAt, &m.Lines[i].UpdatedAt); err != nil {
+				m.ID, l.AccountID, l.PartnerID, l.ProductID, l.Name,
+				l.Quantity, l.PriceUnit, l.Discount, l.Debit, l.Credit, l.Balance,
+				l.TaxIDs, l.TaxAmount, l.Reconcile, l.Reconciled, l.AmountResidual,
+				l.MatchingNumber, l.StatementLineID, l.DisplayType, l.CogsOriginID, l.CreatedAt, l.UpdatedAt,
+			).Scan(&l.ID, &l.CreatedAt, &l.UpdatedAt); err != nil {
 				return platformerrors.Internal("failed to insert move line", err)
 			}
 		}
@@ -737,7 +748,8 @@ func (r *PostgresRepo) GetMoveWithLines(ctx context.Context, id int64) (*account
 	linesQuery := `
 		SELECT id, move_id, account_id, partner_id, product_id, name,
 		       quantity, price_unit, discount, debit, credit, balance,
-		       tax_ids, tax_amount, created_at, updated_at
+		       tax_ids, tax_amount, reconcile, reconciled, amount_residual,
+		       matching_number, statement_line_id, display_type, cogs_origin_id, created_at, updated_at
 		FROM account_move_lines
 		WHERE move_id = $1
 		ORDER BY id ASC
@@ -753,7 +765,8 @@ func (r *PostgresRepo) GetMoveWithLines(ctx context.Context, id int64) (*account
 		if err := rows.Scan(
 			&l.ID, &l.MoveID, &l.AccountID, &l.PartnerID, &l.ProductID, &l.Name,
 			&l.Quantity, &l.PriceUnit, &l.Discount, &l.Debit, &l.Credit, &l.Balance,
-			&l.TaxIDs, &l.TaxAmount, &l.CreatedAt, &l.UpdatedAt,
+			&l.TaxIDs, &l.TaxAmount, &l.Reconcile, &l.Reconciled, &l.AmountResidual,
+			&l.MatchingNumber, &l.StatementLineID, &l.DisplayType, &l.CogsOriginID, &l.CreatedAt, &l.UpdatedAt,
 		); err != nil {
 			return nil, platformerrors.Internal("failed to scan move line", err)
 		}
@@ -791,25 +804,34 @@ func (r *PostgresRepo) UpdateMove(ctx context.Context, m *accounting.AccountMove
 			if _, err := tx.Exec(ctx, `DELETE FROM account_move_lines WHERE move_id = $1`, m.ID); err != nil {
 				return platformerrors.Internal("failed to replace move lines", err)
 			}
+			reconcileFlags, err := loadReconcileFlags(ctx, tx, m.Lines)
+			if err != nil {
+				return err
+			}
 			lineQuery := `
 				INSERT INTO account_move_lines (
 					move_id, account_id, partner_id, product_id, name,
 					quantity, price_unit, discount, debit, credit, balance,
-					tax_ids, tax_amount, created_at, updated_at
+					tax_ids, tax_amount, reconcile, reconciled, amount_residual,
+					matching_number, statement_line_id, display_type, cogs_origin_id, created_at, updated_at
 				) VALUES (
 					$1, $2, $3, $4, $5,
 					$6, $7, $8, $9, $10, $11,
-					$12, $13, NOW(), NOW()
+					$12, $13, $14, $15, $16,
+					$17, $18, $19, $20, NOW(), NOW()
 				) RETURNING id
 			`
 			for i := range m.Lines {
-				m.Lines[i].MoveID = m.ID
-				m.Lines[i].Balance = m.Lines[i].Debit - m.Lines[i].Credit
+				l := &m.Lines[i]
+				l.MoveID = m.ID
+				l.Balance = l.Debit - l.Credit
+				applyReconcileDefaults(l, reconcileFlags[l.AccountID])
 				if err := tx.QueryRow(ctx, lineQuery,
-					m.ID, m.Lines[i].AccountID, m.Lines[i].PartnerID, m.Lines[i].ProductID, m.Lines[i].Name,
-					m.Lines[i].Quantity, m.Lines[i].PriceUnit, m.Lines[i].Discount, m.Lines[i].Debit, m.Lines[i].Credit, m.Lines[i].Balance,
-					m.Lines[i].TaxIDs, m.Lines[i].TaxAmount,
-				).Scan(&m.Lines[i].ID); err != nil {
+					m.ID, l.AccountID, l.PartnerID, l.ProductID, l.Name,
+					l.Quantity, l.PriceUnit, l.Discount, l.Debit, l.Credit, l.Balance,
+					l.TaxIDs, l.TaxAmount, l.Reconcile, l.Reconciled, l.AmountResidual,
+					l.MatchingNumber, l.StatementLineID, l.DisplayType, l.CogsOriginID,
+				).Scan(&l.ID); err != nil {
 					return platformerrors.Internal("failed to insert move line on update", err)
 				}
 			}
@@ -883,6 +905,124 @@ func (r *PostgresRepo) ListMoves(ctx context.Context, f *filter.Filter, page pag
 	}
 
 	return pagination.NewPageResult(moves, total, page), nil
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Move Lines & Reconciliation
+// ─────────────────────────────────────────────────────────────────────────────
+
+// scanMoveLineColumns lists the persisted move-line columns in scan order.
+const moveLineColumns = `id, move_id, account_id, partner_id, product_id, name,
+		quantity, price_unit, discount, debit, credit, balance,
+		tax_ids, tax_amount, reconcile, reconciled, amount_residual,
+		matching_number, statement_line_id, display_type, cogs_origin_id, created_at, updated_at`
+
+func (r *PostgresRepo) GetMoveLineByID(ctx context.Context, id int64) (*accounting.AccountMoveLine, error) {
+	query := `
+		SELECT ` + moveLineColumns + `
+		FROM account_move_lines
+		WHERE id = $1
+	`
+	var l accounting.AccountMoveLine
+	if err := r.pool.QueryRow(ctx, query, id).Scan(
+		&l.ID, &l.MoveID, &l.AccountID, &l.PartnerID, &l.ProductID, &l.Name,
+		&l.Quantity, &l.PriceUnit, &l.Discount, &l.Debit, &l.Credit, &l.Balance,
+		&l.TaxIDs, &l.TaxAmount, &l.Reconcile, &l.Reconciled, &l.AmountResidual,
+		&l.MatchingNumber, &l.StatementLineID, &l.DisplayType, &l.CogsOriginID, &l.CreatedAt, &l.UpdatedAt,
+	); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, platformerrors.NotFound(fmt.Sprintf("account move line with id %d not found", id))
+		}
+		return nil, platformerrors.Internal("failed to fetch move line", err)
+	}
+	return &l, nil
+}
+
+func (r *PostgresRepo) UpdateMoveLine(ctx context.Context, l *accounting.AccountMoveLine) error {
+	query := `
+		UPDATE account_move_lines
+		SET account_id = $2, partner_id = $3, product_id = $4, name = $5,
+		    quantity = $6, price_unit = $7, discount = $8, debit = $9, credit = $10,
+		    balance = $11, tax_ids = $12, tax_amount = $13,
+		    reconcile = $14, reconciled = $15, amount_residual = $16,
+		    matching_number = $17, statement_line_id = $18, updated_at = NOW()
+		WHERE id = $1
+		RETURNING updated_at
+	`
+	if err := r.pool.QueryRow(ctx, query,
+		l.ID, l.AccountID, l.PartnerID, l.ProductID, l.Name,
+		l.Quantity, l.PriceUnit, l.Discount, l.Debit, l.Credit, l.Balance,
+		l.TaxIDs, l.TaxAmount, l.Reconcile, l.Reconciled, l.AmountResidual,
+		l.MatchingNumber, l.StatementLineID,
+	).Scan(&l.UpdatedAt); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return platformerrors.NotFound(fmt.Sprintf("account move line with id %d not found", l.ID))
+		}
+		return platformerrors.Internal("failed to update move line", err)
+	}
+	return nil
+}
+
+func (r *PostgresRepo) UpdateMoveLineReconcile(ctx context.Context, id int64, reconciled bool, residual float64, matchingNumber *string) error {
+	query := `
+		UPDATE account_move_lines
+		SET reconciled = $2, amount_residual = $3, matching_number = $4, updated_at = NOW()
+		WHERE id = $1
+		RETURNING id
+	`
+	var updatedID int64
+	if err := r.pool.QueryRow(ctx, query, id, reconciled, residual, matchingNumber).Scan(&updatedID); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return platformerrors.NotFound(fmt.Sprintf("account move line with id %d not found", id))
+		}
+		return platformerrors.Internal("failed to update move line reconciliation state", err)
+	}
+	return nil
+}
+
+// ListReconcilableMoveLines returns posted, reconcilable, unmatched move lines for a partner.
+func (r *PostgresRepo) ListReconcilableMoveLines(ctx context.Context, partnerID *int64, excludeLineIDs []int64, limit int) ([]accounting.AccountMoveLine, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+	var exclude []int64
+	if len(excludeLineIDs) > 0 {
+		exclude = excludeLineIDs
+	}
+
+	query := `
+		SELECT ` + moveLineColumns + `
+		FROM account_move_lines l
+		INNER JOIN account_moves m ON m.id = l.move_id AND m.state = 'posted' AND m.active = true
+		WHERE l.reconcile = true
+		  AND l.reconciled = false
+		  AND l.amount_residual > 0.004
+		  AND l.statement_line_id IS NULL
+		  AND ($1::bigint IS NULL OR l.partner_id = $1)
+		  AND ($2::bigint[] IS NULL OR NOT (l.id = ANY($2)))
+		ORDER BY l.id ASC
+		LIMIT $3
+	`
+	rows, err := r.pool.Query(ctx, query, partnerID, exclude, limit)
+	if err != nil {
+		return nil, platformerrors.Internal("failed to list reconcilable move lines", err)
+	}
+	defer rows.Close()
+
+	var lines []accounting.AccountMoveLine
+	for rows.Next() {
+		var l accounting.AccountMoveLine
+		if err := rows.Scan(
+			&l.ID, &l.MoveID, &l.AccountID, &l.PartnerID, &l.ProductID, &l.Name,
+			&l.Quantity, &l.PriceUnit, &l.Discount, &l.Debit, &l.Credit, &l.Balance,
+			&l.TaxIDs, &l.TaxAmount, &l.Reconcile, &l.Reconciled, &l.AmountResidual,
+			&l.MatchingNumber, &l.StatementLineID, &l.CreatedAt, &l.UpdatedAt,
+		); err != nil {
+			return nil, platformerrors.Internal("failed to scan reconcilable move line", err)
+		}
+		lines = append(lines, l)
+	}
+	return lines, nil
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1122,4 +1262,55 @@ func (r *PostgresRepo) GetGeneralLedger(ctx context.Context, accountID *int64, p
 		items = append(items, it)
 	}
 	return items, nil
+}
+
+// moveLineQueryer abstracts pgxpool.Pool and pgx.Tx so reconcile flags can be
+// resolved either at top-level or inside a transaction.
+type moveLineQueryer interface {
+	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
+}
+
+// loadReconcileFlags returns, per account ID, whether the account allows reconciliation.
+func loadReconcileFlags(ctx context.Context, q moveLineQueryer, lines []accounting.AccountMoveLine) (map[int64]bool, error) {
+	ids := make([]int64, 0, len(lines))
+	seen := make(map[int64]struct{}, len(lines))
+	for _, l := range lines {
+		if _, ok := seen[l.AccountID]; ok {
+			continue
+		}
+		seen[l.AccountID] = struct{}{}
+		ids = append(ids, l.AccountID)
+	}
+
+	flags := make(map[int64]bool, len(ids))
+	if len(ids) == 0 {
+		return flags, nil
+	}
+
+	rows, err := q.Query(ctx, `SELECT id, reconcile FROM account_accounts WHERE id = ANY($1)`, ids)
+	if err != nil {
+		return nil, platformerrors.Internal("failed to load reconcile flags", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var id int64
+		var reconcile bool
+		if err := rows.Scan(&id, &reconcile); err != nil {
+			return nil, platformerrors.Internal("failed to scan reconcile flags", err)
+		}
+		flags[id] = reconcile
+	}
+	return flags, nil
+}
+
+// applyReconcileDefaults fills the reconciliation fields of a freshly-persisted
+// line from the underlying account unless the line already carries explicit state.
+func applyReconcileDefaults(l *accounting.AccountMoveLine, accountReconcile bool) {
+	if accountReconcile && !l.Reconciled {
+		l.Reconcile = true
+		if l.AmountResidual <= 0 {
+			l.AmountResidual = math.Abs(l.Balance)
+		}
+	}
 }

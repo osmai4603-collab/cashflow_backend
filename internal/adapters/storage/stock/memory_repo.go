@@ -22,14 +22,26 @@ type MemoryRepo struct {
 	pickings       map[int64]*stock.StockPicking
 	moves          map[int64]*stock.StockMove
 	quants         map[string]*stock.StockQuant // key: "productID:locationID"
+	productValues  map[int64]*stock.ProductValue
+	periods        map[int64]*stock.AccountingPeriod
+	orderpoints    map[int64]*stock.Orderpoint
+	landedCosts    map[int64]*stock.LandedCost
+	procurements   map[int64]*stock.ProcurementGroup
 	seqInCounters  map[int]int64
 	seqOutCounters map[int]int64
 	seqIntCounters map[int]int64
+	opCounters     map[int]int64
+	lcCounters     map[int]int64
 	lastLocID      int64
 	lastWhID       int64
 	lastPickingID  int64
 	lastMoveID     int64
 	lastQuantID    int64
+	lastValueID    int64
+	lastPeriodID   int64
+	lastOpID       int64
+	lastLCID       int64
+	lastPGID       int64
 }
 
 // NewMemoryRepo initializes a MemoryRepo pre-seeded with standard locations and warehouse.
@@ -40,9 +52,16 @@ func NewMemoryRepo() *MemoryRepo {
 		pickings:       make(map[int64]*stock.StockPicking),
 		moves:          make(map[int64]*stock.StockMove),
 		quants:         make(map[string]*stock.StockQuant),
+		productValues:  make(map[int64]*stock.ProductValue),
+		periods:        make(map[int64]*stock.AccountingPeriod),
+		orderpoints:    make(map[int64]*stock.Orderpoint),
+		landedCosts:    make(map[int64]*stock.LandedCost),
+		procurements:   make(map[int64]*stock.ProcurementGroup),
 		seqInCounters:  make(map[int]int64),
 		seqOutCounters: make(map[int]int64),
 		seqIntCounters: make(map[int]int64),
+		opCounters:     make(map[int]int64),
+		lcCounters:     make(map[int]int64),
 	}
 
 	now := time.Now().UTC()
@@ -995,4 +1014,647 @@ func (r *MemoryRepo) ValidatePickingTx(ctx context.Context, picking *stock.Stock
 	clone := *picking
 	r.pickings[picking.ID] = &clone
 	return nil
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Valuations (Phase 12 — stock-account integration)
+// ─────────────────────────────────────────────────────────────────────────────
+
+// UpdateMoveValue persists the valuation fields of a stock move.
+func (r *MemoryRepo) UpdateMoveValue(ctx context.Context, move *stock.StockMove) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if _, ok := r.moves[move.ID]; !ok {
+		return platformerrors.NotFound(fmt.Sprintf("stock move #%d not found", move.ID))
+	}
+	clone := *move
+	clone.UpdatedAt = time.Now().UTC()
+	r.moves[move.ID] = &clone
+	*move = clone
+	return nil
+}
+
+// GetFIFOStack returns the remaining incoming layers for a product, ordered oldest first.
+func (r *MemoryRepo) GetFIFOStack(ctx context.Context, productID, companyID int64) (stock.FIFOStack, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	stack, err := r.fifoStackLocked(productID)
+	if err != nil {
+		return nil, err
+	}
+	return stack, nil
+}
+
+// CreateProductValue inserts a history record of a product value update.
+func (r *MemoryRepo) CreateProductValue(ctx context.Context, pv *stock.ProductValue) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	r.lastValueID++
+	pv.ID = r.lastValueID
+	pv.CreatedAt = time.Now().UTC()
+	if pv.Date.IsZero() {
+		pv.Date = pv.CreatedAt
+	}
+	clone := *pv
+	r.productValues[pv.ID] = &clone
+	return nil
+}
+
+// ListProductValues returns the history of product value records.
+func (r *MemoryRepo) ListProductValues(ctx context.Context, f *filter.Filter, page pagination.PageRequest) (pagination.PageResult[stock.ProductValue], error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	var values []stock.ProductValue
+	for _, pv := range r.productValues {
+		if !matchFilterByString(pv.ProductID, "product_id", f) || !matchFilterByInt64Ptr(pv.MoveID, "move_id", f) {
+			continue
+		}
+		values = append(values, *pv)
+	}
+	sort.Slice(values, func(i, j int) bool { return values[i].ID > values[j].ID })
+	total := int64(len(values))
+	start := int64(page.Offset())
+	end := start + int64(page.LimitClamped())
+	if start >= total {
+		start, end = 0, 0
+	}
+	if end > total {
+		end = total
+	}
+	return pagination.NewPageResult(values[start:end], total, page), nil
+}
+
+// ComputeTotalValuation aggregates the current valuation by product (and optional location).
+func (r *MemoryRepo) ComputeTotalValuation(ctx context.Context, productID *int64, locationID *int64) ([]stock.ValuationSummary, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	type aggKey struct {
+		product int64
+		loc     int64
+	}
+	agg := make(map[aggKey]*stock.ValuationSummary)
+
+	for _, q := range r.quants {
+		if productID != nil && q.ProductID != *productID {
+			continue
+		}
+		if locationID != nil && q.LocationID != *locationID {
+			continue
+		}
+		loc, ok := r.locations[q.LocationID]
+		if !ok || !loc.Active {
+			continue
+		}
+		if locationID == nil && loc.Usage != stock.LocationUsageInternal {
+			continue
+		}
+		if q.Quantity == 0 {
+			continue
+		}
+
+		stack, err := r.fifoStackLocked(q.ProductID)
+		if err != nil {
+			return nil, err
+		}
+		unitCost := stack.UnitPrice()
+
+		key := aggKey{product: q.ProductID, loc: q.LocationID}
+		if s, ok := agg[key]; ok {
+			s.Quantity += q.Quantity
+			s.Value += q.Quantity * unitCost
+			s.UnitCost = unitCost
+		} else {
+			locID := q.LocationID
+			s := &stock.ValuationSummary{
+				ProductID:   q.ProductID,
+				ProductName: r.productNameLocked(q.ProductID),
+				LocationID:  &locID,
+				Location:    loc.CompleteName,
+				Quantity:    q.Quantity,
+				UnitCost:    unitCost,
+				Value:       q.Quantity * unitCost,
+			}
+			agg[key] = s
+		}
+	}
+
+	var summaries []stock.ValuationSummary
+	for _, s := range agg {
+		summaries = append(summaries, *s)
+	}
+	sort.Slice(summaries, func(i, j int) bool {
+		if summaries[i].ProductID == summaries[j].ProductID {
+			return summaries[i].Location < summaries[j].Location
+		}
+		return summaries[i].ProductID < summaries[j].ProductID
+	})
+	return summaries, nil
+}
+
+// CreateAccountingPeriod inserts a new period.
+func (r *MemoryRepo) CreateAccountingPeriod(ctx context.Context, p *stock.AccountingPeriod) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	r.lastPeriodID++
+	p.ID = r.lastPeriodID
+	now := time.Now().UTC()
+	p.CreatedAt = now
+	p.UpdatedAt = now
+	if p.State == "" {
+		p.State = "open"
+	}
+	clone := *p
+	r.periods[p.ID] = &clone
+	return nil
+}
+
+// GetAccountingPeriodByID fetches a single period.
+func (r *MemoryRepo) GetAccountingPeriodByID(ctx context.Context, id int64) (*stock.AccountingPeriod, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	p, ok := r.periods[id]
+	if !ok {
+		return nil, platformerrors.NotFound(fmt.Sprintf("accounting period #%d not found", id))
+	}
+	clone := *p
+	return &clone, nil
+}
+
+// ListAccountingPeriods returns a paginated list of periods.
+func (r *MemoryRepo) ListAccountingPeriods(ctx context.Context, f *filter.Filter, page pagination.PageRequest) (pagination.PageResult[stock.AccountingPeriod], error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	var periods []stock.AccountingPeriod
+	for _, p := range r.periods {
+		if !matchPeriodFilter(p, f) {
+			continue
+		}
+		periods = append(periods, *p)
+	}
+	sort.Slice(periods, func(i, j int) bool { return periods[i].DateFrom.After(periods[j].DateFrom) })
+	total := int64(len(periods))
+	start := int64(page.Offset())
+	end := start + int64(page.LimitClamped())
+	if start >= total {
+		start, end = 0, 0
+	}
+	if end > total {
+		end = total
+	}
+	return pagination.NewPageResult(periods[start:end], total, page), nil
+}
+
+// CloseAccountingPeriod marks a period as closed and links the closing entry.
+func (r *MemoryRepo) CloseAccountingPeriod(ctx context.Context, p *stock.AccountingPeriod) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	existing, ok := r.periods[p.ID]
+	if !ok {
+		return platformerrors.NotFound(fmt.Sprintf("accounting period #%d not found", p.ID))
+	}
+	if existing.State == "closed" {
+		return platformerrors.Conflict("accounting period is already closed")
+	}
+	existing.State = "closed"
+	existing.AccountMoveID = p.AccountMoveID
+	existing.UpdatedAt = time.Now().UTC()
+	p.State = existing.State
+	p.AccountMoveID = existing.AccountMoveID
+	p.UpdatedAt = existing.UpdatedAt
+	return nil
+}
+
+// fifoStackLocked returns the FIFO stack without acquiring the lock (caller must hold r.mu).
+func (r *MemoryRepo) fifoStackLocked(productID int64) (stock.FIFOStack, error) {
+	var stack stock.FIFOStack
+	for _, m := range r.moves {
+		if m.ProductID != productID || !m.IsIn || m.State != stock.MoveStateDone || m.RemainingQty <= 0 {
+			continue
+		}
+		stack = append(stack, stock.FIFOEntry{MoveID: m.ID, Qty: m.RemainingQty, Value: m.RemainingValue})
+	}
+	sort.Slice(stack, func(i, j int) bool { return stack[i].MoveID < stack[j].MoveID })
+	return stack, nil
+}
+
+// productNameLocked resolves a product template name (requires r.mu).
+func (r *MemoryRepo) productNameLocked(productID int64) string {
+	return fmt.Sprintf("Product #%d", productID)
+}
+
+// matchFilterByString reports whether an int64 field matches the filter (empty filter → true).
+func matchFilterByString(v int64, field string, f *filter.Filter) bool {
+	for _, c := range filterCriteria(f, field) {
+		want, ok := criteriaInt64(c)
+		if !ok {
+			continue
+		}
+		return v == want
+	}
+	return true
+}
+
+// matchFilterByInt64Ptr reports whether an *int64 field matches the filter (empty filter → true).
+func matchFilterByInt64Ptr(v *int64, field string, f *filter.Filter) bool {
+	for _, c := range filterCriteria(f, field) {
+		want, ok := criteriaInt64(c)
+		if !ok {
+			continue
+		}
+		return v != nil && *v == want
+	}
+	return true
+}
+
+// matchPeriodFilter reports whether a period matches the filter (empty filter → true).
+func matchPeriodFilter(p *stock.AccountingPeriod, f *filter.Filter) bool {
+	for _, c := range filterCriteria(f, "state") {
+		if state, ok := c.Value.(string); ok && state != p.State {
+			return false
+		}
+	}
+	for _, c := range filterCriteria(f, "journal_id") {
+		want, ok := criteriaInt64(c)
+		if !ok {
+			continue
+		}
+		return want == p.JournalID
+	}
+	return true
+}
+
+// filterCriteria returns all filter criteria for the given field.
+func filterCriteria(f *filter.Filter, field string) []filter.Criterion {
+	if f == nil {
+		return nil
+	}
+	var out []filter.Criterion
+	for _, c := range f.Criteria {
+		if c.Field == field {
+			out = append(out, c)
+		}
+	}
+	return out
+}
+
+// criteriaInt64 coerces a criteria value to int64.
+func criteriaInt64(c filter.Criterion) (int64, bool) {
+	var want int64
+	if _, err := fmt.Sscanf(fmt.Sprintf("%v", c.Value), "%d", &want); err != nil {
+		return 0, false
+	}
+	return want, true
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Reorder Rules (Phase 13 — stock.orderpoint)
+// ─────────────────────────────────────────────────────────────────────────────
+
+func (r *MemoryRepo) CreateOrderpoint(ctx context.Context, op *stock.Orderpoint) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	for _, existing := range r.orderpoints {
+		if existing.Active && existing.ProductID == op.ProductID && existing.LocationID == op.LocationID && existing.CompanyID == op.CompanyID {
+			return platformerrors.Conflict("an orderpoint already exists for this product in this location")
+		}
+	}
+
+	r.lastOpID++
+	op.ID = r.lastOpID
+	if op.Name == "" {
+		year := time.Now().UTC().Year()
+		r.opCounters[year]++
+		op.Name = fmt.Sprintf("ROP/%d/%05d", year, r.opCounters[year])
+	}
+	now := time.Now().UTC()
+	op.CreatedAt = now
+	op.UpdatedAt = now
+	op.Active = true
+	clone := *op
+	r.orderpoints[op.ID] = &clone
+	return nil
+}
+
+func (r *MemoryRepo) GetOrderpointByID(ctx context.Context, id int64) (*stock.Orderpoint, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	op, ok := r.orderpoints[id]
+	if !ok {
+		return nil, platformerrors.NotFound(fmt.Sprintf("stock orderpoint #%d not found", id))
+	}
+	clone := *op
+	return &clone, nil
+}
+
+func (r *MemoryRepo) UpdateOrderpoint(ctx context.Context, op *stock.Orderpoint) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	existing, ok := r.orderpoints[op.ID]
+	if !ok {
+		return platformerrors.NotFound(fmt.Sprintf("stock orderpoint #%d not found", op.ID))
+	}
+	op.UpdatedAt = time.Now().UTC()
+	clone := *op
+	r.orderpoints[op.ID] = &clone
+	_ = existing
+	return nil
+}
+
+func (r *MemoryRepo) DeleteOrderpoint(ctx context.Context, id int64) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	op, ok := r.orderpoints[id]
+	if !ok {
+		return platformerrors.NotFound(fmt.Sprintf("stock orderpoint #%d not found", id))
+	}
+	op.Active = false
+	op.UpdatedAt = time.Now().UTC()
+	return nil
+}
+
+func (r *MemoryRepo) ListOrderpoints(ctx context.Context, f *filter.Filter, page pagination.PageRequest) (pagination.PageResult[stock.Orderpoint], error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	var ops []*stock.Orderpoint
+	for _, op := range r.orderpoints {
+		if !op.Active {
+			continue
+		}
+		if !matchOPFilter(op, f) {
+			continue
+		}
+		clone := *op
+		ops = append(ops, &clone)
+	}
+	sort.Slice(ops, func(i, j int) bool { return ops[i].ID > ops[j].ID })
+
+	total := int64(len(ops))
+	offset := page.Offset()
+	if offset >= int(total) {
+		return pagination.NewPageResult([]stock.Orderpoint{}, total, page), nil
+	}
+	limit := page.LimitClamped()
+	end := offset + limit
+	if end > int(total) {
+		end = int(total)
+	}
+	items := make([]stock.Orderpoint, 0, end-offset)
+	for _, op := range ops[offset:end] {
+		items = append(items, *op)
+	}
+	return pagination.NewPageResult(items, total, page), nil
+}
+
+func matchOPFilter(op *stock.Orderpoint, f *filter.Filter) bool {
+	if !matchFilterByString(op.ProductID, "product_id", f) {
+		return false
+	}
+	if !matchFilterByString(op.WarehouseID, "warehouse_id", f) {
+		return false
+	}
+	if !matchFilterByString(op.LocationID, "location_id", f) {
+		return false
+	}
+	for _, c := range filterCriteria(f, "trigger") {
+		if v, ok := c.Value.(string); ok && v != string(op.Trigger) {
+			return false
+		}
+	}
+	for _, c := range filterCriteria(f, "source") {
+		if v, ok := c.Value.(string); ok && v != string(op.Source) {
+			return false
+		}
+	}
+	return true
+}
+
+func (r *MemoryRepo) ListOrderpointsForReplenishment(ctx context.Context, now time.Time) ([]*stock.Orderpoint, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	var ops []*stock.Orderpoint
+	for _, op := range r.orderpoints {
+		if !op.Active {
+			continue
+		}
+		if op.SnoozedUntil != nil && now.Before(*op.SnoozedUntil) {
+			continue
+		}
+		if op.Trigger != stock.OrderpointTriggerAuto && op.QtyToOrderManual <= 0 {
+			continue
+		}
+		clone := *op
+		ops = append(ops, &clone)
+	}
+	sort.Slice(ops, func(i, j int) bool {
+		if ops[i].ProductID != ops[j].ProductID {
+			return ops[i].ProductID < ops[j].ProductID
+		}
+		return ops[i].LocationID < ops[j].LocationID
+	})
+	return ops, nil
+}
+
+func (r *MemoryRepo) StockForecast(ctx context.Context, productID, locationID int64, at time.Time) (onHand, incoming, outgoing float64, err error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	if q, ok := r.quants[quantKey(productID, locationID)]; ok {
+		onHand = q.Quantity
+	}
+	for _, m := range r.moves {
+		if m.ProductID != productID {
+			continue
+		}
+		if !m.Date.After(at) {
+			switch m.State {
+			case stock.MoveStateConfirmed, stock.MoveStateAssigned:
+				if m.LocationDestID == locationID {
+					incoming += m.ProductQty
+				}
+				if m.LocationID == locationID {
+					outgoing += m.ProductQty
+				}
+			}
+		}
+	}
+	return onHand, incoming, outgoing, nil
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Landed Costs (Phase 13 — stock.landed.cost)
+// ─────────────────────────────────────────────────────────────────────────────
+
+func (r *MemoryRepo) CreateLandedCost(ctx context.Context, lc *stock.LandedCost) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	r.lastLCID++
+	lc.ID = r.lastLCID
+	if lc.Name == "" {
+		year := lc.Date.UTC().Year()
+		r.lcCounters[year]++
+		lc.Name = fmt.Sprintf("LC/%d/%05d", year, r.lcCounters[year])
+	}
+	now := time.Now().UTC()
+	lc.CreatedAt = now
+	lc.UpdatedAt = now
+	for i := range lc.CostLines {
+		lc.CostLines[i].LandedCostID = lc.ID
+		lc.CostLines[i].CreatedAt = now
+		lc.CostLines[i].UpdatedAt = now
+	}
+	for i := range lc.ValuationAdjustments {
+		lc.ValuationAdjustments[i].LandedCostID = lc.ID
+		lc.ValuationAdjustments[i].CreatedAt = now
+		lc.ValuationAdjustments[i].UpdatedAt = now
+	}
+	clone := *lc
+	r.landedCosts[lc.ID] = &clone
+	return nil
+}
+
+func (r *MemoryRepo) GetLandedCostByID(ctx context.Context, id int64) (*stock.LandedCost, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	lc, ok := r.landedCosts[id]
+	if !ok {
+		return nil, platformerrors.NotFound(fmt.Sprintf("stock landed cost #%d not found", id))
+	}
+	clone := *lc
+	return &clone, nil
+}
+
+func (r *MemoryRepo) UpdateLandedCost(ctx context.Context, lc *stock.LandedCost) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	existing, ok := r.landedCosts[lc.ID]
+	if !ok {
+		return platformerrors.NotFound(fmt.Sprintf("stock landed cost #%d not found", lc.ID))
+	}
+	now := time.Now().UTC()
+	lc.UpdatedAt = now
+	lc.CreatedAt = existing.CreatedAt
+	for i := range lc.CostLines {
+		lc.CostLines[i].LandedCostID = lc.ID
+		lc.CostLines[i].CreatedAt = now
+		lc.CostLines[i].UpdatedAt = now
+	}
+	for i := range lc.ValuationAdjustments {
+		lc.ValuationAdjustments[i].LandedCostID = lc.ID
+		lc.ValuationAdjustments[i].CreatedAt = now
+		lc.ValuationAdjustments[i].UpdatedAt = now
+	}
+	clone := *lc
+	r.landedCosts[lc.ID] = &clone
+	return nil
+}
+
+func (r *MemoryRepo) ListLandedCosts(ctx context.Context, f *filter.Filter, page pagination.PageRequest) (pagination.PageResult[stock.LandedCost], error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	var lcs []*stock.LandedCost
+	for _, lc := range r.landedCosts {
+		clone := *lc
+		lcs = append(lcs, &clone)
+	}
+	sort.Slice(lcs, func(i, j int) bool { return lcs[i].ID > lcs[j].ID })
+
+	total := int64(len(lcs))
+	offset := page.Offset()
+	if offset >= int(total) {
+		return pagination.NewPageResult([]stock.LandedCost{}, total, page), nil
+	}
+	limit := page.LimitClamped()
+	end := offset + limit
+	if end > int(total) {
+		end = int(total)
+	}
+	items := make([]stock.LandedCost, 0, end-offset)
+	for _, lc := range lcs[offset:end] {
+		items = append(items, *lc)
+	}
+	return pagination.NewPageResult(items, total, page), nil
+}
+
+func (r *MemoryRepo) DeleteLandedCost(ctx context.Context, id int64) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	lc, ok := r.landedCosts[id]
+	if !ok {
+		return platformerrors.NotFound(fmt.Sprintf("stock landed cost #%d not found", id))
+	}
+	if lc.State == stock.LandedCostDone {
+		return platformerrors.Conflict("stock landed cost cannot be deleted once validated")
+	}
+	delete(r.landedCosts, id)
+	return nil
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Procurement Groups (stock.procurement.group)
+// ─────────────────────────────────────────────────────────────────────────────
+
+func (r *MemoryRepo) CreateProcurementGroup(ctx context.Context, pg *stock.ProcurementGroup) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	r.lastPGID++
+	pg.ID = r.lastPGID
+	now := time.Now().UTC()
+	pg.CreatedAt = now
+	pg.UpdatedAt = now
+	if pg.CompanyID == 0 {
+		pg.CompanyID = 1
+	}
+	clone := *pg
+	r.procurements[pg.ID] = &clone
+	return nil
+}
+
+func (r *MemoryRepo) procurementMoveIDsLocked(pgID int64) []int64 {
+	var ids []int64
+	for _, m := range r.moves {
+		if m.ProcurementGroupID != nil && *m.ProcurementGroupID == pgID {
+			ids = append(ids, m.ID)
+		}
+	}
+	return ids
+}
+
+func (r *MemoryRepo) GetProcurementGroupByID(ctx context.Context, id int64) (*stock.ProcurementGroup, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	pg, ok := r.procurements[id]
+	if !ok {
+		return nil, platformerrors.NotFound(fmt.Sprintf("procurement group #%d not found", id))
+	}
+	clone := *pg
+	clone.MoveIDs = r.procurementMoveIDsLocked(id)
+	return &clone, nil
+}
+
+func (r *MemoryRepo) GetProcurementGroupByName(ctx context.Context, name string) (*stock.ProcurementGroup, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	for _, pg := range r.procurements {
+		if pg.Name == name {
+			clone := *pg
+			clone.MoveIDs = r.procurementMoveIDsLocked(pg.ID)
+			return &clone, nil
+		}
+	}
+	return nil, platformerrors.NotFound(fmt.Sprintf("procurement group '%s' not found", name))
 }

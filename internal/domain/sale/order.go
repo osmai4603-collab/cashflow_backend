@@ -47,6 +47,7 @@ type SaleOrderLine struct {
 	PriceTotal    float64   `json:"price_total"`    // Subtotal + Tax
 	QtyDelivered  float64   `json:"qty_delivered"`
 	QtyInvoiced   float64   `json:"qty_invoiced"`
+	RouteID       *int64    `json:"route_id,omitempty"` // ID of the stock route
 	CreatedAt     time.Time `json:"created_at"`
 	UpdatedAt     time.Time `json:"updated_at"`
 }
@@ -100,6 +101,9 @@ type SaleOrder struct {
 	AmountTotal   float64         `json:"amount_total"`
 	Lines         []SaleOrderLine `json:"lines,omitempty"`
 	InvoiceIDs    []int64         `json:"invoice_ids,omitempty"`
+	PickingIDs    []int64         `json:"picking_ids,omitempty"`      // Linked stock pickings (deliveries)
+	DeliveryStatus string         `json:"delivery_status"`             // nothing, partial, full
+	ProcurementGroupID *int64      `json:"procurement_group_id,omitempty"`
 	Active        bool            `json:"active"`
 	Audit         audit.Fields    `json:"audit"`
 }

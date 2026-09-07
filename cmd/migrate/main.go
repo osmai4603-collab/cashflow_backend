@@ -38,10 +38,14 @@ func main() {
 		os.Exit(1)
 	}
 
-	cfg := config.Load()
+	cfg, err := config.Load()
+	if err != nil {
+		logger.Error("configuration error", "error", err)
+		os.Exit(1)
+	}
 
-	if cfg.StorageDriver != "postgres" {
-		logger.Error("migrations are only supported for postgres driver", "driver", cfg.StorageDriver)
+	if cfg.Database.StorageDriver != "postgres" {
+		logger.Error("migrations are only supported for postgres driver", "driver", cfg.Database.StorageDriver)
 		os.Exit(1)
 	}
 

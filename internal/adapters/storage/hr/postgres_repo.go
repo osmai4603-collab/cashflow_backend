@@ -36,6 +36,26 @@ var allowedEmployeeFilterFields = map[string]string{
 	"work_email":    "work_email",
 }
 
+var allowedAttendanceFilterFields = map[string]string{
+	"employee_id": "employee_id",
+	"company_id":  "company_id",
+	"check_in":    "check_in",
+	"check_out":   "check_out",
+}
+
+var allowedOvertimeLineFilterFields = map[string]string{
+	"employee_id": "employee_id",
+	"company_id":  "company_id",
+	"date":        "date",
+	"status":      "status",
+}
+
+var allowedOvertimeRuleFilterFields = map[string]string{
+	"name":       "name",
+	"company_id": "company_id",
+	"active":     "active",
+}
+
 var allowedAllocationFilterFields = map[string]string{
 	"employee_id": "employee_id",
 	"leave_type":  "leave_type",
@@ -365,11 +385,12 @@ func (r *PostgresRepo) CreateEmployee(ctx context.Context, emp *hr.Employee) err
 		INSERT INTO hr_employees (
 			name, partner_id, department_id, job_id, job_title, manager_id,
 			work_email, work_phone, work_location, hire_date, gender, marital_status,
-			identification_id, bank_account_no, company_id, active, created_at, updated_at
+			identification_id, bank_account_no, company_id, active,
+			overtime_employee_threshold, created_at, updated_at
 		) VALUES (
 			$1, $2, $3, $4, $5, $6,
 			$7, $8, $9, $10, $11, $12,
-			$13, $14, $15, $16, NOW(), NOW()
+			$13, $14, $15, $16, $17, NOW(), NOW()
 		)
 		RETURNING id, created_at, updated_at
 	`
@@ -377,6 +398,7 @@ func (r *PostgresRepo) CreateEmployee(ctx context.Context, emp *hr.Employee) err
 		emp.Name, emp.PartnerID, emp.DepartmentID, emp.JobID, emp.JobTitle, emp.ManagerID,
 		emp.WorkEmail, emp.WorkPhone, emp.WorkLocation, emp.HireDate, emp.Gender, emp.MaritalStatus,
 		emp.IdentificationID, emp.BankAccountNo, emp.CompanyID, emp.Active,
+		emp.OvertimeEmployeeThreshold,
 	).Scan(&emp.ID, &emp.CreatedAt, &emp.UpdatedAt)
 }
 
@@ -386,6 +408,7 @@ func (r *PostgresRepo) GetEmployeeByID(ctx context.Context, id int64) (*hr.Emplo
 			id, name, partner_id, department_id, job_id, job_title, manager_id,
 			work_email, work_phone, work_location, hire_date, gender, marital_status,
 			identification_id, bank_account_no, company_id, active,
+			overtime_employee_threshold,
 			created_at, updated_at, created_by, updated_by
 		FROM hr_employees
 		WHERE id = $1
@@ -395,6 +418,7 @@ func (r *PostgresRepo) GetEmployeeByID(ctx context.Context, id int64) (*hr.Emplo
 		&e.ID, &e.Name, &e.PartnerID, &e.DepartmentID, &e.JobID, &e.JobTitle, &e.ManagerID,
 		&e.WorkEmail, &e.WorkPhone, &e.WorkLocation, &e.HireDate, &e.Gender, &e.MaritalStatus,
 		&e.IdentificationID, &e.BankAccountNo, &e.CompanyID, &e.Active,
+		&e.OvertimeEmployeeThreshold,
 		&e.CreatedAt, &e.UpdatedAt, &e.CreatedBy, &e.UpdatedBy,
 	)
 	if err != nil {
@@ -412,6 +436,7 @@ func (r *PostgresRepo) GetEmployeeByPartnerID(ctx context.Context, partnerID int
 			id, name, partner_id, department_id, job_id, job_title, manager_id,
 			work_email, work_phone, work_location, hire_date, gender, marital_status,
 			identification_id, bank_account_no, company_id, active,
+			overtime_employee_threshold,
 			created_at, updated_at, created_by, updated_by
 		FROM hr_employees
 		WHERE partner_id = $1
@@ -422,6 +447,7 @@ func (r *PostgresRepo) GetEmployeeByPartnerID(ctx context.Context, partnerID int
 		&e.ID, &e.Name, &e.PartnerID, &e.DepartmentID, &e.JobID, &e.JobTitle, &e.ManagerID,
 		&e.WorkEmail, &e.WorkPhone, &e.WorkLocation, &e.HireDate, &e.Gender, &e.MaritalStatus,
 		&e.IdentificationID, &e.BankAccountNo, &e.CompanyID, &e.Active,
+		&e.OvertimeEmployeeThreshold,
 		&e.CreatedAt, &e.UpdatedAt, &e.CreatedBy, &e.UpdatedBy,
 	)
 	if err != nil {
@@ -439,15 +465,16 @@ func (r *PostgresRepo) UpdateEmployee(ctx context.Context, emp *hr.Employee) err
 		SET name = $1, partner_id = $2, department_id = $3, job_id = $4, job_title = $5,
 		    manager_id = $6, work_email = $7, work_phone = $8, work_location = $9,
 		    hire_date = $10, gender = $11, marital_status = $12, identification_id = $13,
-		    bank_account_no = $14, company_id = $15, active = $16, updated_at = NOW()
-		WHERE id = $17
+		    bank_account_no = $14, company_id = $15, active = $16,
+		    overtime_employee_threshold = $17, updated_at = NOW()
+		WHERE id = $18
 		RETURNING updated_at
 	`
 	err := r.pool.QueryRow(ctx, query,
 		emp.Name, emp.PartnerID, emp.DepartmentID, emp.JobID, emp.JobTitle,
 		emp.ManagerID, emp.WorkEmail, emp.WorkPhone, emp.WorkLocation,
 		emp.HireDate, emp.Gender, emp.MaritalStatus, emp.IdentificationID,
-		emp.BankAccountNo, emp.CompanyID, emp.Active, emp.ID,
+		emp.BankAccountNo, emp.CompanyID, emp.Active, emp.OvertimeEmployeeThreshold, emp.ID,
 	).Scan(&emp.UpdatedAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -497,6 +524,7 @@ func (r *PostgresRepo) ListEmployees(ctx context.Context, f *filter.Filter, page
 			id, name, partner_id, department_id, job_id, job_title, manager_id,
 			work_email, work_phone, work_location, hire_date, gender, marital_status,
 			identification_id, bank_account_no, company_id, active,
+			overtime_employee_threshold,
 			created_at, updated_at, created_by, updated_by
 		FROM hr_employees
 		%s
@@ -518,6 +546,7 @@ func (r *PostgresRepo) ListEmployees(ctx context.Context, f *filter.Filter, page
 			&e.ID, &e.Name, &e.PartnerID, &e.DepartmentID, &e.JobID, &e.JobTitle, &e.ManagerID,
 			&e.WorkEmail, &e.WorkPhone, &e.WorkLocation, &e.HireDate, &e.Gender, &e.MaritalStatus,
 			&e.IdentificationID, &e.BankAccountNo, &e.CompanyID, &e.Active,
+			&e.OvertimeEmployeeThreshold,
 			&e.CreatedAt, &e.UpdatedAt, &e.CreatedBy, &e.UpdatedBy,
 		); err != nil {
 			return pagination.PageResult[hr.Employee]{}, platformerrors.Internal("failed to scan employee row", err)
@@ -902,4 +931,424 @@ func (r *PostgresRepo) HasOverlappingLeave(ctx context.Context, employeeID int64
 		return false, platformerrors.Internal("failed to check overlapping leave", err)
 	}
 	return exists, nil
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Attendance
+// ─────────────────────────────────────────────────────────────────────────────
+
+func (r *PostgresRepo) CreateAttendance(ctx context.Context, att *hr.Attendance) error {
+	query := `
+		INSERT INTO hr_attendance (
+			employee_id, check_in, check_out, worked_hours, expected_hours,
+			overtime_hours, overtime_status, in_latitude, in_longitude,
+			in_ip_address, in_browser, in_mode, out_latitude, out_longitude,
+			out_ip_address, out_browser, out_mode, company_id, created_at, updated_at
+		) VALUES (
+			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, NOW(), NOW()
+		)
+		RETURNING id, created_at, updated_at
+	`
+	return r.pool.QueryRow(ctx, query,
+		att.EmployeeID, att.CheckIn, att.CheckOut, att.WorkedHours, att.ExpectedHours,
+		att.OvertimeHours, att.OvertimeStatus, att.InLatitude, att.InLongitude,
+		att.InIPAddress, att.InBrowser, att.InMode, att.OutLatitude, att.OutLongitude,
+		att.OutIPAddress, att.OutBrowser, att.OutMode, att.CompanyID,
+	).Scan(&att.ID, &att.CreatedAt, &att.UpdatedAt)
+}
+
+func (r *PostgresRepo) GetAttendanceByID(ctx context.Context, id int64) (*hr.Attendance, error) {
+	query := `
+		SELECT
+			id, employee_id, check_in, check_out, worked_hours, expected_hours,
+			overtime_hours, overtime_status, in_latitude, in_longitude,
+			in_ip_address, in_browser, in_mode, out_latitude, out_longitude,
+			out_ip_address, out_browser, out_mode, company_id, created_at, updated_at
+		FROM hr_attendance
+		WHERE id = $1
+	`
+	var a hr.Attendance
+	err := r.pool.QueryRow(ctx, query, id).Scan(
+		&a.ID, &a.EmployeeID, &a.CheckIn, &a.CheckOut, &a.WorkedHours, &a.ExpectedHours,
+		&a.OvertimeHours, &a.OvertimeStatus, &a.InLatitude, &a.InLongitude,
+		&a.InIPAddress, &a.InBrowser, &a.InMode, &a.OutLatitude, &a.OutLongitude,
+		&a.OutIPAddress, &a.OutBrowser, &a.OutMode, &a.CompanyID, &a.CreatedAt, &a.UpdatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, platformerrors.NotFound(fmt.Sprintf("attendance with ID %d not found", id))
+		}
+		return nil, platformerrors.Internal("failed to get attendance", err)
+	}
+	return &a, nil
+}
+
+func (r *PostgresRepo) UpdateAttendance(ctx context.Context, att *hr.Attendance) error {
+	query := `
+		UPDATE hr_attendance
+		SET employee_id = $1, check_in = $2, check_out = $3, worked_hours = $4,
+		    expected_hours = $5, overtime_hours = $6, overtime_status = $7,
+		    in_latitude = $8, in_longitude = $9, in_ip_address = $10,
+		    in_browser = $11, in_mode = $12, out_latitude = $13,
+		    out_longitude = $14, out_ip_address = $15, out_browser = $16,
+		    out_mode = $17, company_id = $18, updated_at = NOW()
+		WHERE id = $19
+		RETURNING updated_at
+	`
+	err := r.pool.QueryRow(ctx, query,
+		att.EmployeeID, att.CheckIn, att.CheckOut, att.WorkedHours, att.ExpectedHours,
+		att.OvertimeHours, att.OvertimeStatus, att.InLatitude, att.InLongitude,
+		att.InIPAddress, att.InBrowser, att.InMode, att.OutLatitude, att.OutLongitude,
+		att.OutIPAddress, att.OutBrowser, att.OutMode, att.CompanyID, att.ID,
+	).Scan(&att.UpdatedAt)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return platformerrors.NotFound(fmt.Sprintf("attendance with ID %d not found", att.ID))
+		}
+		return platformerrors.Internal("failed to update attendance", err)
+	}
+	return nil
+}
+
+func (r *PostgresRepo) DeleteAttendance(ctx context.Context, id int64) error {
+	tag, err := r.pool.Exec(ctx, "DELETE FROM hr_attendance WHERE id = $1", id)
+	if err != nil {
+		return platformerrors.Internal("failed to delete attendance", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return platformerrors.NotFound(fmt.Sprintf("attendance with ID %d not found", id))
+	}
+	return nil
+}
+
+func (r *PostgresRepo) ListAttendance(ctx context.Context, f *filter.Filter, page pagination.PageRequest) (pagination.PageResult[hr.Attendance], error) {
+	whereClause, args, nextIdx, err := f.BuildWhereClause(allowedAttendanceFilterFields, 1)
+	if err != nil {
+		return pagination.PageResult[hr.Attendance]{}, platformerrors.Validation("invalid filter", map[string]string{"filter": err.Error()})
+	}
+
+	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM hr_attendance %s", whereClause)
+	var totalItems int64
+	if err := r.pool.QueryRow(ctx, countQuery, args...).Scan(&totalItems); err != nil {
+		return pagination.PageResult[hr.Attendance]{}, platformerrors.Internal("failed to count attendance", err)
+	}
+
+	orderDir := page.OrderDirection()
+	sortBy := "id"
+	if page.SortBy != "" {
+		if col, ok := allowedAttendanceFilterFields[page.SortBy]; ok {
+			sortBy = col
+		}
+	}
+
+	limit := page.LimitClamped()
+	offset := page.Offset()
+
+	dataQuery := fmt.Sprintf(`
+		SELECT
+			id, employee_id, check_in, check_out, worked_hours, expected_hours,
+			overtime_hours, overtime_status, in_latitude, in_longitude,
+			in_ip_address, in_browser, in_mode, out_latitude, out_longitude,
+			out_ip_address, out_browser, out_mode, company_id, created_at, updated_at
+		FROM hr_attendance
+		%s
+		ORDER BY %s %s
+		LIMIT $%d OFFSET $%d
+	`, whereClause, sortBy, orderDir, nextIdx, nextIdx+1)
+
+	args = append(args, limit, offset)
+	rows, err := r.pool.Query(ctx, dataQuery, args...)
+	if err != nil {
+		return pagination.PageResult[hr.Attendance]{}, platformerrors.Internal("failed to list attendance", err)
+	}
+	defer rows.Close()
+
+	var list []hr.Attendance
+	for rows.Next() {
+		var a hr.Attendance
+		if err := rows.Scan(
+			&a.ID, &a.EmployeeID, &a.CheckIn, &a.CheckOut, &a.WorkedHours, &a.ExpectedHours,
+			&a.OvertimeHours, &a.OvertimeStatus, &a.InLatitude, &a.InLongitude,
+			&a.InIPAddress, &a.InBrowser, &a.InMode, &a.OutLatitude, &a.OutLongitude,
+			&a.OutIPAddress, &a.OutBrowser, &a.OutMode, &a.CompanyID, &a.CreatedAt, &a.UpdatedAt,
+		); err != nil {
+			return pagination.PageResult[hr.Attendance]{}, platformerrors.Internal("failed to scan attendance row", err)
+		}
+		list = append(list, a)
+	}
+
+	return pagination.NewPageResult(list, totalItems, page), nil
+}
+
+func (r *PostgresRepo) GetLastAttendance(ctx context.Context, employeeID int64) (*hr.Attendance, error) {
+	query := `
+		SELECT
+			id, employee_id, check_in, check_out, worked_hours, expected_hours,
+			overtime_hours, overtime_status, in_latitude, in_longitude,
+			in_ip_address, in_browser, in_mode, out_latitude, out_longitude,
+			out_ip_address, out_browser, out_mode, company_id, created_at, updated_at
+		FROM hr_attendance
+		WHERE employee_id = $1
+		ORDER BY check_in DESC
+		LIMIT 1
+	`
+	var a hr.Attendance
+	err := r.pool.QueryRow(ctx, query, employeeID).Scan(
+		&a.ID, &a.EmployeeID, &a.CheckIn, &a.CheckOut, &a.WorkedHours, &a.ExpectedHours,
+		&a.OvertimeHours, &a.OvertimeStatus, &a.InLatitude, &a.InLongitude,
+		&a.InIPAddress, &a.InBrowser, &a.InMode, &a.OutLatitude, &a.OutLongitude,
+		&a.OutIPAddress, &a.OutBrowser, &a.OutMode, &a.CompanyID, &a.CreatedAt, &a.UpdatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, platformerrors.Internal("failed to get last attendance", err)
+	}
+	return &a, nil
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Overtime
+// ─────────────────────────────────────────────────────────────────────────────
+
+func (r *PostgresRepo) CreateOvertimeLine(ctx context.Context, line *hr.OvertimeLine) error {
+	query := `
+		INSERT INTO hr_overtime_lines (
+			employee_id, attendance_id, date, duration, manual_duration,
+			status, time_start, time_stop, rule_ids, company_id, created_at, updated_at
+		) VALUES (
+			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NOW()
+		)
+		RETURNING id, created_at, updated_at
+	`
+	return r.pool.QueryRow(ctx, query,
+		line.EmployeeID, line.AttendanceID, line.Date, line.Duration, line.ManualDuration,
+		line.Status, line.TimeStart, line.TimeStop, line.RuleIDs, line.CompanyID,
+	).Scan(&line.ID, &line.CreatedAt, &line.UpdatedAt)
+}
+
+func (r *PostgresRepo) GetOvertimeLineByID(ctx context.Context, id int64) (*hr.OvertimeLine, error) {
+	query := `
+		SELECT
+			id, employee_id, attendance_id, date, duration, manual_duration,
+			status, time_start, time_stop, rule_ids, company_id, created_at, updated_at
+		FROM hr_overtime_lines
+		WHERE id = $1
+	`
+	var l hr.OvertimeLine
+	err := r.pool.QueryRow(ctx, query, id).Scan(
+		&l.ID, &l.EmployeeID, &l.AttendanceID, &l.Date, &l.Duration, &l.ManualDuration,
+		&l.Status, &l.TimeStart, &l.TimeStop, &l.RuleIDs, &l.CompanyID, &l.CreatedAt, &l.UpdatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, platformerrors.NotFound(fmt.Sprintf("overtime line with ID %d not found", id))
+		}
+		return nil, platformerrors.Internal("failed to get overtime line", err)
+	}
+	return &l, nil
+}
+
+func (r *PostgresRepo) UpdateOvertimeLine(ctx context.Context, line *hr.OvertimeLine) error {
+	query := `
+		UPDATE hr_overtime_lines
+		SET employee_id = $1, attendance_id = $2, date = $3, duration = $4,
+		    manual_duration = $5, status = $6, time_start = $7, time_stop = $8,
+		    rule_ids = $9, company_id = $10, updated_at = NOW()
+		WHERE id = $11
+		RETURNING updated_at
+	`
+	err := r.pool.QueryRow(ctx, query,
+		line.EmployeeID, line.AttendanceID, line.Date, line.Duration, line.ManualDuration,
+		line.Status, line.TimeStart, line.TimeStop, line.RuleIDs, line.CompanyID, line.ID,
+	).Scan(&line.UpdatedAt)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return platformerrors.NotFound(fmt.Sprintf("overtime line with ID %d not found", line.ID))
+		}
+		return platformerrors.Internal("failed to update overtime line", err)
+	}
+	return nil
+}
+
+func (r *PostgresRepo) DeleteOvertimeLine(ctx context.Context, id int64) error {
+	tag, err := r.pool.Exec(ctx, "DELETE FROM hr_overtime_lines WHERE id = $1", id)
+	if err != nil {
+		return platformerrors.Internal("failed to delete overtime line", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return platformerrors.NotFound(fmt.Sprintf("overtime line with ID %d not found", id))
+	}
+	return nil
+}
+
+func (r *PostgresRepo) ListOvertimeLines(ctx context.Context, f *filter.Filter, page pagination.PageRequest) (pagination.PageResult[hr.OvertimeLine], error) {
+	whereClause, args, nextIdx, err := f.BuildWhereClause(allowedOvertimeLineFilterFields, 1)
+	if err != nil {
+		return pagination.PageResult[hr.OvertimeLine]{}, platformerrors.Validation("invalid filter", map[string]string{"filter": err.Error()})
+	}
+
+	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM hr_overtime_lines %s", whereClause)
+	var totalItems int64
+	if err := r.pool.QueryRow(ctx, countQuery, args...).Scan(&totalItems); err != nil {
+		return pagination.PageResult[hr.OvertimeLine]{}, platformerrors.Internal("failed to count overtime lines", err)
+	}
+
+	orderDir := page.OrderDirection()
+	sortBy := "id"
+	if page.SortBy != "" {
+		if col, ok := allowedOvertimeLineFilterFields[page.SortBy]; ok {
+			sortBy = col
+		}
+	}
+
+	limit := page.LimitClamped()
+	offset := page.Offset()
+
+	dataQuery := fmt.Sprintf(`
+		SELECT
+			id, employee_id, attendance_id, date, duration, manual_duration,
+			status, time_start, time_stop, rule_ids, company_id, created_at, updated_at
+		FROM hr_overtime_lines
+		%s
+		ORDER BY %s %s
+		LIMIT $%d OFFSET $%d
+	`, whereClause, sortBy, orderDir, nextIdx, nextIdx+1)
+
+	args = append(args, limit, offset)
+	rows, err := r.pool.Query(ctx, dataQuery, args...)
+	if err != nil {
+		return pagination.PageResult[hr.OvertimeLine]{}, platformerrors.Internal("failed to list overtime lines", err)
+	}
+	defer rows.Close()
+
+	var list []hr.OvertimeLine
+	for rows.Next() {
+		var l hr.OvertimeLine
+		if err := rows.Scan(
+			&l.ID, &l.EmployeeID, &l.AttendanceID, &l.Date, &l.Duration, &l.ManualDuration,
+			&l.Status, &l.TimeStart, &l.TimeStop, &l.RuleIDs, &l.CompanyID, &l.CreatedAt, &l.UpdatedAt,
+		); err != nil {
+			return pagination.PageResult[hr.OvertimeLine]{}, platformerrors.Internal("failed to scan overtime line row", err)
+		}
+		list = append(list, l)
+	}
+
+	return pagination.NewPageResult(list, totalItems, page), nil
+}
+
+func (r *PostgresRepo) CreateOvertimeRule(ctx context.Context, rule *hr.OvertimeRule) error {
+	query := `
+		INSERT INTO hr_overtime_rules (
+			name, base_off, timing_type, timing_start, multiplier, active, company_id, created_at, updated_at
+		) VALUES (
+			$1, $2, $3, $4, $5, $6, $7, NOW(), NOW()
+		)
+		RETURNING id
+	`
+	return r.pool.QueryRow(ctx, query,
+		rule.Name, rule.BaseOff, rule.TimingType, rule.TimingStart, rule.Multiplier, rule.Active, rule.CompanyID,
+	).Scan(&rule.ID)
+}
+
+func (r *PostgresRepo) GetOvertimeRuleByID(ctx context.Context, id int64) (*hr.OvertimeRule, error) {
+	query := `
+		SELECT id, name, base_off, timing_type, timing_start, multiplier, active, company_id
+		FROM hr_overtime_rules
+		WHERE id = $1
+	`
+	var ru hr.OvertimeRule
+	err := r.pool.QueryRow(ctx, query, id).Scan(
+		&ru.ID, &ru.Name, &ru.BaseOff, &ru.TimingType, &ru.TimingStart, &ru.Multiplier, &ru.Active, &ru.CompanyID,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, platformerrors.NotFound(fmt.Sprintf("overtime rule with ID %d not found", id))
+		}
+		return nil, platformerrors.Internal("failed to get overtime rule", err)
+	}
+	return &ru, nil
+}
+
+func (r *PostgresRepo) UpdateOvertimeRule(ctx context.Context, rule *hr.OvertimeRule) error {
+	query := `
+		UPDATE hr_overtime_rules
+		SET name = $1, base_off = $2, timing_type = $3, timing_start = $4,
+		    multiplier = $5, active = $6, company_id = $7, updated_at = NOW()
+		WHERE id = $8
+	`
+	tag, err := r.pool.Exec(ctx, query,
+		rule.Name, rule.BaseOff, rule.TimingType, rule.TimingStart, rule.Multiplier, rule.Active, rule.CompanyID, rule.ID,
+	)
+	if err != nil {
+		return platformerrors.Internal("failed to update overtime rule", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return platformerrors.NotFound(fmt.Sprintf("overtime rule with ID %d not found", rule.ID))
+	}
+	return nil
+}
+
+func (r *PostgresRepo) DeleteOvertimeRule(ctx context.Context, id int64) error {
+	tag, err := r.pool.Exec(ctx, "DELETE FROM hr_overtime_rules WHERE id = $1", id)
+	if err != nil {
+		return platformerrors.Internal("failed to delete overtime rule", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return platformerrors.NotFound(fmt.Sprintf("overtime rule with ID %d not found", id))
+	}
+	return nil
+}
+
+func (r *PostgresRepo) ListOvertimeRules(ctx context.Context, f *filter.Filter, page pagination.PageRequest) (pagination.PageResult[hr.OvertimeRule], error) {
+	whereClause, args, nextIdx, err := f.BuildWhereClause(allowedOvertimeRuleFilterFields, 1)
+	if err != nil {
+		return pagination.PageResult[hr.OvertimeRule]{}, platformerrors.Validation("invalid filter", map[string]string{"filter": err.Error()})
+	}
+
+	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM hr_overtime_rules %s", whereClause)
+	var totalItems int64
+	if err := r.pool.QueryRow(ctx, countQuery, args...).Scan(&totalItems); err != nil {
+		return pagination.PageResult[hr.OvertimeRule]{}, platformerrors.Internal("failed to count overtime rules", err)
+	}
+
+	orderDir := page.OrderDirection()
+	sortBy := "id"
+	if page.SortBy != "" {
+		if col, ok := allowedOvertimeRuleFilterFields[page.SortBy]; ok {
+			sortBy = col
+		}
+	}
+
+	limit := page.LimitClamped()
+	offset := page.Offset()
+
+	dataQuery := fmt.Sprintf(`
+		SELECT id, name, base_off, timing_type, timing_start, multiplier, active, company_id
+		FROM hr_overtime_rules
+		%s
+		ORDER BY %s %s
+		LIMIT $%d OFFSET $%d
+	`, whereClause, sortBy, orderDir, nextIdx, nextIdx+1)
+
+	args = append(args, limit, offset)
+	rows, err := r.pool.Query(ctx, dataQuery, args...)
+	if err != nil {
+		return pagination.PageResult[hr.OvertimeRule]{}, platformerrors.Internal("failed to list overtime rules", err)
+	}
+	defer rows.Close()
+
+	var list []hr.OvertimeRule
+	for rows.Next() {
+		var ru hr.OvertimeRule
+		if err := rows.Scan(
+			&ru.ID, &ru.Name, &ru.BaseOff, &ru.TimingType, &ru.TimingStart, &ru.Multiplier, &ru.Active, &ru.CompanyID,
+		); err != nil {
+			return pagination.PageResult[hr.OvertimeRule]{}, platformerrors.Internal("failed to scan overtime rule row", err)
+		}
+		list = append(list, ru)
+	}
+
+	return pagination.NewPageResult(list, totalItems, page), nil
 }

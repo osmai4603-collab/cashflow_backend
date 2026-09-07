@@ -108,12 +108,13 @@ type StockAdjustmentInput struct {
 // ─────────────────────────────────────────────────────────────────────────────
 
 type UseCase struct {
-	repo         stock.Repository
-	partnerRepo  partner.Repository
-	productRepo  product.Repository
-	saleRepo     sale.Repository
-	purchaseRepo purchase.Repository
-	logger       *slog.Logger
+	repo          stock.Repository
+	partnerRepo   partner.Repository
+	productRepo   product.Repository
+	saleRepo      sale.Repository
+	purchaseRepo  purchase.Repository
+	accountingSvc AccountingGateway
+	logger        *slog.Logger
 }
 
 func New(
@@ -122,18 +123,32 @@ func New(
 	productRepo product.Repository,
 	saleRepo sale.Repository,
 	purchaseRepo purchase.Repository,
-	logger *slog.Logger,
+	optional ...any,
 ) *UseCase {
+	var accountingSvc AccountingGateway
+	var logger *slog.Logger
+	for _, value := range optional {
+		switch typed := value.(type) {
+		case AccountingGateway:
+			accountingSvc = typed
+		case *slog.Logger:
+			logger = typed
+		}
+	}
 	if logger == nil {
 		logger = slog.Default()
 	}
+	if accountingSvc == nil {
+		accountingSvc = noopAccountingGateway{}
+	}
 	return &UseCase{
-		repo:         repo,
-		partnerRepo:  partnerRepo,
-		productRepo:  productRepo,
-		saleRepo:     saleRepo,
-		purchaseRepo: purchaseRepo,
-		logger:       logger,
+		repo:          repo,
+		partnerRepo:   partnerRepo,
+		productRepo:   productRepo,
+		saleRepo:      saleRepo,
+		purchaseRepo:  purchaseRepo,
+		accountingSvc: accountingSvc,
+		logger:        logger,
 	}
 }
 
@@ -730,6 +745,12 @@ func (uc *UseCase) ValidatePicking(ctx context.Context, id int64, in ValidatePic
 		return nil, err
 	}
 
+	// Phase 12: value the moves and post stock valuation entries when boundaries are configured.
+	if err := uc.ValuatePicking(ctx, picking); err != nil {
+		uc.logger.ErrorContext(ctx, "stock valuation failed after picking validation", "id", picking.ID, "error", err)
+		return nil, err
+	}
+
 	// Update linked Sale Order delivered quantities if applicable
 	if picking.SourceOrderID != nil && picking.PickingType == stock.PickingTypeOutgoing && uc.saleRepo != nil {
 		if so, err := uc.saleRepo.GetOrderByID(ctx, *picking.SourceOrderID); err == nil {
@@ -886,6 +907,12 @@ func (uc *UseCase) AdjustStock(ctx context.Context, in StockAdjustmentInput) (*s
 	}
 
 	if err := uc.repo.ValidatePickingTx(ctx, picking); err != nil {
+		return nil, err
+	}
+
+	// Phase 12: value the adjustment move so the valuation trail stays consistent.
+	if err := uc.ValuatePicking(ctx, picking); err != nil {
+		uc.logger.ErrorContext(ctx, "stock adjustment valuation failed", "product_id", in.ProductID, "error", err)
 		return nil, err
 	}
 

@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"cashflow_backend/internal/domain/stock"
 	"cashflow_backend/internal/platform/audit"
 	platformerrors "cashflow_backend/internal/platform/errors"
 )
@@ -57,13 +58,20 @@ func (u *UnitOfMeasure) Validate() error {
 
 // ProductCategory represents a hierarchical categorization (product.category in Odoo).
 type ProductCategory struct {
-	ID           int64     `json:"id"`
-	Name         string    `json:"name"`
-	ParentID     *int64    `json:"parent_id,omitempty"`
-	CompleteName string    `json:"complete_name"` // e.g. "All / Electronics / Laptops"
-	Active       bool      `json:"active"`
-	CreatedAt    time.Time `json:"created_at"`
-	UpdatedAt    time.Time `json:"updated_at"`
+	ID           int64  `json:"id"`
+	Name         string `json:"name"`
+	ParentID     *int64 `json:"parent_id,omitempty"`
+	CompleteName string `json:"complete_name"` // e.g. "All / Electronics / Laptops"
+	// Valuation defaults (company_templates — inherited by products, Phase 12).
+	PropertyCostMethod               *stock.CostMethod    `json:"property_cost_method,omitempty"`
+	PropertyValuation                *stock.ValuationMode `json:"property_valuation,omitempty"`
+	PropertyLotValuated              *bool                `json:"property_lot_valuated,omitempty"`
+	PropertyStockValuationAccountID  *int64               `json:"property_stock_valuation_account_id,omitempty"`
+	PropertyPriceDifferenceAccountID *int64               `json:"property_price_difference_account_id,omitempty"`
+	PropertyStockJournalID           *int64               `json:"property_stock_journal_id,omitempty"`
+	Active                           bool                 `json:"active"`
+	CreatedAt                        time.Time            `json:"created_at"`
+	UpdatedAt                        time.Time            `json:"updated_at"`
 }
 
 // Validate verifies ProductCategory invariants.
@@ -96,16 +104,28 @@ type ProductTemplate struct {
 	Barcode     string           `json:"barcode,omitempty"`
 	SalePrice   float64          `json:"sale_price"`
 	CostPrice   float64          `json:"cost_price"`
-	UoMID       *int64           `json:"uom_id,omitempty"`
-	UoM         *UnitOfMeasure   `json:"uom,omitempty"`
-	SaleOK      bool             `json:"sale_ok"`
-	PurchaseOK  bool             `json:"purchase_ok"`
-	Weight      float64          `json:"weight"`
-	Volume      float64          `json:"volume"`
-	Description string           `json:"description,omitempty"`
-	CompanyID   *int64           `json:"company_id,omitempty"`
-	Active      bool             `json:"active"`
-	Audit       audit.Fields     `json:"audit"`
+	// Valuation configuration (Phase 12 — resolved from category/company when empty).
+	CostMethod               stock.CostMethod    `json:"cost_method,omitempty"` // standard | fifo | average
+	Valuation                stock.ValuationMode `json:"valuation,omitempty"`   // real_time | periodic
+	LotValuated              bool                `json:"lot_valuated,omitempty"`
+	AvgCost                  float64             `json:"avg_cost,omitempty"`
+	TotalValue               float64             `json:"total_value,omitempty"`
+	StockValuationAccountID  *int64              `json:"stock_valuation_account_id,omitempty"`
+	PriceDifferenceAccountID *int64              `json:"price_difference_account_id,omitempty"`
+	StockJournalID           *int64              `json:"stock_journal_id,omitempty"`
+	// Landed cost capability (Odoo stock_landed_costs: landed_cost_ok / split_method_landed_cost).
+	LandedCostOK          bool              `json:"landed_cost_ok,omitempty"`
+	SplitMethodLandedCost stock.SplitMethod `json:"split_method_landed_cost,omitempty"`
+	UoMID                 *int64            `json:"uom_id,omitempty"`
+	UoM                   *UnitOfMeasure    `json:"uom,omitempty"`
+	SaleOK                bool              `json:"sale_ok"`
+	PurchaseOK            bool              `json:"purchase_ok"`
+	Weight                float64           `json:"weight"`
+	Volume                float64           `json:"volume"`
+	Description           string            `json:"description,omitempty"`
+	CompanyID             *int64            `json:"company_id,omitempty"`
+	Active                bool              `json:"active"`
+	Audit                 audit.Fields      `json:"audit"`
 }
 
 // Validate ensures ProductTemplate invariants are strictly upheld.
@@ -158,6 +178,10 @@ func (pt *ProductTemplate) Validate() error {
 	pt.InternalRef = strings.TrimSpace(pt.InternalRef)
 	pt.Barcode = strings.TrimSpace(pt.Barcode)
 
+	if pt.SplitMethodLandedCost == "" {
+		pt.SplitMethodLandedCost = stock.SplitEqual
+	}
+
 	return nil
 }
 
@@ -194,14 +218,14 @@ type VariantAttributeValue struct {
 
 // ProductVariant represents a concrete SKU variant of a product template (product.product in Odoo).
 type ProductVariant struct {
-	ID          int64                   `json:"id"`
-	TemplateID  int64                   `json:"template_id"`
-	SKU         string                  `json:"sku,omitempty"`
-	Barcode     string                  `json:"barcode,omitempty"`
-	ExtraPrice  float64                 `json:"extra_price"`
-	Attributes  []VariantAttributeValue `json:"attributes,omitempty"`
-	Active      bool                    `json:"active"`
-	Audit       audit.Fields            `json:"audit"`
+	ID         int64                   `json:"id"`
+	TemplateID int64                   `json:"template_id"`
+	SKU        string                  `json:"sku,omitempty"`
+	Barcode    string                  `json:"barcode,omitempty"`
+	ExtraPrice float64                 `json:"extra_price"`
+	Attributes []VariantAttributeValue `json:"attributes,omitempty"`
+	Active     bool                    `json:"active"`
+	Audit      audit.Fields            `json:"audit"`
 }
 
 // Validate ensures ProductVariant invariants.
@@ -350,12 +374,12 @@ func (pi *PricelistItem) CalculatePrice(basePrice float64, qty float64) float64 
 
 // Pricelist represents a collection of pricing rules (product.pricelist in Odoo).
 type Pricelist struct {
-	ID        int64           `json:"id"`
-	Name      string          `json:"name"`
-	Currency  string          `json:"currency"`
-	Active    bool            `json:"active"`
-	Items     []PricelistItem `json:"items,omitempty"`
-	Audit     audit.Fields    `json:"audit"`
+	ID       int64           `json:"id"`
+	Name     string          `json:"name"`
+	Currency string          `json:"currency"`
+	Active   bool            `json:"active"`
+	Items    []PricelistItem `json:"items,omitempty"`
+	Audit    audit.Fields    `json:"audit"`
 }
 
 // Validate checks Pricelist constraints.

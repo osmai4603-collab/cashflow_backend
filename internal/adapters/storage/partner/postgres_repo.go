@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"cashflow_backend/internal/domain/partner"
+	"cashflow_backend/internal/platform/audit"
 	platformerrors "cashflow_backend/internal/platform/errors"
 	"cashflow_backend/internal/platform/filter"
 	"cashflow_backend/internal/platform/pagination"
@@ -70,6 +71,9 @@ func NewPostgresRepo(pool *pgxpool.Pool) *PostgresRepo {
 }
 
 func (r *PostgresRepo) Create(ctx context.Context, p *partner.Partner) error {
+	if p.CompanyID == nil {
+		p.CompanyID = audit.CompanyIDFromContext(ctx)
+	}
 	query := `
 		INSERT INTO res_partners (
 			name, email, phone, mobile, type,
@@ -101,11 +105,16 @@ func (r *PostgresRepo) Create(ctx context.Context, p *partner.Partner) error {
 
 func (r *PostgresRepo) GetByID(ctx context.Context, id int64) (*partner.Partner, error) {
 	query := fmt.Sprintf(`SELECT %s FROM res_partners WHERE id = $1 AND active = true`, selectPartnerFields)
+	args := []any{id}
+	if companyID := audit.CompanyIDFromContext(ctx); companyID != nil {
+		query += " AND company_id = $2"
+		args = append(args, *companyID)
+	}
 
 	var p partner.Partner
 	var pType string
 
-	err := r.pool.QueryRow(ctx, query, id).Scan(
+	err := r.pool.QueryRow(ctx, query, args...).Scan(
 		&p.ID,
 		&p.Name,
 		&p.Email,
@@ -167,13 +176,18 @@ func (r *PostgresRepo) Update(ctx context.Context, p *partner.Partner) error {
 		WHERE id = $20 AND active = true
 		RETURNING updated_at
 	`
-
-	err := r.pool.QueryRow(ctx, query,
+	args := []any{
 		p.Name, p.Email, p.Phone, p.Mobile, string(p.Type),
 		p.IsCustomer, p.IsSupplier, p.VATNumber, p.Website,
 		p.CompanyID, p.ParentID, p.Street, p.Street2, p.City, p.State, p.Country, p.ZipCode,
 		p.Audit.UpdatedAt, p.Audit.UpdatedBy, p.ID,
-	).Scan(&p.Audit.UpdatedAt)
+	}
+	if companyID := audit.CompanyIDFromContext(ctx); companyID != nil {
+		query = strings.Replace(query, "WHERE id = $20 AND active = true", "WHERE id = $20 AND active = true AND company_id = $21", 1)
+		args = append(args, *companyID)
+	}
+
+	err := r.pool.QueryRow(ctx, query, args...).Scan(&p.Audit.UpdatedAt)
 
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -187,8 +201,13 @@ func (r *PostgresRepo) Update(ctx context.Context, p *partner.Partner) error {
 
 func (r *PostgresRepo) Delete(ctx context.Context, id int64) error {
 	query := `UPDATE res_partners SET active = false, updated_at = NOW() WHERE id = $1 AND active = true`
+	args := []any{id}
+	if companyID := audit.CompanyIDFromContext(ctx); companyID != nil {
+		query += " AND company_id = $2"
+		args = append(args, *companyID)
+	}
 
-	cmdTag, err := r.pool.Exec(ctx, query, id)
+	cmdTag, err := r.pool.Exec(ctx, query, args...)
 	if err != nil {
 		return platformerrors.Internal("failed to soft delete partner", err)
 	}
@@ -201,6 +220,12 @@ func (r *PostgresRepo) Delete(ctx context.Context, id int64) error {
 }
 
 func (r *PostgresRepo) List(ctx context.Context, f *filter.Filter, page pagination.PageRequest) (pagination.PageResult[partner.Partner], error) {
+	if companyID := audit.CompanyIDFromContext(ctx); companyID != nil {
+		if f == nil {
+			f = filter.NewFilter()
+		}
+		f.Add("company_id", filter.OpEqual, *companyID)
+	}
 	// If no filter or no explicit active filter, enforce active = true
 	var activeExplicit bool
 	if f != nil {

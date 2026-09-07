@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"cashflow_backend/internal/domain/sale"
+	"cashflow_backend/internal/platform/audit"
 	"cashflow_backend/internal/platform/database"
 	platformerrors "cashflow_backend/internal/platform/errors"
 	"cashflow_backend/internal/platform/filter"
@@ -18,11 +19,14 @@ import (
 )
 
 var allowedSaleOrderFilterFields = map[string]string{
-	"partner_id":     "partner_id",
-	"state":          "state",
-	"invoice_status": "invoice_status",
-	"name":           "name",
-	"active":         "active",
+	"partner_id":           "partner_id",
+	"state":                "state",
+	"invoice_status":       "invoice_status",
+	"delivery_status":      "delivery_status",
+	"procurement_group_id": "procurement_group_id",
+	"name":                 "name",
+	"active":               "active",
+	"company_id":           "company_id",
 }
 
 // PostgresRepo implements sale.Repository using PostgreSQL.
@@ -37,16 +41,19 @@ func NewPostgresRepo(pool *pgxpool.Pool) *PostgresRepo {
 
 // CreateOrder persists a new sale order and its lines within an atomic transaction.
 func (r *PostgresRepo) CreateOrder(ctx context.Context, order *sale.SaleOrder) error {
+	if order.CompanyID == nil {
+		order.CompanyID = audit.CompanyIDFromContext(ctx)
+	}
 	return database.WithTx(ctx, r.pool, func(tx pgx.Tx) error {
 		query := `
 			INSERT INTO sale_orders (
 				name, partner_id, date_order, validity_date, state, invoice_status,
 				pricelist_id, payment_term_id, user_id, company_id, currency, note,
-				amount_untaxed, amount_tax, amount_total, active, created_at, updated_at
+				amount_untaxed, amount_tax, amount_total, delivery_status, procurement_group_id, active, created_at, updated_at
 			) VALUES (
 				$1, $2, $3, $4, $5, $6,
 				$7, $8, $9, $10, $11, $12,
-				$13, $14, $15, true, NOW(), NOW()
+				$13, $14, $15, $16, $17, true, NOW(), NOW()
 			) RETURNING id, created_at, updated_at
 		`
 		now := time.Now().UTC()
@@ -62,11 +69,14 @@ func (r *PostgresRepo) CreateOrder(ctx context.Context, order *sale.SaleOrder) e
 		if order.InvoiceStatus == "" {
 			order.InvoiceStatus = sale.InvoiceStatusNo
 		}
+		if order.DeliveryStatus == "" {
+			order.DeliveryStatus = "nothing"
+		}
 
 		err := tx.QueryRow(ctx, query,
 			order.Name, order.PartnerID, order.DateOrder, order.ValidityDate, string(order.State), string(order.InvoiceStatus),
 			order.PricelistID, order.PaymentTermID, order.UserID, order.CompanyID, order.Currency, order.Note,
-			order.AmountUntaxed, order.AmountTax, order.AmountTotal,
+			order.AmountUntaxed, order.AmountTax, order.AmountTotal, order.DeliveryStatus, order.ProcurementGroupID,
 		).Scan(&order.ID, &order.Audit.CreatedAt, &order.Audit.UpdatedAt)
 
 		if err != nil {
@@ -80,11 +90,11 @@ func (r *PostgresRepo) CreateOrder(ctx context.Context, order *sale.SaleOrder) e
 			INSERT INTO sale_order_lines (
 				order_id, sequence, product_id, name, product_uom_qty, product_uom,
 				price_unit, discount, tax_ids, price_subtotal, price_tax, price_total,
-				qty_delivered, qty_invoiced, created_at, updated_at
+				qty_delivered, qty_invoiced, route_id, created_at, updated_at
 			) VALUES (
 				$1, $2, $3, $4, $5, $6,
 				$7, $8, $9, $10, $11, $12,
-				$13, $14, NOW(), NOW()
+				$13, $14, $15, NOW(), NOW()
 			) RETURNING id, created_at, updated_at
 		`
 
@@ -98,7 +108,7 @@ func (r *PostgresRepo) CreateOrder(ctx context.Context, order *sale.SaleOrder) e
 				order.Lines[i].ProductUomQty, order.Lines[i].ProductUom, order.Lines[i].UnitPrice,
 				order.Lines[i].Discount, order.Lines[i].TaxIDs, order.Lines[i].PriceSubtotal,
 				order.Lines[i].PriceTax, order.Lines[i].PriceTotal, order.Lines[i].QtyDelivered,
-				order.Lines[i].QtyInvoiced,
+				order.Lines[i].QtyInvoiced, order.Lines[i].RouteID,
 			).Scan(&order.Lines[i].ID, &order.Lines[i].CreatedAt, &order.Lines[i].UpdatedAt)
 			if err != nil {
 				return platformerrors.Internal("failed to insert sale order line", err)
@@ -114,16 +124,21 @@ func (r *PostgresRepo) GetOrderByID(ctx context.Context, id int64) (*sale.SaleOr
 	query := `
 		SELECT id, name, partner_id, date_order, validity_date, state, invoice_status,
 		       pricelist_id, payment_term_id, user_id, company_id, currency, COALESCE(note, ''),
-		       amount_untaxed, amount_tax, amount_total, active, created_at, updated_at
+		       amount_untaxed, amount_tax, amount_total, delivery_status, procurement_group_id, active, created_at, updated_at
 		FROM sale_orders
 		WHERE id = $1 AND active = true
 	`
+	args := []any{id}
+	if companyID := audit.CompanyIDFromContext(ctx); companyID != nil {
+		query = strings.Replace(query, "WHERE id = $1 AND active = true", "WHERE id = $1 AND active = true AND company_id = $2", 1)
+		args = append(args, *companyID)
+	}
 	var o sale.SaleOrder
 	var stateStr, invStatusStr string
-	err := r.pool.QueryRow(ctx, query, id).Scan(
+	err := r.pool.QueryRow(ctx, query, args...).Scan(
 		&o.ID, &o.Name, &o.PartnerID, &o.DateOrder, &o.ValidityDate, &stateStr, &invStatusStr,
 		&o.PricelistID, &o.PaymentTermID, &o.UserID, &o.CompanyID, &o.Currency, &o.Note,
-		&o.AmountUntaxed, &o.AmountTax, &o.AmountTotal, &o.Active, &o.Audit.CreatedAt, &o.Audit.UpdatedAt,
+		&o.AmountUntaxed, &o.AmountTax, &o.AmountTotal, &o.DeliveryStatus, &o.ProcurementGroupID, &o.Active, &o.Audit.CreatedAt, &o.Audit.UpdatedAt,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -156,16 +171,21 @@ func (r *PostgresRepo) GetOrderByName(ctx context.Context, name string) (*sale.S
 	query := `
 		SELECT id, name, partner_id, date_order, validity_date, state, invoice_status,
 		       pricelist_id, payment_term_id, user_id, company_id, currency, COALESCE(note, ''),
-		       amount_untaxed, amount_tax, amount_total, active, created_at, updated_at
+		       amount_untaxed, amount_tax, amount_total, delivery_status, procurement_group_id, active, created_at, updated_at
 		FROM sale_orders
 		WHERE name = $1 AND active = true
 	`
+	args := []any{name}
+	if companyID := audit.CompanyIDFromContext(ctx); companyID != nil {
+		query = strings.Replace(query, "WHERE name = $1 AND active = true", "WHERE name = $1 AND active = true AND company_id = $2", 1)
+		args = append(args, *companyID)
+	}
 	var o sale.SaleOrder
 	var stateStr, invStatusStr string
-	err := r.pool.QueryRow(ctx, query, name).Scan(
+	err := r.pool.QueryRow(ctx, query, args...).Scan(
 		&o.ID, &o.Name, &o.PartnerID, &o.DateOrder, &o.ValidityDate, &stateStr, &invStatusStr,
 		&o.PricelistID, &o.PaymentTermID, &o.UserID, &o.CompanyID, &o.Currency, &o.Note,
-		&o.AmountUntaxed, &o.AmountTax, &o.AmountTotal, &o.Active, &o.Audit.CreatedAt, &o.Audit.UpdatedAt,
+		&o.AmountUntaxed, &o.AmountTax, &o.AmountTotal, &o.DeliveryStatus, &o.ProcurementGroupID, &o.Active, &o.Audit.CreatedAt, &o.Audit.UpdatedAt,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -200,17 +220,23 @@ func (r *PostgresRepo) UpdateOrder(ctx context.Context, order *sale.SaleOrder) e
 			    state = $5, invoice_status = $6, pricelist_id = $7, payment_term_id = $8,
 			    user_id = $9, company_id = $10, currency = $11, note = $12,
 			    amount_untaxed = $13, amount_tax = $14, amount_total = $15,
+			    delivery_status = $16, procurement_group_id = $17,
 			    updated_at = NOW()
-			WHERE id = $16 AND active = true
+			WHERE id = $18 AND active = true
 			RETURNING updated_at
 		`
-		err := tx.QueryRow(ctx, query,
+		args := []any{
 			order.Name, order.PartnerID, order.DateOrder, order.ValidityDate,
 			string(order.State), string(order.InvoiceStatus), order.PricelistID, order.PaymentTermID,
 			order.UserID, order.CompanyID, order.Currency, order.Note,
 			order.AmountUntaxed, order.AmountTax, order.AmountTotal,
-			order.ID,
-		).Scan(&order.Audit.UpdatedAt)
+			order.DeliveryStatus, order.ProcurementGroupID, order.ID,
+		}
+		if companyID := audit.CompanyIDFromContext(ctx); companyID != nil {
+			query = strings.Replace(query, "WHERE id = $18 AND active = true", "WHERE id = $18 AND active = true AND company_id = $19", 1)
+			args = append(args, *companyID)
+		}
+		err := tx.QueryRow(ctx, query, args...).Scan(&order.Audit.UpdatedAt)
 		if err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
 				return platformerrors.NotFound(fmt.Sprintf("sale order with id %d not found", order.ID))
@@ -228,11 +254,11 @@ func (r *PostgresRepo) UpdateOrder(ctx context.Context, order *sale.SaleOrder) e
 			INSERT INTO sale_order_lines (
 				order_id, sequence, product_id, name, product_uom_qty, product_uom,
 				price_unit, discount, tax_ids, price_subtotal, price_tax, price_total,
-				qty_delivered, qty_invoiced, created_at, updated_at
+				qty_delivered, qty_invoiced, route_id, created_at, updated_at
 			) VALUES (
 				$1, $2, $3, $4, $5, $6,
 				$7, $8, $9, $10, $11, $12,
-				$13, $14, NOW(), NOW()
+				$13, $14, $15, NOW(), NOW()
 			) RETURNING id, created_at, updated_at
 		`
 		for i := range order.Lines {
@@ -245,7 +271,7 @@ func (r *PostgresRepo) UpdateOrder(ctx context.Context, order *sale.SaleOrder) e
 				order.Lines[i].ProductUomQty, order.Lines[i].ProductUom, order.Lines[i].UnitPrice,
 				order.Lines[i].Discount, order.Lines[i].TaxIDs, order.Lines[i].PriceSubtotal,
 				order.Lines[i].PriceTax, order.Lines[i].PriceTotal, order.Lines[i].QtyDelivered,
-				order.Lines[i].QtyInvoiced,
+				order.Lines[i].QtyInvoiced, order.Lines[i].RouteID,
 			).Scan(&order.Lines[i].ID, &order.Lines[i].CreatedAt, &order.Lines[i].UpdatedAt)
 			if err != nil {
 				return platformerrors.Internal("failed to insert updated order line", err)
@@ -263,7 +289,12 @@ func (r *PostgresRepo) DeleteOrder(ctx context.Context, id int64) error {
 		SET active = false, updated_at = NOW()
 		WHERE id = $1 AND active = true
 	`
-	res, err := r.pool.Exec(ctx, query, id)
+	args := []any{id}
+	if companyID := audit.CompanyIDFromContext(ctx); companyID != nil {
+		query = strings.Replace(query, "WHERE id = $1 AND active = true", "WHERE id = $1 AND active = true AND company_id = $2", 1)
+		args = append(args, *companyID)
+	}
+	res, err := r.pool.Exec(ctx, query, args...)
 	if err != nil {
 		return platformerrors.Internal("failed to delete sale order", err)
 	}
@@ -275,6 +306,12 @@ func (r *PostgresRepo) DeleteOrder(ctx context.Context, id int64) error {
 
 // ListOrders returns paginated sale orders matching filters.
 func (r *PostgresRepo) ListOrders(ctx context.Context, f *filter.Filter, page pagination.PageRequest) (pagination.PageResult[sale.SaleOrder], error) {
+	if companyID := audit.CompanyIDFromContext(ctx); companyID != nil {
+		if f == nil {
+			f = filter.NewFilter()
+		}
+		f.Add("company_id", filter.OpEqual, *companyID)
+	}
 	var activeExplicit bool
 	if f != nil {
 		for _, c := range f.Criteria {
@@ -309,7 +346,7 @@ func (r *PostgresRepo) ListOrders(ctx context.Context, f *filter.Filter, page pa
 	dataQuery := fmt.Sprintf(`
 		SELECT id, name, partner_id, date_order, validity_date, state, invoice_status,
 		       pricelist_id, payment_term_id, user_id, company_id, currency, COALESCE(note, ''),
-		       amount_untaxed, amount_tax, amount_total, active, created_at, updated_at
+		       amount_untaxed, amount_tax, amount_total, delivery_status, procurement_group_id, active, created_at, updated_at
 		FROM sale_orders
 		%s
 		ORDER BY id DESC
@@ -330,7 +367,7 @@ func (r *PostgresRepo) ListOrders(ctx context.Context, f *filter.Filter, page pa
 		err := rows.Scan(
 			&o.ID, &o.Name, &o.PartnerID, &o.DateOrder, &o.ValidityDate, &stateStr, &invStatusStr,
 			&o.PricelistID, &o.PaymentTermID, &o.UserID, &o.CompanyID, &o.Currency, &o.Note,
-			&o.AmountUntaxed, &o.AmountTax, &o.AmountTotal, &o.Active, &o.Audit.CreatedAt, &o.Audit.UpdatedAt,
+			&o.AmountUntaxed, &o.AmountTax, &o.AmountTotal, &o.DeliveryStatus, &o.ProcurementGroupID, &o.Active, &o.Audit.CreatedAt, &o.Audit.UpdatedAt,
 		)
 		if err != nil {
 			return pagination.PageResult[sale.SaleOrder]{}, platformerrors.Internal("failed to scan sale order", err)
@@ -412,7 +449,7 @@ func (r *PostgresRepo) fetchLinesByOrderID(ctx context.Context, orderID int64) (
 	query := `
 		SELECT id, order_id, sequence, product_id, name, product_uom_qty, product_uom,
 		       price_unit, discount, tax_ids, price_subtotal, price_tax, price_total,
-		       qty_delivered, qty_invoiced, created_at, updated_at
+		       qty_delivered, qty_invoiced, route_id, created_at, updated_at
 		FROM sale_order_lines
 		WHERE order_id = $1
 		ORDER BY sequence ASC, id ASC
@@ -430,7 +467,7 @@ func (r *PostgresRepo) fetchLinesByOrderID(ctx context.Context, orderID int64) (
 			&l.ID, &l.OrderID, &l.Sequence, &l.ProductID, &l.Name,
 			&l.ProductUomQty, &l.ProductUom, &l.UnitPrice, &l.Discount,
 			&l.TaxIDs, &l.PriceSubtotal, &l.PriceTax, &l.PriceTotal,
-			&l.QtyDelivered, &l.QtyInvoiced, &l.CreatedAt, &l.UpdatedAt,
+			&l.QtyDelivered, &l.QtyInvoiced, &l.RouteID, &l.CreatedAt, &l.UpdatedAt,
 		)
 		if err != nil {
 			return nil, platformerrors.Internal("failed to scan sale order line", err)

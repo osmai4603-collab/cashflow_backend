@@ -7,6 +7,7 @@ import (
 
 	"cashflow_backend/internal/domain/partner"
 	"cashflow_backend/internal/platform/audit"
+	platformauth "cashflow_backend/internal/platform/auth"
 	platformerrors "cashflow_backend/internal/platform/errors"
 	"cashflow_backend/internal/platform/filter"
 	"cashflow_backend/internal/platform/pagination"
@@ -67,22 +68,44 @@ type UseCase interface {
 
 // PartnerUseCase implements the UseCase interface.
 type PartnerUseCase struct {
-	repo   partner.Repository
-	logger *slog.Logger
+	repo       partner.Repository
+	logger     *slog.Logger
+	authorizer platformauth.Authorizer
 }
 
 // New constructs a new PartnerUseCase.
-func New(repo partner.Repository, logger *slog.Logger) *PartnerUseCase {
+func New(repo partner.Repository, logger *slog.Logger, authorizers ...platformauth.Authorizer) *PartnerUseCase {
 	if logger == nil {
 		logger = slog.Default()
 	}
-	return &PartnerUseCase{
-		repo:   repo,
-		logger: logger,
+	uc := &PartnerUseCase{repo: repo, logger: logger}
+	if len(authorizers) > 0 {
+		uc.authorizer = authorizers[0]
 	}
+	return uc
+}
+
+func (uc *PartnerUseCase) authorize(ctx context.Context, action platformauth.Action) error {
+	if uc.authorizer == nil {
+		return nil
+	}
+	claims := platformauth.ClaimsFromContext(ctx)
+	subject := platformauth.Subject{}
+	if claims != nil {
+		subject = platformauth.Subject{UserID: claims.UserID, CompanyID: claims.CompanyID}
+	} else if userID := audit.UserIDFromContext(ctx); userID != nil {
+		subject.UserID = *userID
+		if companyID := audit.CompanyIDFromContext(ctx); companyID != nil {
+			subject.CompanyID = *companyID
+		}
+	}
+	return uc.authorizer.Check(ctx, subject, "res.partner", action)
 }
 
 func (uc *PartnerUseCase) CreatePartner(ctx context.Context, in CreatePartnerInput) (*partner.Partner, error) {
+	if err := uc.authorize(ctx, platformauth.ActionCreate); err != nil {
+		return nil, err
+	}
 	pType := in.Type
 	if pType == "" {
 		pType = partner.PartnerTypeIndividual
@@ -143,6 +166,9 @@ func (uc *PartnerUseCase) CreatePartner(ctx context.Context, in CreatePartnerInp
 }
 
 func (uc *PartnerUseCase) GetPartner(ctx context.Context, id int64) (*partner.Partner, error) {
+	if err := uc.authorize(ctx, platformauth.ActionRead); err != nil {
+		return nil, err
+	}
 	if id <= 0 {
 		return nil, platformerrors.BadRequest("invalid partner id")
 	}
@@ -150,6 +176,9 @@ func (uc *PartnerUseCase) GetPartner(ctx context.Context, id int64) (*partner.Pa
 }
 
 func (uc *PartnerUseCase) UpdatePartner(ctx context.Context, id int64, in UpdatePartnerInput) (*partner.Partner, error) {
+	if err := uc.authorize(ctx, platformauth.ActionWrite); err != nil {
+		return nil, err
+	}
 	if id <= 0 {
 		return nil, platformerrors.BadRequest("invalid partner id")
 	}
@@ -239,6 +268,9 @@ func (uc *PartnerUseCase) UpdatePartner(ctx context.Context, id int64, in Update
 }
 
 func (uc *PartnerUseCase) DeletePartner(ctx context.Context, id int64) error {
+	if err := uc.authorize(ctx, platformauth.ActionUnlink); err != nil {
+		return err
+	}
 	if id <= 0 {
 		return platformerrors.BadRequest("invalid partner id")
 	}
@@ -252,13 +284,22 @@ func (uc *PartnerUseCase) DeletePartner(ctx context.Context, id int64) error {
 }
 
 func (uc *PartnerUseCase) ListPartners(ctx context.Context, f *filter.Filter, page pagination.PageRequest) (pagination.PageResult[partner.Partner], error) {
+	if err := uc.authorize(ctx, platformauth.ActionRead); err != nil {
+		return pagination.PageResult[partner.Partner]{}, err
+	}
 	return uc.repo.List(ctx, f, page)
 }
 
 func (uc *PartnerUseCase) ListCustomers(ctx context.Context, page pagination.PageRequest) (pagination.PageResult[partner.Partner], error) {
+	if err := uc.authorize(ctx, platformauth.ActionRead); err != nil {
+		return pagination.PageResult[partner.Partner]{}, err
+	}
 	return uc.repo.ListCustomers(ctx, page)
 }
 
 func (uc *PartnerUseCase) ListSuppliers(ctx context.Context, page pagination.PageRequest) (pagination.PageResult[partner.Partner], error) {
+	if err := uc.authorize(ctx, platformauth.ActionRead); err != nil {
+		return pagination.PageResult[partner.Partner]{}, err
+	}
 	return uc.repo.ListSuppliers(ctx, page)
 }

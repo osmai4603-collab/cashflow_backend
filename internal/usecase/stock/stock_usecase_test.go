@@ -12,7 +12,7 @@ import (
 func TestLocationUseCases(t *testing.T) {
 	ctx := context.Background()
 	repo := stockstorage.NewMemoryRepo()
-	uc := stockusecase.New(repo, nil, nil, nil, nil, nil)
+	uc := stockusecase.New(repo, nil, nil, nil, nil, nil, nil)
 
 	// Create child location under WH/Stock (id: 8)
 	parentID := int64(8)
@@ -52,7 +52,7 @@ func TestLocationUseCases(t *testing.T) {
 func TestWarehouseUseCases(t *testing.T) {
 	ctx := context.Background()
 	repo := stockstorage.NewMemoryRepo()
-	uc := stockusecase.New(repo, nil, nil, nil, nil, nil)
+	uc := stockusecase.New(repo, nil, nil, nil, nil, nil, nil)
 
 	// 1. Invalid lot stock usage
 	viewLocID := int64(7) // WH
@@ -82,7 +82,7 @@ func TestWarehouseUseCases(t *testing.T) {
 func TestPickingReceiptAndDeliveryUseCases(t *testing.T) {
 	ctx := context.Background()
 	repo := stockstorage.NewMemoryRepo()
-	uc := stockusecase.New(repo, nil, nil, nil, nil, nil)
+	uc := stockusecase.New(repo, nil, nil, nil, nil, nil, nil)
 
 	// 1. Create Receipt (Incoming)
 	receipt, err := uc.CreatePicking(ctx, stockusecase.CreatePickingInput{
@@ -167,7 +167,7 @@ func TestPickingReceiptAndDeliveryUseCases(t *testing.T) {
 func TestStockAdjustmentUseCase(t *testing.T) {
 	ctx := context.Background()
 	repo := stockstorage.NewMemoryRepo()
-	uc := stockusecase.New(repo, nil, nil, nil, nil, nil)
+	uc := stockusecase.New(repo, nil, nil, nil, nil, nil, nil)
 
 	// Set initial stock to 25 via adjustment
 	q, err := uc.AdjustStock(ctx, stockusecase.StockAdjustmentInput{

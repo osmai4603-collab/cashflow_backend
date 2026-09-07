@@ -479,3 +479,55 @@ func ToEmployeeLeaveSummaryResponse(s *hr.EmployeeLeaveSummary) EmployeeLeaveSum
 		Balances:     balances,
 	}
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Attendance
+// ─────────────────────────────────────────────────────────────────────────────
+
+type CheckInRequest struct {
+	Latitude  float64 `json:"latitude"`
+	Longitude float64 `json:"longitude"`
+	IPAddress string  `json:"ip_address"`
+	Browser   string  `json:"browser"`
+	Mode      string  `json:"mode"`
+}
+
+type CheckOutRequest struct {
+	Latitude  float64 `json:"latitude"`
+	Longitude float64 `json:"longitude"`
+	IPAddress string  `json:"ip_address"`
+	Browser   string  `json:"browser"`
+	Mode      string  `json:"mode"`
+}
+
+type AttendanceResponse struct {
+	ID             int64      `json:"id"`
+	EmployeeID     int64      `json:"employee_id"`
+	CheckIn        time.Time  `json:"check_in"`
+	CheckOut       *time.Time `json:"check_out,omitempty"`
+	WorkedHours    float64    `json:"worked_hours"`
+	OvertimeHours  float64    `json:"overtime_hours"`
+	OvertimeStatus string     `json:"overtime_status"`
+	InMode         string     `json:"in_mode"`
+	OutMode        string     `json:"out_mode"`
+	CreatedAt      time.Time  `json:"created_at"`
+}
+
+func ToAttendanceResponse(a *hr.Attendance) AttendanceResponse {
+	return AttendanceResponse{
+		ID:             a.ID,
+		EmployeeID:     a.EmployeeID,
+		CheckIn:        a.CheckIn,
+		CheckOut:       a.CheckOut,
+		WorkedHours:    a.WorkedHours,
+		OvertimeHours:  a.OvertimeHours,
+		OvertimeStatus: a.OvertimeStatus,
+		InMode:         a.InMode,
+		OutMode:        a.OutMode,
+		CreatedAt:      a.CreatedAt,
+	}
+}
+
+type ApproveOvertimeRequest struct {
+	ManagerID int64 `json:"manager_id"`
+}

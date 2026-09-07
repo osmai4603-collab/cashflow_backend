@@ -17,6 +17,7 @@ const (
 	JournalTypeCash     JournalType = "cash"
 	JournalTypeBank     JournalType = "bank"
 	JournalTypeGeneral  JournalType = "general"
+	JournalTypeStock    JournalType = "stock"
 )
 
 // Journal represents a financial journal for organizing transactions (account.journal in Odoo).
@@ -56,7 +57,7 @@ func (j *Journal) Validate() error {
 	}
 
 	switch j.Type {
-	case JournalTypeSale, JournalTypePurchase, JournalTypeCash, JournalTypeBank, JournalTypeGeneral:
+	case JournalTypeSale, JournalTypePurchase, JournalTypeCash, JournalTypeBank, JournalTypeGeneral, JournalTypeStock:
 	default:
 		return platformerrors.Validation("invalid journal type", map[string]string{
 			"type": fmt.Sprintf("unsupported journal type '%s'", j.Type),

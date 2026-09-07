@@ -17,7 +17,7 @@ import (
 
 func setupTestServer() (http.Handler, *stockstorage.MemoryRepo) {
 	repo := stockstorage.NewMemoryRepo()
-	uc := stockusecase.New(repo, nil, nil, nil, nil, nil)
+	uc := stockusecase.New(repo, nil, nil, nil, nil, nil, nil)
 	h := stockhttp.NewHandler(uc, nil)
 
 	r := chi.NewRouter()

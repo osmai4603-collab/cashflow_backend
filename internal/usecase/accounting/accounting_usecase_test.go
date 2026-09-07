@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"log/slog"
+	"strings"
 	"testing"
 	"time"
 
@@ -132,6 +133,114 @@ func TestInvoiceCreationAndPosting(t *testing.T) {
 	}
 	if err := reversed.ValidateBalance(); err != nil {
 		t.Fatalf("reversal must be balanced: %v", err)
+	}
+}
+
+func TestInvoiceCOGSBooking(t *testing.T) {
+	ctx := context.Background()
+	uc, _ := newTestUseCase()
+
+	now := time.Date(2026, 3, 15, 12, 0, 0, 0, time.UTC)
+	prodID := int64(7)
+	cogsAcc := int64(12) // 500000 COGS
+	stockAcc := int64(5) // 140000 Inventory
+
+	// Invoice 10 units @ 50 with a COGS of 10 * 20 = 200 booked on the delivered cost.
+	in := accountingusecase.CreateInvoiceInput{
+		MoveType:    accounting.MoveTypeOutInvoice,
+		PartnerID:   1, // Customer
+		JournalID:   1, // Customer Invoices
+		Date:        now,
+		InvoiceDate: &now,
+		Ref:         "SO-COGS-INV",
+		Items: []accountingusecase.InvoiceLineItemInput{
+			{
+				ProductID:    &prodID,
+				Name:         "Widget Delivered",
+				Quantity:     10.0,
+				PriceUnit:    50.0,
+				Discount:     0.0,
+				TaxIDs:       []int64{1},
+				CogsAmount:   200.0,
+				CogsAccountID: &cogsAcc,
+				StockAccountID: &stockAcc,
+			},
+		},
+	}
+
+	invoice, err := uc.CreateInvoice(ctx, in)
+	if err != nil {
+		t.Fatalf("failed to create invoice with COGS: %v", err)
+	}
+	if err := invoice.ValidateBalance(); err != nil {
+		t.Fatalf("invoice with COGS lines must stay balanced: %v", err)
+	}
+
+	// Expect: receivable 575 (500 + 75 tax) + COGS 200 debit / Inventory 200 credit.
+	var cogsLines, invOutLines int
+	for _, l := range invoice.Lines {
+		if l.DisplayType == "cogs" {
+			if l.CogsOriginID == nil {
+				t.Errorf("cogs line %d must carry cogs_origin_id", l.ID)
+			}
+			if strings.Contains(l.Name, "COGS") {
+				cogsLines++
+				if l.Debit != 200.0 || l.Credit != 0.0 {
+					t.Errorf("expected COGS debit 200.0, got debit %.2f credit %.2f", l.Debit, l.Credit)
+				}
+				if l.AccountID != cogsAcc {
+					t.Errorf("expected cogs account %d, got %d", cogsAcc, l.AccountID)
+				}
+			} else {
+				invOutLines++
+				if l.Credit != 200.0 || l.Debit != 0.0 {
+					t.Errorf("expected Inventory credit 200.0, got debit %.2f credit %.2f", l.Debit, l.Credit)
+				}
+				if l.AccountID != stockAcc {
+					t.Errorf("expected stock account %d, got %d", stockAcc, l.AccountID)
+				}
+			}
+		}
+	}
+	if cogsLines != 1 || invOutLines != 1 {
+		t.Fatalf("expected 1 cogs + 1 inventory line, got %d + %d", cogsLines, invOutLines)
+	}
+
+	// The persisted move should round-trip the cogs metadata.
+	fetched, err := uc.GetMove(ctx, invoice.ID)
+	if err != nil {
+		t.Fatalf("failed to reload invoice: %v", err)
+	}
+	roundTripCogs := 0
+	for _, l := range fetched.Lines {
+		if l.DisplayType == "cogs" {
+			roundTripCogs++
+		}
+	}
+	if roundTripCogs != 2 {
+		t.Fatalf("expected 2 cogs lines after reload, got %d", roundTripCogs)
+	}
+
+	// No COGS when CogsAmount is zero.
+	plain := accountingusecase.CreateInvoiceInput{
+		MoveType:    accounting.MoveTypeOutInvoice,
+		PartnerID:   1,
+		JournalID:   1,
+		Date:        now,
+		InvoiceDate: &now,
+		Ref:         "SO-PLAIN-INV",
+		Items: []accountingusecase.InvoiceLineItemInput{
+			{ProductID: &prodID, Name: "Consulting", Quantity: 1.0, PriceUnit: 100.0, TaxIDs: []int64{1}},
+		},
+	}
+	plainInv, err := uc.CreateInvoice(ctx, plain)
+	if err != nil {
+		t.Fatalf("failed to create invoice without COGS: %v", err)
+	}
+	for _, l := range plainInv.Lines {
+		if l.DisplayType == "cogs" {
+			t.Fatalf("unexpected cogs line on plain invoice: %+v", l)
+		}
 	}
 }
 

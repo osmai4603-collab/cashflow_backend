@@ -11,10 +11,10 @@ import (
 	"time"
 
 	httpadapter "cashflow_backend/internal/adapters/http"
-	"cashflow_backend/internal/infrastructure/config"
 	"cashflow_backend/internal/infrastructure/health"
 	"cashflow_backend/internal/infrastructure/server"
 	"cashflow_backend/internal/infrastructure/worker"
+	platconfig "cashflow_backend/internal/platform/config"
 )
 
 type trackCloser struct {
@@ -35,20 +35,20 @@ func (dummyPinger) Ping(ctx context.Context) error {
 func TestServer_FullLifecycle(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 
-	cfg := &config.Config{
-		Port:              "0",
-		ReadTimeout:       2 * time.Second,
-		ReadHeaderTimeout: 1 * time.Second,
-		WriteTimeout:      2 * time.Second,
-		IdleTimeout:       5 * time.Second,
-		DrainDuration:     50 * time.Millisecond,
-		ShutdownTimeout:   1 * time.Second,
-		MaxHeaderBytes:    1 << 20,
-	}
+	cfg := platconfig.Defaults()
+	cfg.Server.Interface = "127.0.0.1"
+	cfg.Server.Port = "0"
+	cfg.Server.ReadTimeout = 2 * time.Second
+	cfg.Server.ReadHeaderTimeout = 1 * time.Second
+	cfg.Server.WriteTimeout = 2 * time.Second
+	cfg.Server.IdleTimeout = 5 * time.Second
+	cfg.Server.DrainDuration = 50 * time.Millisecond
+	cfg.Server.ShutdownTimeout = 1 * time.Second
+	cfg.Server.MaxHeaderBytes = 1 << 20
 
 	handler := httpadapter.NewBaseHandler("odoo_go_backend", "0.1.0", logger)
 	hc := health.NewHealthChecker(dummyPinger{})
-	router := httpadapter.NewRouter(handler, hc, nil, nil, nil, nil, nil, nil, nil, nil, nil, logger)
+	router := httpadapter.NewRouter(handler, hc, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, logger)
 	wm := worker.NewWorkerManager(logger)
 	customResource := &trackCloser{}
 

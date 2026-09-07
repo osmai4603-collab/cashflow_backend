@@ -2,6 +2,7 @@ package stock
 
 import (
 	"context"
+	"time"
 
 	"cashflow_backend/internal/platform/filter"
 	"cashflow_backend/internal/platform/pagination"
@@ -52,4 +53,38 @@ type Repository interface {
 
 	// Atomic Execution
 	ValidatePickingTx(ctx context.Context, picking *StockPicking) error
+
+	// Valuations (Phase 12 — stock-account integration)
+	UpdateMoveValue(ctx context.Context, move *StockMove) error
+	GetFIFOStack(ctx context.Context, productID, companyID int64) (FIFOStack, error)
+	CreateProductValue(ctx context.Context, pv *ProductValue) error
+	ListProductValues(ctx context.Context, f *filter.Filter, page pagination.PageRequest) (pagination.PageResult[ProductValue], error)
+	ComputeTotalValuation(ctx context.Context, productID *int64, locationID *int64) ([]ValuationSummary, error)
+
+	// Accounting Periods (periodic closing valuation)
+	CreateAccountingPeriod(ctx context.Context, p *AccountingPeriod) error
+	GetAccountingPeriodByID(ctx context.Context, id int64) (*AccountingPeriod, error)
+	ListAccountingPeriods(ctx context.Context, f *filter.Filter, page pagination.PageRequest) (pagination.PageResult[AccountingPeriod], error)
+	CloseAccountingPeriod(ctx context.Context, p *AccountingPeriod) error
+
+	// Reorder rules (Phase 13 — stock.orderpoint)
+	CreateOrderpoint(ctx context.Context, op *Orderpoint) error
+	GetOrderpointByID(ctx context.Context, id int64) (*Orderpoint, error)
+	UpdateOrderpoint(ctx context.Context, op *Orderpoint) error
+	DeleteOrderpoint(ctx context.Context, id int64) error
+	ListOrderpoints(ctx context.Context, f *filter.Filter, page pagination.PageRequest) (pagination.PageResult[Orderpoint], error)
+	ListOrderpointsForReplenishment(ctx context.Context, now time.Time) ([]*Orderpoint, error)
+	StockForecast(ctx context.Context, productID, locationID int64, at time.Time) (onHand, incoming, outgoing float64, err error)
+
+	// Landed costs (Phase 13 — stock.landed.cost)
+	CreateLandedCost(ctx context.Context, lc *LandedCost) error
+	GetLandedCostByID(ctx context.Context, id int64) (*LandedCost, error)
+	UpdateLandedCost(ctx context.Context, lc *LandedCost) error
+	ListLandedCosts(ctx context.Context, f *filter.Filter, page pagination.PageRequest) (pagination.PageResult[LandedCost], error)
+	DeleteLandedCost(ctx context.Context, id int64) error
+
+	// Procurement Groups (Phase 14 — sale_stock/purchase_stock)
+	CreateProcurementGroup(ctx context.Context, pg *ProcurementGroup) error
+	GetProcurementGroupByID(ctx context.Context, id int64) (*ProcurementGroup, error)
+	GetProcurementGroupByName(ctx context.Context, name string) (*ProcurementGroup, error)
 }

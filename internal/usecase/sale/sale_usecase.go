@@ -12,10 +12,12 @@ import (
 	"cashflow_backend/internal/domain/partner"
 	"cashflow_backend/internal/domain/product"
 	"cashflow_backend/internal/domain/sale"
+	"cashflow_backend/internal/domain/stock"
 	platformerrors "cashflow_backend/internal/platform/errors"
 	"cashflow_backend/internal/platform/filter"
 	"cashflow_backend/internal/platform/pagination"
 	accountingusecase "cashflow_backend/internal/usecase/accounting"
+	stockusecase "cashflow_backend/internal/usecase/stock"
 )
 
 // AccountingService abstracts the accounting usecase operations needed by sales.
@@ -85,6 +87,8 @@ type UseCase struct {
 	productRepo    product.Repository
 	accountingRepo accounting.Repository
 	accountingUC   AccountingService
+	stockRepo      stock.Repository
+	stockUC        *stockusecase.UseCase
 	logger         *slog.Logger
 }
 
@@ -96,13 +100,27 @@ func New(
 	accountingRepo accounting.Repository,
 	accountingUC AccountingService,
 	logger *slog.Logger,
+	optional ...any,
 ) *UseCase {
+	var stockRepo stock.Repository
+	var stockUC *stockusecase.UseCase
+	for _, opt := range optional {
+		switch v := opt.(type) {
+		case stock.Repository:
+			stockRepo = v
+		case *stockusecase.UseCase:
+			stockUC = v
+		}
+	}
+
 	return &UseCase{
 		repo:           repo,
 		partnerRepo:    partnerRepo,
 		productRepo:    productRepo,
 		accountingRepo: accountingRepo,
 		accountingUC:   accountingUC,
+		stockRepo:      stockRepo,
+		stockUC:        stockUC,
 		logger:         logger,
 	}
 }
@@ -308,6 +326,17 @@ func (uc *UseCase) ConfirmOrder(ctx context.Context, id int64) (*sale.SaleOrder,
 		return nil, err
 	}
 
+	// Phase 14: Sale-Stock Integration
+	if uc.stockUC != nil && uc.stockRepo != nil {
+		saleStock := NewSaleStockUseCase(uc.repo, uc.stockRepo, uc.stockUC, uc.logger)
+		if err := saleStock.CreateDeliveriesFromOrder(ctx, order); err != nil {
+			uc.logger.ErrorContext(ctx, "failed to create stock deliveries for sale order", "order_id", order.ID, "error", err)
+			// We don't necessarily want to fail the whole confirmation if stock creation fails,
+			// but in a strict system we might. For Phase 14, let's keep it robust.
+			return nil, fmt.Errorf("order confirmed but stock integration failed: %w", err)
+		}
+	}
+
 	uc.logger.InfoContext(ctx, "sale order confirmed", "id", order.ID, "name", order.Name)
 	return order, nil
 }
@@ -416,6 +445,8 @@ func (uc *UseCase) CreateInvoiceFromOrder(ctx context.Context, orderID int64, in
 			PriceUnit: l.UnitPrice,
 			Discount:  l.Discount,
 			TaxIDs:    l.TaxIDs,
+			// Phase 12 — Anglo-Saxon COGS for the delivered portion of this line.
+			CogsAmount: uc.computeCogs(ctx, l.ProductID, qtyToInvoice, l.QtyDelivered),
 		})
 	}
 
@@ -610,4 +641,28 @@ func (uc *UseCase) prepareLines(ctx context.Context, lineInputs []CreateSaleOrde
 
 func roundTo4(val float64) float64 {
 	return math.Round(val*10000) / 10000
+}
+
+// computeCogs returns the cost-of-goods-sold amount for the delivered portion of an
+// invoiced line, valued at the product's current cost (avg cost when maintained, else standard).
+func (uc *UseCase) computeCogs(ctx context.Context, productID int64, qtyToInvoice, qtyDelivered float64) float64 {
+	if uc.productRepo == nil {
+		return 0
+	}
+	delivered := qtyToInvoice
+	if qtyDelivered < delivered {
+		delivered = qtyDelivered
+	}
+	if delivered <= 0 {
+		return 0
+	}
+	pt, err := uc.productRepo.GetTemplateByID(ctx, productID)
+	if err != nil {
+		return 0
+	}
+	cost := pt.CostPrice
+	if pt.AvgCost > 0 {
+		cost = pt.AvgCost
+	}
+	return roundTo4(delivered * cost)
 }

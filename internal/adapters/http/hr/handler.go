@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"time"
 
+	"cashflow_backend/internal/domain/hr"
 	platformerrors "cashflow_backend/internal/platform/errors"
 	"cashflow_backend/internal/platform/filter"
 	"cashflow_backend/internal/platform/pagination"
@@ -18,18 +19,20 @@ import (
 
 // Handler serves HTTP requests for the Human Resources (HR) domain.
 type Handler struct {
-	useCase *hrusecase.UseCase
-	logger  *slog.Logger
+	useCase           *hrusecase.UseCase
+	attendanceUseCase hr.AttendanceUseCase
+	logger            *slog.Logger
 }
 
 // NewHandler constructs a new HR HTTP Handler.
-func NewHandler(useCase *hrusecase.UseCase, logger *slog.Logger) *Handler {
+func NewHandler(useCase *hrusecase.UseCase, attendanceUseCase hr.AttendanceUseCase, logger *slog.Logger) *Handler {
 	if logger == nil {
 		logger = slog.Default()
 	}
 	return &Handler{
-		useCase: useCase,
-		logger:  logger,
+		useCase:           useCase,
+		attendanceUseCase: attendanceUseCase,
+		logger:            logger,
 	}
 }
 

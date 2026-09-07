@@ -42,6 +42,7 @@ type StockPicking struct {
 	DateDone       *time.Time   `json:"date_done,omitempty"`
 	Origin         string       `json:"origin,omitempty"` // e.g. "SO/2026/00001", "PO/2026/00001"
 	SourceOrderID  *int64       `json:"source_order_id,omitempty"`
+	ProcurementGroupID *int64    `json:"procurement_group_id,omitempty"`
 	CompanyID      *int64       `json:"company_id,omitempty"`
 	Note           string       `json:"note,omitempty"`
 	Active         bool         `json:"active"`

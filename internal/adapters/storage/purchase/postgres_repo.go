@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"cashflow_backend/internal/domain/purchase"
+	"cashflow_backend/internal/platform/audit"
 	"cashflow_backend/internal/platform/database"
 	platformerrors "cashflow_backend/internal/platform/errors"
 	"cashflow_backend/internal/platform/filter"
@@ -18,11 +19,14 @@ import (
 )
 
 var allowedPurchaseOrderFilterFields = map[string]string{
-	"partner_id":     "partner_id",
-	"state":          "state",
-	"invoice_status": "invoice_status",
-	"name":           "name",
-	"active":         "active",
+	"partner_id":           "partner_id",
+	"state":                "state",
+	"invoice_status":       "invoice_status",
+	"receipt_status":       "receipt_status",
+	"procurement_group_id": "procurement_group_id",
+	"name":                 "name",
+	"active":               "active",
+	"company_id":           "company_id",
 }
 
 // PostgresRepo implements purchase.Repository using PostgreSQL.
@@ -37,16 +41,19 @@ func NewPostgresRepo(pool *pgxpool.Pool) *PostgresRepo {
 
 // CreateOrder persists a new purchase order and its lines within an atomic transaction.
 func (r *PostgresRepo) CreateOrder(ctx context.Context, order *purchase.PurchaseOrder) error {
+	if order.CompanyID == nil {
+		order.CompanyID = audit.CompanyIDFromContext(ctx)
+	}
 	return database.WithTx(ctx, r.pool, func(tx pgx.Tx) error {
 		query := `
 			INSERT INTO purchase_orders (
 				name, partner_id, date_order, date_planned, state, invoice_status,
 				payment_term_id, user_id, company_id, currency, note,
-				amount_untaxed, amount_tax, amount_total, active, created_at, updated_at
+				amount_untaxed, amount_tax, amount_total, receipt_status, procurement_group_id, active, created_at, updated_at
 			) VALUES (
 				$1, $2, $3, $4, $5, $6,
 				$7, $8, $9, $10, $11,
-				$12, $13, $14, true, NOW(), NOW()
+				$12, $13, $14, $15, $16, true, NOW(), NOW()
 			) RETURNING id, created_at, updated_at
 		`
 		now := time.Now().UTC()
@@ -62,11 +69,14 @@ func (r *PostgresRepo) CreateOrder(ctx context.Context, order *purchase.Purchase
 		if order.InvoiceStatus == "" {
 			order.InvoiceStatus = purchase.InvoiceStatusNo
 		}
+		if order.ReceiptStatus == "" {
+			order.ReceiptStatus = "nothing"
+		}
 
 		err := tx.QueryRow(ctx, query,
 			order.Name, order.PartnerID, order.DateOrder, order.DatePlanned, string(order.State), string(order.InvoiceStatus),
 			order.PaymentTermID, order.UserID, order.CompanyID, order.Currency, order.Note,
-			order.AmountUntaxed, order.AmountTax, order.AmountTotal,
+			order.AmountUntaxed, order.AmountTax, order.AmountTotal, order.ReceiptStatus, order.ProcurementGroupID,
 		).Scan(&order.ID, &order.Audit.CreatedAt, &order.Audit.UpdatedAt)
 
 		if err != nil {
@@ -114,16 +124,21 @@ func (r *PostgresRepo) GetOrderByID(ctx context.Context, id int64) (*purchase.Pu
 	query := `
 		SELECT id, name, partner_id, date_order, date_planned, state, invoice_status,
 		       payment_term_id, user_id, company_id, currency, COALESCE(note, ''),
-		       amount_untaxed, amount_tax, amount_total, active, created_at, updated_at
+		       amount_untaxed, amount_tax, amount_total, receipt_status, procurement_group_id, active, created_at, updated_at
 		FROM purchase_orders
 		WHERE id = $1 AND active = true
 	`
+	args := []any{id}
+	if companyID := audit.CompanyIDFromContext(ctx); companyID != nil {
+		query = strings.Replace(query, "WHERE id = $1 AND active = true", "WHERE id = $1 AND active = true AND company_id = $2", 1)
+		args = append(args, *companyID)
+	}
 	var o purchase.PurchaseOrder
 	var stateStr, invStatusStr string
-	err := r.pool.QueryRow(ctx, query, id).Scan(
+	err := r.pool.QueryRow(ctx, query, args...).Scan(
 		&o.ID, &o.Name, &o.PartnerID, &o.DateOrder, &o.DatePlanned, &stateStr, &invStatusStr,
 		&o.PaymentTermID, &o.UserID, &o.CompanyID, &o.Currency, &o.Note,
-		&o.AmountUntaxed, &o.AmountTax, &o.AmountTotal, &o.Active, &o.Audit.CreatedAt, &o.Audit.UpdatedAt,
+		&o.AmountUntaxed, &o.AmountTax, &o.AmountTotal, &o.ReceiptStatus, &o.ProcurementGroupID, &o.Active, &o.Audit.CreatedAt, &o.Audit.UpdatedAt,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -156,16 +171,21 @@ func (r *PostgresRepo) GetOrderByName(ctx context.Context, name string) (*purcha
 	query := `
 		SELECT id, name, partner_id, date_order, date_planned, state, invoice_status,
 		       payment_term_id, user_id, company_id, currency, COALESCE(note, ''),
-		       amount_untaxed, amount_tax, amount_total, active, created_at, updated_at
+		       amount_untaxed, amount_tax, amount_total, receipt_status, procurement_group_id, active, created_at, updated_at
 		FROM purchase_orders
 		WHERE name = $1 AND active = true
 	`
+	args := []any{name}
+	if companyID := audit.CompanyIDFromContext(ctx); companyID != nil {
+		query = strings.Replace(query, "WHERE name = $1 AND active = true", "WHERE name = $1 AND active = true AND company_id = $2", 1)
+		args = append(args, *companyID)
+	}
 	var o purchase.PurchaseOrder
 	var stateStr, invStatusStr string
-	err := r.pool.QueryRow(ctx, query, name).Scan(
+	err := r.pool.QueryRow(ctx, query, args...).Scan(
 		&o.ID, &o.Name, &o.PartnerID, &o.DateOrder, &o.DatePlanned, &stateStr, &invStatusStr,
 		&o.PaymentTermID, &o.UserID, &o.CompanyID, &o.Currency, &o.Note,
-		&o.AmountUntaxed, &o.AmountTax, &o.AmountTotal, &o.Active, &o.Audit.CreatedAt, &o.Audit.UpdatedAt,
+		&o.AmountUntaxed, &o.AmountTax, &o.AmountTotal, &o.ReceiptStatus, &o.ProcurementGroupID, &o.Active, &o.Audit.CreatedAt, &o.Audit.UpdatedAt,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -200,17 +220,23 @@ func (r *PostgresRepo) UpdateOrder(ctx context.Context, order *purchase.Purchase
 			    state = $5, invoice_status = $6, payment_term_id = $7,
 			    user_id = $8, company_id = $9, currency = $10, note = $11,
 			    amount_untaxed = $12, amount_tax = $13, amount_total = $14,
+			    receipt_status = $15, procurement_group_id = $16,
 			    updated_at = NOW()
-			WHERE id = $15 AND active = true
+			WHERE id = $17 AND active = true
 			RETURNING updated_at
 		`
-		err := tx.QueryRow(ctx, query,
+		args := []any{
 			order.Name, order.PartnerID, order.DateOrder, order.DatePlanned,
 			string(order.State), string(order.InvoiceStatus), order.PaymentTermID,
 			order.UserID, order.CompanyID, order.Currency, order.Note,
 			order.AmountUntaxed, order.AmountTax, order.AmountTotal,
-			order.ID,
-		).Scan(&order.Audit.UpdatedAt)
+			order.ReceiptStatus, order.ProcurementGroupID, order.ID,
+		}
+		if companyID := audit.CompanyIDFromContext(ctx); companyID != nil {
+			query = strings.Replace(query, "WHERE id = $17 AND active = true", "WHERE id = $17 AND active = true AND company_id = $18", 1)
+			args = append(args, *companyID)
+		}
+		err := tx.QueryRow(ctx, query, args...).Scan(&order.Audit.UpdatedAt)
 		if err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
 				return platformerrors.NotFound(fmt.Sprintf("purchase order with id %d not found", order.ID))
@@ -263,7 +289,12 @@ func (r *PostgresRepo) DeleteOrder(ctx context.Context, id int64) error {
 		SET active = false, updated_at = NOW()
 		WHERE id = $1 AND active = true
 	`
-	res, err := r.pool.Exec(ctx, query, id)
+	args := []any{id}
+	if companyID := audit.CompanyIDFromContext(ctx); companyID != nil {
+		query = strings.Replace(query, "WHERE id = $1 AND active = true", "WHERE id = $1 AND active = true AND company_id = $2", 1)
+		args = append(args, *companyID)
+	}
+	res, err := r.pool.Exec(ctx, query, args...)
 	if err != nil {
 		return platformerrors.Internal("failed to delete purchase order", err)
 	}
@@ -275,6 +306,12 @@ func (r *PostgresRepo) DeleteOrder(ctx context.Context, id int64) error {
 
 // ListOrders returns paginated purchase orders matching filters.
 func (r *PostgresRepo) ListOrders(ctx context.Context, f *filter.Filter, page pagination.PageRequest) (pagination.PageResult[purchase.PurchaseOrder], error) {
+	if companyID := audit.CompanyIDFromContext(ctx); companyID != nil {
+		if f == nil {
+			f = filter.NewFilter()
+		}
+		f.Add("company_id", filter.OpEqual, *companyID)
+	}
 	var activeExplicit bool
 	if f != nil {
 		for _, c := range f.Criteria {
@@ -309,7 +346,7 @@ func (r *PostgresRepo) ListOrders(ctx context.Context, f *filter.Filter, page pa
 	dataQuery := fmt.Sprintf(`
 		SELECT id, name, partner_id, date_order, date_planned, state, invoice_status,
 		       payment_term_id, user_id, company_id, currency, COALESCE(note, ''),
-		       amount_untaxed, amount_tax, amount_total, active, created_at, updated_at
+		       amount_untaxed, amount_tax, amount_total, receipt_status, procurement_group_id, active, created_at, updated_at
 		FROM purchase_orders
 		%s
 		ORDER BY id DESC
@@ -330,7 +367,7 @@ func (r *PostgresRepo) ListOrders(ctx context.Context, f *filter.Filter, page pa
 		err := rows.Scan(
 			&o.ID, &o.Name, &o.PartnerID, &o.DateOrder, &o.DatePlanned, &stateStr, &invStatusStr,
 			&o.PaymentTermID, &o.UserID, &o.CompanyID, &o.Currency, &o.Note,
-			&o.AmountUntaxed, &o.AmountTax, &o.AmountTotal, &o.Active, &o.Audit.CreatedAt, &o.Audit.UpdatedAt,
+			&o.AmountUntaxed, &o.AmountTax, &o.AmountTotal, &o.ReceiptStatus, &o.ProcurementGroupID, &o.Active, &o.Audit.CreatedAt, &o.Audit.UpdatedAt,
 		)
 		if err != nil {
 			return pagination.PageResult[purchase.PurchaseOrder]{}, platformerrors.Internal("failed to scan purchase order", err)

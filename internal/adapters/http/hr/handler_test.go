@@ -12,6 +12,7 @@ import (
 	"time"
 
 	hrhttp "cashflow_backend/internal/adapters/http/hr"
+	companystorage "cashflow_backend/internal/adapters/storage/company"
 	hrstorage "cashflow_backend/internal/adapters/storage/hr"
 	partnerstorage "cashflow_backend/internal/adapters/storage/partner"
 	hrusecase "cashflow_backend/internal/usecase/hr"
@@ -25,7 +26,9 @@ func setupTestServer() (*chi.Mux, *hrhttp.Handler, *hrusecase.UseCase) {
 	partnerRepo := partnerstorage.NewMemoryRepo()
 
 	useCase := hrusecase.New(hrRepo, partnerRepo, logger)
-	handler := hrhttp.NewHandler(useCase, logger)
+	companyRepo := companystorage.NewMemoryRepo()
+	attendanceUseCase := hrusecase.NewAttendanceUseCase(hrRepo, companyRepo, logger)
+	handler := hrhttp.NewHandler(useCase, attendanceUseCase, logger)
 
 	r := chi.NewRouter()
 	r.Route("/api/v1", func(v1 chi.Router) {

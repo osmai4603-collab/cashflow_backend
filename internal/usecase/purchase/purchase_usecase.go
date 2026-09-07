@@ -12,15 +12,19 @@ import (
 	"cashflow_backend/internal/domain/partner"
 	"cashflow_backend/internal/domain/product"
 	"cashflow_backend/internal/domain/purchase"
+	"cashflow_backend/internal/domain/stock"
 	platformerrors "cashflow_backend/internal/platform/errors"
 	"cashflow_backend/internal/platform/filter"
 	"cashflow_backend/internal/platform/pagination"
 	accountingusecase "cashflow_backend/internal/usecase/accounting"
+	stockusecase "cashflow_backend/internal/usecase/stock"
 )
 
 // AccountingService abstracts the accounting usecase operations needed by purchase.
 type AccountingService interface {
 	CreateInvoice(ctx context.Context, in accountingusecase.CreateInvoiceInput) (*accounting.AccountMove, error)
+	CreateJournalEntry(ctx context.Context, in accountingusecase.CreateJournalEntryInput) (*accounting.AccountMove, error)
+	PostMove(ctx context.Context, id int64) (*accounting.AccountMove, error)
 	GetMove(ctx context.Context, id int64) (*accounting.AccountMove, error)
 }
 
@@ -83,6 +87,8 @@ type UseCase struct {
 	productRepo    product.Repository
 	accountingRepo accounting.Repository
 	accountingUC   AccountingService
+	stockRepo      stock.Repository
+	stockUC        *stockusecase.UseCase
 	logger         *slog.Logger
 }
 
@@ -94,13 +100,27 @@ func New(
 	accountingRepo accounting.Repository,
 	accountingUC AccountingService,
 	logger *slog.Logger,
+	optional ...any,
 ) *UseCase {
+	var stockRepo stock.Repository
+	var stockUC *stockusecase.UseCase
+	for _, opt := range optional {
+		switch v := opt.(type) {
+		case stock.Repository:
+			stockRepo = v
+		case *stockusecase.UseCase:
+			stockUC = v
+		}
+	}
+
 	return &UseCase{
 		repo:           repo,
 		partnerRepo:    partnerRepo,
 		productRepo:    productRepo,
 		accountingRepo: accountingRepo,
 		accountingUC:   accountingUC,
+		stockRepo:      stockRepo,
+		stockUC:        stockUC,
 		logger:         logger,
 	}
 }
@@ -315,6 +335,15 @@ func (uc *UseCase) ConfirmOrder(ctx context.Context, id int64) (*purchase.Purcha
 		return nil, err
 	}
 
+	// Phase 14: Purchase-Stock Integration
+	if uc.stockUC != nil && uc.stockRepo != nil {
+		purchaseStock := NewPurchaseStockUseCase(uc.repo, uc.stockRepo, uc.stockUC, uc.logger)
+		if err := purchaseStock.CreateReceiptsFromOrder(ctx, order); err != nil {
+			uc.logger.ErrorContext(ctx, "failed to create stock receipts for purchase order", "order_id", order.ID, "error", err)
+			return nil, fmt.Errorf("purchase order confirmed but stock integration failed: %w", err)
+		}
+	}
+
 	uc.logger.InfoContext(ctx, "purchase order confirmed", "id", order.ID, "name", order.Name, "state", order.State)
 	return order, nil
 }
@@ -420,6 +449,7 @@ func (uc *UseCase) CreateBillFromOrder(ctx context.Context, orderID int64, in Cr
 
 	// Validate requested quantities against remaining unbilled quantities
 	var billItems []accountingusecase.InvoiceLineItemInput
+	var priceDiffLines []accountingusecase.JournalEntryLineInput
 	for i := range order.Lines {
 		l := &order.Lines[i]
 		qtyToBill, requested := qtyMap[l.ID]
@@ -443,6 +473,52 @@ func (uc *UseCase) CreateBillFromOrder(ctx context.Context, orderID int64, in Cr
 			Discount:  l.Discount,
 			TaxIDs:    l.TaxIDs,
 		})
+
+		// Anglo-Saxon price difference: the portion of this bill that covers inventory
+		// already received was valued on receipt at the product's standard cost. The
+		// gap between the invoiced unit price and that cost is booked to a Stock
+		// Valuation / Price Difference pair (Odoo stock_valuation price_diff_account).
+		if uc.productRepo != nil && l.QtyReceived > 0 {
+			billedReceived := qtyToBill
+			if l.QtyReceived < billedReceived {
+				billedReceived = l.QtyReceived
+			}
+			if billedReceived <= 0 {
+				continue
+			}
+			pt, err := uc.productRepo.GetTemplateByID(ctx, l.ProductID)
+			if err != nil {
+				continue
+			}
+			valuedCost := pt.CostPrice
+			if pt.CostMethod == "average" && pt.AvgCost > 0 {
+				valuedCost = pt.AvgCost
+			}
+			diff := roundTo4((l.UnitPrice - valuedCost) * billedReceived)
+			if diff == 0 {
+				continue
+			}
+			stockAcc := int64(5) // 140000 Inventory
+			if pt.StockValuationAccountID != nil && *pt.StockValuationAccountID > 0 {
+				stockAcc = *pt.StockValuationAccountID
+			}
+			priceDiffAcc := int64(17) // 510000 Price Difference
+			if pt.PriceDifferenceAccountID != nil && *pt.PriceDifferenceAccountID > 0 {
+				priceDiffAcc = *pt.PriceDifferenceAccountID
+			}
+			name := fmt.Sprintf("Price difference / %s", l.Name)
+			if diff > 0 {
+				priceDiffLines = append(priceDiffLines,
+					accountingusecase.JournalEntryLineInput{AccountID: stockAcc, ProductID: &pID, Name: name, Debit: diff, Credit: 0},
+					accountingusecase.JournalEntryLineInput{AccountID: priceDiffAcc, Name: name, Debit: 0, Credit: diff},
+				)
+			} else {
+				priceDiffLines = append(priceDiffLines,
+					accountingusecase.JournalEntryLineInput{AccountID: stockAcc, ProductID: &pID, Name: name, Debit: 0, Credit: -diff},
+					accountingusecase.JournalEntryLineInput{AccountID: priceDiffAcc, Name: name, Debit: -diff, Credit: 0},
+				)
+			}
+		}
 	}
 
 	if len(billItems) == 0 {
@@ -485,6 +561,24 @@ func (uc *UseCase) CreateBillFromOrder(ctx context.Context, orderID int64, in Cr
 	move, err := uc.accountingUC.CreateInvoice(ctx, invInput)
 	if err != nil {
 		return nil, err
+	}
+
+	// Post any price-difference entry raised while refining already-received inventory.
+	if len(priceDiffLines) > 0 {
+		diffEntry, err := uc.accountingUC.CreateJournalEntry(ctx, accountingusecase.CreateJournalEntryInput{
+			JournalID: journalID,
+			Date:      billDate,
+			Ref:       fmt.Sprintf("%s / price diff", move.Name),
+			Lines:     priceDiffLines,
+		})
+		if err != nil {
+			return nil, err
+		}
+		if _, err := uc.accountingUC.PostMove(ctx, diffEntry.ID); err != nil {
+			return nil, err
+		}
+		uc.logger.InfoContext(ctx, "purchase bill price difference posted",
+			"order_id", order.ID, "bill_id", move.ID, "diff_entry", diffEntry.ID)
 	}
 
 	// Link vendor bill to purchase order

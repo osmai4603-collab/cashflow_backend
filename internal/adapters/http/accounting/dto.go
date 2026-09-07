@@ -557,3 +557,33 @@ func ToMoveResponse(m *accounting.AccountMove) MoveResponse {
 		UpdatedAt:       m.Audit.UpdatedAt,
 	}
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// EDI DTOs
+// ─────────────────────────────────────────────────────────────────────────────
+
+type EDIDocumentResponse struct {
+	ID              int64                         `json:"id"`
+	MoveID          int64                         `json:"move_id"`
+	Format          accounting.EDIFormat          `json:"format"`
+	TransactionType accounting.EDITransactionType `json:"transaction_type"`
+	State           accounting.EDIState           `json:"state"`
+	QRCode          string                        `json:"qr_code,omitempty"`
+	ErrorMsg        string                        `json:"error_msg,omitempty"`
+	SentAt          *time.Time                    `json:"sent_at,omitempty"`
+	CreatedAt       time.Time                     `json:"created_at"`
+}
+
+func ToEDIDocumentResponse(d *accounting.EDIDocument) EDIDocumentResponse {
+	return EDIDocumentResponse{
+		ID:              d.ID,
+		MoveID:          d.MoveID,
+		Format:          d.Format,
+		TransactionType: d.TransactionType,
+		State:           d.State,
+		QRCode:          d.QRCode,
+		ErrorMsg:        d.ErrorMsg,
+		SentAt:          d.SentAt,
+		CreatedAt:       d.CreatedAt,
+	}
+}

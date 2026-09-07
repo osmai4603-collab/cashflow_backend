@@ -22,11 +22,17 @@ type MemoryRepo struct {
 	employees      map[int64]*hr.Employee
 	allocations    map[int64]*hr.LeaveAllocation
 	leaveRequests  map[int64]*hr.LeaveRequest
+	attendances    map[int64]*hr.Attendance
+	overtimeLines  map[int64]*hr.OvertimeLine
+	overtimeRules  map[int64]*hr.OvertimeRule
 	lastDeptID     int64
 	lastJobID      int64
 	lastEmpID      int64
 	lastAllocID    int64
 	lastLeaveReqID int64
+	lastAttID      int64
+	lastOTLineID   int64
+	lastOTRuleID   int64
 }
 
 // NewMemoryRepo creates an initialized MemoryRepo with standard initial departments and jobs.
@@ -37,6 +43,9 @@ func NewMemoryRepo() *MemoryRepo {
 		employees:     make(map[int64]*hr.Employee),
 		allocations:   make(map[int64]*hr.LeaveAllocation),
 		leaveRequests: make(map[int64]*hr.LeaveRequest),
+		attendances:   make(map[int64]*hr.Attendance),
+		overtimeLines: make(map[int64]*hr.OvertimeLine),
+		overtimeRules: make(map[int64]*hr.OvertimeRule),
 	}
 
 	now := time.Now().UTC()
@@ -792,4 +801,321 @@ func (r *MemoryRepo) HasOverlappingLeave(ctx context.Context, employeeID int64, 
 		}
 	}
 	return false, nil
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Attendance
+// ─────────────────────────────────────────────────────────────────────────────
+
+func (r *MemoryRepo) CreateAttendance(ctx context.Context, att *hr.Attendance) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	r.lastAttID++
+	att.ID = r.lastAttID
+	now := time.Now().UTC()
+	att.CreatedAt = now
+	att.UpdatedAt = now
+
+	clone := *att
+	r.attendances[att.ID] = &clone
+	return nil
+}
+
+func (r *MemoryRepo) GetAttendanceByID(ctx context.Context, id int64) (*hr.Attendance, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	att, ok := r.attendances[id]
+	if !ok {
+		return nil, platformerrors.NotFound(fmt.Sprintf("attendance with ID %d not found", id))
+	}
+	clone := *att
+	return &clone, nil
+}
+
+func (r *MemoryRepo) UpdateAttendance(ctx context.Context, att *hr.Attendance) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	existing, ok := r.attendances[att.ID]
+	if !ok {
+		return platformerrors.NotFound(fmt.Sprintf("attendance with ID %d not found", att.ID))
+	}
+
+	att.CreatedAt = existing.CreatedAt
+	att.UpdatedAt = time.Now().UTC()
+
+	clone := *att
+	r.attendances[att.ID] = &clone
+	return nil
+}
+
+func (r *MemoryRepo) DeleteAttendance(ctx context.Context, id int64) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if _, ok := r.attendances[id]; !ok {
+		return platformerrors.NotFound(fmt.Sprintf("attendance with ID %d not found", id))
+	}
+	delete(r.attendances, id)
+	return nil
+}
+
+func (r *MemoryRepo) ListAttendance(ctx context.Context, f *filter.Filter, page pagination.PageRequest) (pagination.PageResult[hr.Attendance], error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	var result []hr.Attendance
+	for _, a := range r.attendances {
+		matches := true
+		if f != nil && len(f.Criteria) > 0 {
+			for _, crit := range f.Criteria {
+				valStr := fmt.Sprintf("%v", crit.Value)
+				switch crit.Field {
+				case "employee_id":
+					if fmt.Sprintf("%d", a.EmployeeID) != valStr {
+						matches = false
+					}
+				case "company_id":
+					if fmt.Sprintf("%d", a.CompanyID) != valStr {
+						matches = false
+					}
+				}
+			}
+		}
+		if matches {
+			result = append(result, *a)
+		}
+	}
+
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].CheckIn.After(result[j].CheckIn)
+	})
+
+	total := int64(len(result))
+	offset := page.Offset()
+	limit := page.LimitClamped()
+
+	if offset >= int(total) {
+		return pagination.NewPageResult([]hr.Attendance{}, total, page), nil
+	}
+
+	end := offset + limit
+	if end > int(total) {
+		end = int(total)
+	}
+
+	return pagination.NewPageResult(result[offset:end], total, page), nil
+}
+
+func (r *MemoryRepo) GetLastAttendance(ctx context.Context, employeeID int64) (*hr.Attendance, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	var last *hr.Attendance
+	for _, a := range r.attendances {
+		if a.EmployeeID == employeeID {
+			if last == nil || a.CheckIn.After(last.CheckIn) {
+				last = a
+			}
+		}
+	}
+	if last == nil {
+		return nil, nil
+	}
+	clone := *last
+	return &clone, nil
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Overtime
+// ─────────────────────────────────────────────────────────────────────────────
+
+func (r *MemoryRepo) CreateOvertimeLine(ctx context.Context, line *hr.OvertimeLine) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	r.lastOTLineID++
+	line.ID = r.lastOTLineID
+	now := time.Now().UTC()
+	line.CreatedAt = now
+	line.UpdatedAt = now
+
+	clone := *line
+	r.overtimeLines[line.ID] = &clone
+	return nil
+}
+
+func (r *MemoryRepo) GetOvertimeLineByID(ctx context.Context, id int64) (*hr.OvertimeLine, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	line, ok := r.overtimeLines[id]
+	if !ok {
+		return nil, platformerrors.NotFound(fmt.Sprintf("overtime line with ID %d not found", id))
+	}
+	clone := *line
+	return &clone, nil
+}
+
+func (r *MemoryRepo) UpdateOvertimeLine(ctx context.Context, line *hr.OvertimeLine) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	existing, ok := r.overtimeLines[line.ID]
+	if !ok {
+		return platformerrors.NotFound(fmt.Sprintf("overtime line with ID %d not found", line.ID))
+	}
+
+	line.CreatedAt = existing.CreatedAt
+	line.UpdatedAt = time.Now().UTC()
+
+	clone := *line
+	r.overtimeLines[line.ID] = &clone
+	return nil
+}
+
+func (r *MemoryRepo) DeleteOvertimeLine(ctx context.Context, id int64) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if _, ok := r.overtimeLines[id]; !ok {
+		return platformerrors.NotFound(fmt.Sprintf("overtime line with ID %d not found", id))
+	}
+	delete(r.overtimeLines, id)
+	return nil
+}
+
+func (r *MemoryRepo) ListOvertimeLines(ctx context.Context, f *filter.Filter, page pagination.PageRequest) (pagination.PageResult[hr.OvertimeLine], error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	var result []hr.OvertimeLine
+	for _, l := range r.overtimeLines {
+		matches := true
+		if f != nil && len(f.Criteria) > 0 {
+			for _, crit := range f.Criteria {
+				valStr := fmt.Sprintf("%v", crit.Value)
+				switch crit.Field {
+				case "employee_id":
+					if fmt.Sprintf("%d", l.EmployeeID) != valStr {
+						matches = false
+					}
+				case "status":
+					if l.Status != valStr {
+						matches = false
+					}
+				}
+			}
+		}
+		if matches {
+			result = append(result, *l)
+		}
+	}
+
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].Date.After(result[j].Date)
+	})
+
+	total := int64(len(result))
+	offset := page.Offset()
+	limit := page.LimitClamped()
+
+	if offset >= int(total) {
+		return pagination.NewPageResult([]hr.OvertimeLine{}, total, page), nil
+	}
+
+	end := offset + limit
+	if end > int(total) {
+		end = int(total)
+	}
+
+	return pagination.NewPageResult(result[offset:end], total, page), nil
+}
+
+func (r *MemoryRepo) CreateOvertimeRule(ctx context.Context, rule *hr.OvertimeRule) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	r.lastOTRuleID++
+	rule.ID = r.lastOTRuleID
+	clone := *rule
+	r.overtimeRules[rule.ID] = &clone
+	return nil
+}
+
+func (r *MemoryRepo) GetOvertimeRuleByID(ctx context.Context, id int64) (*hr.OvertimeRule, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	rule, ok := r.overtimeRules[id]
+	if !ok {
+		return nil, platformerrors.NotFound(fmt.Sprintf("overtime rule with ID %d not found", id))
+	}
+	clone := *rule
+	return &clone, nil
+}
+
+func (r *MemoryRepo) UpdateOvertimeRule(ctx context.Context, rule *hr.OvertimeRule) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if _, ok := r.overtimeRules[rule.ID]; !ok {
+		return platformerrors.NotFound(fmt.Sprintf("overtime rule with ID %d not found", rule.ID))
+	}
+	clone := *rule
+	r.overtimeRules[rule.ID] = &clone
+	return nil
+}
+
+func (r *MemoryRepo) DeleteOvertimeRule(ctx context.Context, id int64) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if _, ok := r.overtimeRules[id]; !ok {
+		return platformerrors.NotFound(fmt.Sprintf("overtime rule with ID %d not found", id))
+	}
+	delete(r.overtimeRules, id)
+	return nil
+}
+
+func (r *MemoryRepo) ListOvertimeRules(ctx context.Context, f *filter.Filter, page pagination.PageRequest) (pagination.PageResult[hr.OvertimeRule], error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	var result []hr.OvertimeRule
+	for _, ru := range r.overtimeRules {
+		matches := true
+		if f != nil && len(f.Criteria) > 0 {
+			for _, crit := range f.Criteria {
+				valStr := fmt.Sprintf("%v", crit.Value)
+				switch crit.Field {
+				case "active":
+					isActive := valStr == "true"
+					if ru.Active != isActive {
+						matches = false
+					}
+				}
+			}
+		}
+		if matches {
+			result = append(result, *ru)
+		}
+	}
+
+	total := int64(len(result))
+	offset := page.Offset()
+	limit := page.LimitClamped()
+
+	if offset >= int(total) {
+		return pagination.NewPageResult([]hr.OvertimeRule{}, total, page), nil
+	}
+
+	end := offset + limit
+	if end > int(total) {
+		end = int(total)
+	}
+
+	return pagination.NewPageResult(result[offset:end], total, page), nil
 }

@@ -42,8 +42,10 @@ type Employee struct {
 	MaritalStatus    string       `json:"marital_status,omitempty"`
 	IdentificationID string       `json:"identification_id,omitempty"`
 	BankAccountNo    string       `json:"bank_account_no,omitempty"`
+	ExpenseManagerID *int64       `json:"expense_manager_id,omitempty"`
 	CompanyID        *int64       `json:"company_id,omitempty"`
 	Active           bool         `json:"active"`
+	OvertimeEmployeeThreshold int `json:"overtime_employee_threshold"`
 	Audit            audit.Fields `json:"audit"`
 	CreatedAt        time.Time    `json:"created_at"`
 	UpdatedAt        time.Time    `json:"updated_at"`

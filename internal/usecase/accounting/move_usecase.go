@@ -18,12 +18,13 @@ import (
 // ─────────────────────────────────────────────────────────────────────────────
 
 type JournalEntryLineInput struct {
-	AccountID int64   `json:"account_id"`
-	PartnerID *int64  `json:"partner_id"`
-	ProductID *int64  `json:"product_id"`
-	Name      string  `json:"name"`
-	Debit     float64 `json:"debit"`
-	Credit    float64 `json:"credit"`
+	AccountID        int64   `json:"account_id"`
+	PartnerID        *int64  `json:"partner_id"`
+	ProductID        *int64  `json:"product_id"`
+	Name             string  `json:"name"`
+	Debit            float64 `json:"debit"`
+	Credit           float64 `json:"credit"`
+	StatementLineID  *int64  `json:"statement_line_id,omitempty"`
 }
 
 type CreateJournalEntryInput struct {
@@ -41,6 +42,13 @@ type InvoiceLineItemInput struct {
 	PriceUnit float64 `json:"price_unit"`
 	Discount  float64 `json:"discount"` // percentage e.g. 10.0 for 10%
 	TaxIDs    []int64 `json:"tax_ids"`
+	// CogsAmount books a cost-of-goods-sold counterpart on this line (Anglo-Saxon).
+	// When > 0 an additional pair of display_type='cogs' lines is generated:
+	//   debit  → COGS account (12 / 500000 by default)
+	//   credit → Stock/Inventory account (5 / 140000 by default)
+	CogsAmount      float64 `json:"cogs_amount,omitempty"`
+	CogsAccountID   *int64  `json:"cogs_account_id,omitempty"`
+	StockAccountID  *int64  `json:"stock_account_id,omitempty"`
 }
 
 type CreateInvoiceInput struct {
@@ -91,13 +99,14 @@ func (uc *UseCase) CreateJournalEntry(ctx context.Context, in CreateJournalEntry
 
 	for i, l := range in.Lines {
 		move.Lines[i] = accounting.AccountMoveLine{
-			AccountID: l.AccountID,
-			PartnerID: l.PartnerID,
-			ProductID: l.ProductID,
-			Name:      strings.TrimSpace(l.Name),
-			Debit:     roundTo4(l.Debit),
-			Credit:    roundTo4(l.Credit),
-			Balance:   roundTo4(l.Debit - l.Credit),
+			AccountID:      l.AccountID,
+			PartnerID:      l.PartnerID,
+			ProductID:      l.ProductID,
+			Name:           strings.TrimSpace(l.Name),
+			Debit:          roundTo4(l.Debit),
+			Credit:         roundTo4(l.Credit),
+			Balance:        roundTo4(l.Debit - l.Credit),
+			StatementLineID: l.StatementLineID,
 		}
 	}
 
@@ -302,6 +311,56 @@ func (uc *UseCase) CreateInvoice(ctx context.Context, in CreateInvoiceInput) (*a
 	// Insert counterpart at the beginning for Odoo convention
 	moveLines = append([]accounting.AccountMoveLine{counterpartLine}, moveLines...)
 
+	// Anglo-Saxon: book COGS counterpart lines for items that delivered inventory.
+	type cogsPair struct {
+		itemIdx  int // index in in.Items (line index = itemIdx + 1 in moveLines)
+		pairIdx  int // index of the first line of the generated pair
+	}
+	var cogsPairs []cogsPair
+	cogsAccount := int64(12) // 500000 Cost of Goods Sold
+	stockAccount := int64(5) // 140000 Inventory / Stock Valuation
+	for i, item := range in.Items {
+		if item.CogsAmount <= 0 {
+			continue
+		}
+		cogs := roundTo4(item.CogsAmount)
+		acc := cogsAccount
+		if item.CogsAccountID != nil && *item.CogsAccountID > 0 {
+			acc = *item.CogsAccountID
+		}
+		stockAcc := stockAccount
+		if item.StockAccountID != nil && *item.StockAccountID > 0 {
+			stockAcc = *item.StockAccountID
+		}
+		pairIdx := len(moveLines)
+		// Debit COGS (cost leaves stock), credit Inventory.
+		moveLines = append(moveLines,
+			accounting.AccountMoveLine{
+				AccountID:   acc,
+				PartnerID:   &in.PartnerID,
+				ProductID:   item.ProductID,
+				Name:        fmt.Sprintf("COGS: %s", strings.TrimSpace(item.Name)),
+				Quantity:    item.Quantity,
+				Debit:       cogs,
+				Credit:      0,
+				Balance:     cogs,
+				DisplayType: "cogs",
+			},
+			accounting.AccountMoveLine{
+				AccountID:   stockAcc,
+				PartnerID:   &in.PartnerID,
+				ProductID:   item.ProductID,
+				Name:        fmt.Sprintf("Inventory Out: %s", strings.TrimSpace(item.Name)),
+				Quantity:    item.Quantity,
+				Debit:       0,
+				Credit:      cogs,
+				Balance:     -cogs,
+				DisplayType: "cogs",
+			},
+		)
+		cogsPairs = append(cogsPairs, cogsPair{itemIdx: i, pairIdx: pairIdx})
+	}
+
 	move := &accounting.AccountMove{
 		Name:           "/",
 		MoveType:       in.MoveType,
@@ -328,6 +387,18 @@ func (uc *UseCase) CreateInvoice(ctx context.Context, in CreateInvoiceInput) (*a
 
 	if err := uc.repo.CreateMove(ctx, move); err != nil {
 		return nil, err
+	}
+
+	// Link each COGS line back to the originating invoice line (cogs_origin_id).
+	if len(cogsPairs) > 0 {
+		for _, cp := range cogsPairs {
+			itemLineID := move.Lines[cp.itemIdx+1].ID
+			move.Lines[cp.pairIdx].CogsOriginID = &itemLineID
+			move.Lines[cp.pairIdx+1].CogsOriginID = &itemLineID
+		}
+		if err := uc.repo.UpdateMove(ctx, move); err != nil {
+			return nil, err
+		}
 	}
 
 	uc.logger.InfoContext(ctx, "invoice created", "id", move.ID, "type", move.MoveType, "total", move.AmountTotal)
@@ -493,6 +564,22 @@ func (uc *UseCase) UpdatePaymentStatus(ctx context.Context, id int64, state acco
 	move.PaymentState = state
 	move.AmountResidual = roundTo4(residual)
 	return uc.repo.UpdateMove(ctx, move)
+}
+
+// GetMoveLine fetches a single account move line.
+func (uc *UseCase) GetMoveLine(ctx context.Context, id int64) (*accounting.AccountMoveLine, error) {
+	return uc.repo.GetMoveLineByID(ctx, id)
+}
+
+// UpdateMoveLineReconcile updates the reconciliation flags of a single move line.
+func (uc *UseCase) UpdateMoveLineReconcile(ctx context.Context, id int64, reconciled bool, residual float64, matchingNumber *string) error {
+	return uc.repo.UpdateMoveLineReconcile(ctx, id, reconciled, residual, matchingNumber)
+}
+
+// ListReconcilableMoveLines returns posted, reconcilable, unmatched move lines, optionally filtered
+// by partner and excluding the given line ids. Used to surface candidates for a statement line.
+func (uc *UseCase) ListReconcilableMoveLines(ctx context.Context, partnerID *int64, excludeLineIDs []int64, limit int) ([]accounting.AccountMoveLine, error) {
+	return uc.repo.ListReconcilableMoveLines(ctx, partnerID, excludeLineIDs, limit)
 }
 
 func roundTo4(val float64) float64 {

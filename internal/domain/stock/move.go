@@ -35,7 +35,20 @@ type StockMove struct {
 	State          MoveState `json:"state"`
 	SaleLineID     *int64    `json:"sale_line_id,omitempty"`
 	PurchaseLineID *int64    `json:"purchase_line_id,omitempty"`
+	ProductionID   *int64    `json:"production_id,omitempty"`          // Raw material for this MO
+	ProductionFinishedID *int64 `json:"production_finished_id,omitempty"` // Finished product for this MO
+	ProcurementGroupID *int64 `json:"procurement_group_id,omitempty"`
 	Date           time.Time `json:"date"`
+	// Valuation fields (Phase 12 — stock_account integration).
+	Value          float64   `json:"value"`                    // current valuation value of the move (0 when not valued)
+	ValueManual    *float64  `json:"value_manual,omitempty"`    // manual override → triggers a ProductValue history record
+	StandardPrice  float64   `json:"standard_price"`            // unit cost captured at valuation time
+	IsIn           bool      `json:"is_in"`                     // valued incoming move
+	IsOut          bool      `json:"is_out"`                    // valued outgoing move
+	IsDropship     bool      `json:"is_dropship"`               // supplier→customer direct move (valued)
+	RemainingQty   float64   `json:"remaining_qty"`             // FIFO stack: remaining qty still in stock
+	RemainingValue float64   `json:"remaining_value"`           // FIFO stack: remaining value
+	AccountMoveID  *int64    `json:"account_move_id,omitempty"` // journal entry created for this move
 	CreatedAt      time.Time `json:"created_at"`
 	UpdatedAt      time.Time `json:"updated_at"`
 }

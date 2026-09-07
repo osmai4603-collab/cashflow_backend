@@ -32,10 +32,12 @@ type StockLocation struct {
 	ReturnLocation bool          `json:"return_location"`
 	CompanyID      *int64        `json:"company_id,omitempty"`
 	Active         bool          `json:"active"`
-	CreatedAt      time.Time     `json:"created_at"`
-	UpdatedAt      time.Time     `json:"updated_at"`
-	CreatedBy      *int64        `json:"created_by,omitempty"`
-	UpdatedBy      *int64        `json:"updated_by,omitempty"`
+	// ValuationAccountID defines the valuation boundary for this location (stock.location.valuation_account_id in Odoo).
+	ValuationAccountID *int64 `json:"valuation_account_id,omitempty"`
+	CreatedAt          time.Time `json:"created_at"`
+	UpdatedAt          time.Time `json:"updated_at"`
+	CreatedBy          *int64    `json:"created_by,omitempty"`
+	UpdatedBy          *int64    `json:"updated_by,omitempty"`
 }
 
 // Validate checks business invariants for StockLocation.

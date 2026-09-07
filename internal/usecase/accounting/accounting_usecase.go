@@ -100,8 +100,9 @@ type UpdatePaymentTermInput struct {
 
 // UseCase orchestrates business rules and application logic for the Core Accounting domain.
 type UseCase struct {
-	repo   accounting.Repository
-	logger *slog.Logger
+	repo          accounting.Repository
+	logger        *slog.Logger
+	ediProcessors map[accounting.EDIFormat]EDIProcessor
 }
 
 // New creates an initialized accounting UseCase instance.
@@ -110,9 +111,15 @@ func New(repo accounting.Repository, logger *slog.Logger) *UseCase {
 		logger = slog.Default()
 	}
 	return &UseCase{
-		repo:   repo,
-		logger: logger,
+		repo:          repo,
+		logger:        logger,
+		ediProcessors: make(map[accounting.EDIFormat]EDIProcessor),
 	}
+}
+
+// RegisterEDIProcessor adds a specific format processor to the usecase.
+func (uc *UseCase) RegisterEDIProcessor(format accounting.EDIFormat, p EDIProcessor) {
+	uc.ediProcessors[format] = p
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

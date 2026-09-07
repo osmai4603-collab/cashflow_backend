@@ -23,6 +23,8 @@ type MemoryRepo struct {
 	paymentTerms map[int64]*accounting.PaymentTerm
 	moves        map[int64]*accounting.AccountMove
 	moveLines    map[int64]*accounting.AccountMoveLine
+	ediDocuments    map[int64]*accounting.EDIDocument
+	ediCertificates map[int64]*accounting.EDICertificate
 
 	lastAccountID     int64
 	lastJournalID     int64
@@ -30,17 +32,21 @@ type MemoryRepo struct {
 	lastPaymentTermID int64
 	lastMoveID        int64
 	lastMoveLineID    int64
+	lastEDIDocID      int64
+	lastEDICertID     int64
 }
 
 // NewMemoryRepo creates an initialized MemoryRepo seeded with standard accounting configuration.
 func NewMemoryRepo() *MemoryRepo {
 	r := &MemoryRepo{
-		accounts:     make(map[int64]*accounting.Account),
-		journals:     make(map[int64]*accounting.Journal),
-		taxes:        make(map[int64]*accounting.Tax),
-		paymentTerms: make(map[int64]*accounting.PaymentTerm),
-		moves:        make(map[int64]*accounting.AccountMove),
-		moveLines:    make(map[int64]*accounting.AccountMoveLine),
+		accounts:        make(map[int64]*accounting.Account),
+		journals:        make(map[int64]*accounting.Journal),
+		taxes:           make(map[int64]*accounting.Tax),
+		paymentTerms:    make(map[int64]*accounting.PaymentTerm),
+		moves:           make(map[int64]*accounting.AccountMove),
+		moveLines:       make(map[int64]*accounting.AccountMoveLine),
+		ediDocuments:    make(map[int64]*accounting.EDIDocument),
+		ediCertificates: make(map[int64]*accounting.EDICertificate),
 	}
 
 	now := time.Now().UTC()
@@ -551,15 +557,24 @@ func (r *MemoryRepo) CreateMove(ctx context.Context, m *accounting.AccountMove) 
 	m.Active = true
 
 	lines := make([]accounting.AccountMoveLine, len(m.Lines))
-	for i, l := range m.Lines {
+	reconcileFlags := make(map[int64]bool, len(m.Lines))
+	for _, l := range m.Lines {
+		if a, ok := r.accounts[l.AccountID]; ok {
+			reconcileFlags[l.AccountID] = a.Reconcile
+		}
+	}
+	for i := range m.Lines {
+		l := m.Lines[i]
 		r.lastMoveLineID++
 		l.ID = r.lastMoveLineID
 		l.MoveID = m.ID
 		l.Balance = l.Debit - l.Credit
 		l.CreatedAt = now
 		l.UpdatedAt = now
+		applyReconcileDefaults(&l, reconcileFlags[l.AccountID])
 		lines[i] = l
-		r.moveLines[l.ID] = &l
+		clone := l
+		r.moveLines[l.ID] = &clone
 	}
 	m.Lines = lines
 
@@ -593,7 +608,11 @@ func (r *MemoryRepo) GetMoveWithLines(ctx context.Context, id int64) (*accountin
 	var lines []accounting.AccountMoveLine
 	for _, l := range r.moveLines {
 		if l.MoveID == id {
-			lines = append(lines, *l)
+			derived := *l
+			if a, ok := r.accounts[derived.AccountID]; ok {
+				applyReconcileDefaults(&derived, a.Reconcile)
+			}
+			lines = append(lines, derived)
 		}
 	}
 	sort.Slice(lines, func(i, j int) bool {
@@ -632,6 +651,9 @@ func (r *MemoryRepo) UpdateMove(ctx context.Context, m *accounting.AccountMove) 
 			m.Lines[i].Balance = m.Lines[i].Debit - m.Lines[i].Credit
 			m.Lines[i].CreatedAt = now
 			m.Lines[i].UpdatedAt = now
+			if a, ok := r.accounts[m.Lines[i].AccountID]; ok {
+				applyReconcileDefaults(&m.Lines[i], a.Reconcile)
+			}
 			r.moveLines[m.Lines[i].ID] = &m.Lines[i]
 		}
 	}
@@ -694,6 +716,106 @@ func (r *MemoryRepo) ListMoves(ctx context.Context, f *filter.Filter, page pagin
 	}
 
 	return pagination.NewPageResult(items, total, page), nil
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Move Lines & Reconciliation
+// ─────────────────────────────────────────────────────────────────────────────
+
+func (r *MemoryRepo) GetMoveLineByID(ctx context.Context, id int64) (*accounting.AccountMoveLine, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	l, exists := r.moveLines[id]
+	if !exists {
+		return nil, platformerrors.NotFound(fmt.Sprintf("account move line with id %d not found", id))
+	}
+	clone := *l
+	if a, ok := r.accounts[clone.AccountID]; ok {
+		applyReconcileDefaults(&clone, a.Reconcile)
+	}
+	return &clone, nil
+}
+
+func (r *MemoryRepo) UpdateMoveLine(ctx context.Context, l *accounting.AccountMoveLine) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	existing, exists := r.moveLines[l.ID]
+	if !exists {
+		return platformerrors.NotFound(fmt.Sprintf("account move line with id %d not found", l.ID))
+	}
+
+	l.Balance = l.Debit - l.Credit
+	l.CreatedAt = existing.CreatedAt
+	l.UpdatedAt = time.Now().UTC()
+
+	clone := *l
+	r.moveLines[l.ID] = &clone
+	return nil
+}
+
+func (r *MemoryRepo) UpdateMoveLineReconcile(ctx context.Context, id int64, reconciled bool, residual float64, matchingNumber *string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	l, exists := r.moveLines[id]
+	if !exists {
+		return platformerrors.NotFound(fmt.Sprintf("account move line with id %d not found", id))
+	}
+
+	l.Reconciled = reconciled
+	l.AmountResidual = residual
+	l.MatchingNumber = matchingNumber
+	l.UpdatedAt = time.Now().UTC()
+	return nil
+}
+
+func (r *MemoryRepo) ListReconcilableMoveLines(ctx context.Context, partnerID *int64, excludeLineIDs []int64, limit int) ([]accounting.AccountMoveLine, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	if limit <= 0 {
+		limit = 50
+	}
+
+	excludeSet := make(map[int64]struct{}, len(excludeLineIDs))
+	for _, id := range excludeLineIDs {
+		excludeSet[id] = struct{}{}
+	}
+
+	var lines []accounting.AccountMoveLine
+	for _, l := range r.moveLines {
+		if _, skip := excludeSet[l.ID]; skip {
+			continue
+		}
+		m := r.moves[l.MoveID]
+		if m == nil || !m.Active || m.State != accounting.MoveStatePosted {
+			continue
+		}
+		derived := *l
+		if a, ok := r.accounts[derived.AccountID]; ok {
+			applyReconcileDefaults(&derived, a.Reconcile)
+		}
+		if derived.StatementLineID != nil {
+			continue
+		}
+		if !derived.Reconcile || derived.Reconciled || derived.AmountResidual <= 0.004 {
+			continue
+		}
+		if partnerID != nil && (derived.PartnerID == nil || *derived.PartnerID != *partnerID) {
+			continue
+		}
+		lines = append(lines, derived)
+	}
+
+	sort.Slice(lines, func(i, j int) bool {
+		return lines[i].ID < lines[j].ID
+	})
+	if len(lines) > limit {
+		lines = lines[:limit]
+	}
+	return lines, nil
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1011,4 +1133,116 @@ func (r *MemoryRepo) GetGeneralLedger(ctx context.Context, accountID *int64, par
 	}
 
 	return items, nil
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// EDI (Electronic Data Interchange)
+// ─────────────────────────────────────────────────────────────────────────────
+
+func (r *MemoryRepo) CreateEDIDocument(ctx context.Context, doc *accounting.EDIDocument) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	r.lastEDIDocID++
+	doc.ID = r.lastEDIDocID
+	now := time.Now().UTC()
+	doc.CreatedAt = now
+	doc.UpdatedAt = now
+
+	clone := *doc
+	r.ediDocuments[doc.ID] = &clone
+	return nil
+}
+
+func (r *MemoryRepo) GetEDIDocumentByID(ctx context.Context, id int64) (*accounting.EDIDocument, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	doc, exists := r.ediDocuments[id]
+	if !exists {
+		return nil, platformerrors.NotFound(fmt.Sprintf("EDI document %d not found", id))
+	}
+	clone := *doc
+	return &clone, nil
+}
+
+func (r *MemoryRepo) GetEDIDocumentsByMoveID(ctx context.Context, moveID int64) ([]accounting.EDIDocument, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	var list []accounting.EDIDocument
+	for _, doc := range r.ediDocuments {
+		if doc.MoveID == moveID {
+			list = append(list, *doc)
+		}
+	}
+	sort.Slice(list, func(i, j int) bool {
+		return list[i].ID < list[j].ID
+	})
+	return list, nil
+}
+
+func (r *MemoryRepo) UpdateEDIDocument(ctx context.Context, doc *accounting.EDIDocument) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if _, exists := r.ediDocuments[doc.ID]; !exists {
+		return platformerrors.NotFound(fmt.Sprintf("EDI document %d not found", doc.ID))
+	}
+
+	doc.UpdatedAt = time.Now().UTC()
+	clone := *doc
+	r.ediDocuments[doc.ID] = &clone
+	return nil
+}
+
+func (r *MemoryRepo) CreateEDICertificate(ctx context.Context, cert *accounting.EDICertificate) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	r.lastEDICertID++
+	cert.ID = r.lastEDICertID
+	cert.CreatedAt = time.Now().UTC()
+
+	clone := *cert
+	r.ediCertificates[cert.ID] = &clone
+	return nil
+}
+
+func (r *MemoryRepo) GetEDICertificateByID(ctx context.Context, id int64) (*accounting.EDICertificate, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	cert, exists := r.ediCertificates[id]
+	if !exists {
+		return nil, platformerrors.NotFound(fmt.Sprintf("EDI certificate %d not found", id))
+	}
+	clone := *cert
+	return &clone, nil
+}
+
+func (r *MemoryRepo) GetActiveCertificate(ctx context.Context, companyID int64) (*accounting.EDICertificate, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	for _, cert := range r.ediCertificates {
+		if cert.Active && cert.CompanyID == companyID {
+			clone := *cert
+			return &clone, nil
+		}
+	}
+	return nil, platformerrors.NotFound("no active EDI certificate found for company")
+}
+
+func (r *MemoryRepo) UpdateEDICertificate(ctx context.Context, cert *accounting.EDICertificate) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if _, exists := r.ediCertificates[cert.ID]; !exists {
+		return platformerrors.NotFound(fmt.Sprintf("EDI certificate %d not found", cert.ID))
+	}
+
+	clone := *cert
+	r.ediCertificates[cert.ID] = &clone
+	return nil
 }

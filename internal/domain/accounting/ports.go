@@ -49,9 +49,28 @@ type Repository interface {
 	DeleteMove(ctx context.Context, id int64) error
 	ListMoves(ctx context.Context, f *filter.Filter, page pagination.PageRequest) (pagination.PageResult[AccountMove], error)
 
+	// ─── Move Lines & Reconciliation ────────────────────────────────────
+	GetMoveLineByID(ctx context.Context, id int64) (*AccountMoveLine, error)
+	UpdateMoveLine(ctx context.Context, l *AccountMoveLine) error
+	UpdateMoveLineReconcile(ctx context.Context, id int64, reconciled bool, residual float64, matchingNumber *string) error
+	// ListReconcilableMoveLines returns posted, reconcilable, unmatched lines on the given partner,
+	// excluding the supplied line IDs (used to surface matching candidates for a statement line).
+	ListReconcilableMoveLines(ctx context.Context, partnerID *int64, excludeLineIDs []int64, limit int) ([]AccountMoveLine, error)
+
 	// ─── Financial Reports ──────────────────────────────────────────────
 	GetTrialBalance(ctx context.Context, fromDate, toDate time.Time, onlyPosted bool) (*TrialBalanceReport, error)
 	GetProfitAndLoss(ctx context.Context, fromDate, toDate time.Time) (*ProfitAndLossReport, error)
 	GetBalanceSheet(ctx context.Context, asOfDate time.Time) (*BalanceSheetReport, error)
 	GetGeneralLedger(ctx context.Context, accountID *int64, partnerID *int64, fromDate, toDate *time.Time) ([]GeneralLedgerItem, error)
+
+	// ─── EDI (Electronic Data Interchange) ──────────────────────────────
+	CreateEDIDocument(ctx context.Context, doc *EDIDocument) error
+	GetEDIDocumentByID(ctx context.Context, id int64) (*EDIDocument, error)
+	GetEDIDocumentsByMoveID(ctx context.Context, moveID int64) ([]EDIDocument, error)
+	UpdateEDIDocument(ctx context.Context, doc *EDIDocument) error
+
+	CreateEDICertificate(ctx context.Context, cert *EDICertificate) error
+	GetEDICertificateByID(ctx context.Context, id int64) (*EDICertificate, error)
+	GetActiveCertificate(ctx context.Context, companyID int64) (*EDICertificate, error)
+	UpdateEDICertificate(ctx context.Context, cert *EDICertificate) error
 }
