@@ -9,6 +9,7 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 
 	accountinghttp "cashflow_backend/internal/adapters/http/accounting"
+	activityhttp "cashflow_backend/internal/adapters/http/activity"
 	analytichttp "cashflow_backend/internal/adapters/http/analytic"
 	attachmenthttp "cashflow_backend/internal/adapters/http/attachment"
 	bankstatementhttp "cashflow_backend/internal/adapters/http/bankstatement"
@@ -25,8 +26,6 @@ import (
 	sequencehttp "cashflow_backend/internal/adapters/http/sequence"
 	stockhttp "cashflow_backend/internal/adapters/http/stock"
 	userhttp "cashflow_backend/internal/adapters/http/user"
-	activityhttp "cashflow_backend/internal/adapters/http/activity"
-	mrphttp "cashflow_backend/internal/adapters/http/mrp"
 	"cashflow_backend/internal/platform/auth"
 	platconfig "cashflow_backend/internal/platform/config"
 	"cashflow_backend/internal/platform/response"
@@ -38,35 +37,16 @@ type HealthRoutes interface {
 	HandleReadiness(w http.ResponseWriter, r *http.Request)
 }
 
-// NewRouter initializes and configures the HTTP router with standard middlewares.
-func NewRouter(
-	handler *BaseHandler,
+// NewRouterWithHandlers initializes the HTTP router from a handler container.
+func NewRouterWithHandlers(
+	handlers *CashflowHandlers,
 	health HealthRoutes,
-	partnerHandler *partnerhttp.Handler,
-	productHandler *producthttp.Handler,
-	accountingHandler *accountinghttp.Handler,
-	analyticHandler *analytichttp.Handler,
-	saleHandler *salehttp.Handler,
-	purchaseHandler *purchasehttp.Handler,
-	stockHandler *stockhttp.Handler,
-	crmHandler *crmhttp.Handler,
-	paymentHandler *paymenthttp.Handler,
-	hrHandler *hrhttp.Handler,
-	companyHandler *companyhttp.Handler,
-	userHandler *userhttp.Handler,
-	currencyHandler *currencyhttp.Handler,
-	sequenceHandler *sequencehttp.Handler,
-	attachmentHandler *attachmenthttp.Handler,
-	activityHandler *activityhttp.Handler,
 	logger *slog.Logger,
 	options ...any,
 ) chi.Router {
 	r := chi.NewRouter()
 	secret := "odoo-go-insecure-dev-secret-key-change-in-production"
 	var authorizer auth.Authorizer
-	var projectHandler *projecthttp.Handler
-	var bankstatementHandler *bankstatementhttp.Handler
-	var mrpHandler *mrphttp.Handler
 	proxyMode := true
 	requestTimeout := 60 * time.Second
 	for _, option := range options {
@@ -77,12 +57,6 @@ func NewRouter(
 			}
 		case auth.Authorizer:
 			authorizer = value
-		case *projecthttp.Handler:
-			projectHandler = value
-		case *bankstatementhttp.Handler:
-			bankstatementHandler = value
-		case *mrphttp.Handler:
-			mrpHandler = value
 		case *platconfig.Configuration:
 			if value != nil {
 				if value.Auth.JWTSecret != "" {
@@ -113,10 +87,15 @@ func NewRouter(
 	}
 
 	// Root Endpoint
-	r.Get("/", handler.Root)
+	if handlers == nil {
+		handlers = &CashflowHandlers{}
+	}
+	if handlers.Base != nil {
+		r.Get("/", handlers.Base.Root)
+	}
 
-	if userHandler != nil {
-		r.Post("/api/v1/users/login", userHandler.Login)
+	if handlers.User != nil {
+		r.Post("/api/v1/users/login", handlers.User.Login)
 	}
 
 	// API v1 Mount Point
@@ -135,68 +114,113 @@ func NewRouter(
 		}
 
 		// Core Infrastructure Modules
-		if companyHandler != nil {
-			companyhttp.RegisterRoutes(v1, companyHandler, authorizer)
+		if handlers.Company != nil {
+			companyhttp.RegisterRoutes(v1, handlers.Company, authorizer)
 		}
-		if userHandler != nil {
-			userhttp.RegisterRoutes(v1, userHandler)
+		if handlers.User != nil {
+			userhttp.RegisterRoutes(v1, handlers.User)
 		}
-		if currencyHandler != nil {
-			currencyhttp.RegisterRoutes(v1, currencyHandler)
+		if handlers.Currency != nil {
+			currencyhttp.RegisterRoutes(v1, handlers.Currency)
 		}
-		if sequenceHandler != nil {
-			sequencehttp.RegisterRoutes(v1, sequenceHandler)
+		if handlers.Sequence != nil {
+			sequencehttp.RegisterRoutes(v1, handlers.Sequence)
 		}
-		if attachmentHandler != nil {
-			attachmenthttp.RegisterRoutes(v1, attachmentHandler)
+		if handlers.Attachment != nil {
+			attachmenthttp.RegisterRoutes(v1, handlers.Attachment)
 		}
-		if activityHandler != nil {
-			activityhttp.RegisterRoutes(v1, activityHandler, authorizer)
+		if handlers.Activity != nil {
+			activityhttp.RegisterRoutes(v1, handlers.Activity, authorizer)
 		}
-		if projectHandler != nil {
-			projecthttp.RegisterRoutes(v1, projectHandler, authorizer)
+		if handlers.Project != nil {
+			projecthttp.RegisterRoutes(v1, handlers.Project, authorizer)
 		}
-		if bankstatementHandler != nil {
-			bankstatementhttp.RegisterRoutes(v1, bankstatementHandler, authorizer)
+		if handlers.BankStatement != nil {
+			bankstatementhttp.RegisterRoutes(v1, handlers.BankStatement, authorizer)
 		}
 
 		// Business Modules
-		if partnerHandler != nil {
-			partnerhttp.RegisterRoutes(v1, partnerHandler, authorizer)
+		if handlers.Partner != nil {
+			partnerhttp.RegisterRoutes(v1, handlers.Partner, authorizer)
 		}
-		if productHandler != nil {
-			producthttp.RegisterRoutes(v1, productHandler, authorizer)
+		if handlers.Product != nil {
+			producthttp.RegisterRoutes(v1, handlers.Product, authorizer)
 		}
-		if accountingHandler != nil {
-			accountinghttp.RegisterRoutes(v1, accountingHandler, authorizer)
+		if handlers.Accounting != nil {
+			accountinghttp.RegisterRoutes(v1, handlers.Accounting, authorizer)
 		}
-		if analyticHandler != nil {
-			analytichttp.RegisterRoutes(v1, analyticHandler)
+		if handlers.Analytic != nil {
+			analytichttp.RegisterRoutes(v1, handlers.Analytic)
 		}
-		if saleHandler != nil {
-			salehttp.RegisterRoutes(v1, saleHandler, authorizer)
+		if handlers.Sale != nil {
+			salehttp.RegisterRoutes(v1, handlers.Sale, authorizer)
 		}
-		if purchaseHandler != nil {
-			purchasehttp.RegisterRoutes(v1, purchaseHandler, authorizer)
+		if handlers.Purchase != nil {
+			purchasehttp.RegisterRoutes(v1, handlers.Purchase, authorizer)
 		}
-		if stockHandler != nil {
-			stockhttp.RegisterRoutes(v1, stockHandler, authorizer)
+		if handlers.Stock != nil {
+			stockhttp.RegisterRoutes(v1, handlers.Stock, authorizer)
 		}
-		if crmHandler != nil {
-			crmhttp.RegisterRoutes(v1, crmHandler, authorizer)
+		if handlers.CRM != nil {
+			crmhttp.RegisterRoutes(v1, handlers.CRM, authorizer)
 		}
-		if paymentHandler != nil {
-			paymenthttp.RegisterRoutes(v1, paymentHandler, authorizer)
+		if handlers.Payment != nil {
+			paymenthttp.RegisterRoutes(v1, handlers.Payment, authorizer)
 		}
-		if hrHandler != nil {
-			hrhttp.RegisterRoutes(v1, hrHandler, authorizer)
+		if handlers.HR != nil {
+			hrhttp.RegisterRoutes(v1, handlers.HR, authorizer)
 		}
-		if mrpHandler != nil {
-			v1.Mount("/mrp", mrpHandler.Routes())
+		if handlers.MRP != nil {
+			v1.Mount("/mrp", handlers.MRP.Routes())
 		}
 	})
 
 	return r
+}
+
+// NewRouter preserves the original constructor for callers that still provide
+// handlers individually.
+func NewRouter(
+	handler *BaseHandler,
+	health HealthRoutes,
+	partnerHandler *partnerhttp.Handler,
+	productHandler *producthttp.Handler,
+	accountingHandler *accountinghttp.Handler,
+	analyticHandler *analytichttp.Handler,
+	saleHandler *salehttp.Handler,
+	purchaseHandler *purchasehttp.Handler,
+	stockHandler *stockhttp.Handler,
+	crmHandler *crmhttp.Handler,
+	paymentHandler *paymenthttp.Handler,
+	hrHandler *hrhttp.Handler,
+	companyHandler *companyhttp.Handler,
+	userHandler *userhttp.Handler,
+	currencyHandler *currencyhttp.Handler,
+	sequenceHandler *sequencehttp.Handler,
+	attachmentHandler *attachmenthttp.Handler,
+	activityHandler *activityhttp.Handler,
+	logger *slog.Logger,
+	options ...any,
+) chi.Router {
+	return NewRouterWithHandlers(&CashflowHandlers{
+		Base:       handler,
+		Partner:    partnerHandler,
+		Product:    productHandler,
+		Accounting: accountingHandler,
+		Analytic:   analyticHandler,
+		Sale:       saleHandler,
+		Purchase:   purchaseHandler,
+		Stock:      stockHandler,
+		CRM:        crmHandler,
+		Payment:    paymentHandler,
+		HR:         hrHandler,
+		Company:    companyHandler,
+		User:       userHandler,
+		Currency:   currencyHandler,
+		Sequence:   sequenceHandler,
+		Attachment: attachmentHandler,
+		Activity:   activityHandler,
+	}, health, logger, options...)
 }
 
 func structuredLogger(logger *slog.Logger) func(next http.Handler) http.Handler {

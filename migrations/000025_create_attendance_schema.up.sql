@@ -24,7 +24,7 @@ CREATE TABLE IF NOT EXISTS hr_attendance (
     out_browser TEXT,
     out_mode VARCHAR(20), -- kiosk, systray, manual, technical, auto_check_out
 
-    company_id BIGINT NOT NULL REFERENCES companies(id),
+    company_id BIGINT NOT NULL REFERENCES res_companies(id),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -37,7 +37,7 @@ CREATE TABLE IF NOT EXISTS hr_overtime_rules (
     timing_start DOUBLE PRECISION,
     multiplier DOUBLE PRECISION DEFAULT 1.0,
     active BOOLEAN DEFAULT TRUE,
-    company_id BIGINT REFERENCES companies(id),
+    company_id BIGINT REFERENCES res_companies(id),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -53,16 +53,16 @@ CREATE TABLE IF NOT EXISTS hr_overtime_lines (
     time_start TIMESTAMP WITH TIME ZONE,
     time_stop TIMESTAMP WITH TIME ZONE,
     rule_ids BIGINT[],
-    company_id BIGINT NOT NULL REFERENCES companies(id),
+    company_id BIGINT NOT NULL REFERENCES res_companies(id),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
 -- Add Attendance Configuration to Companies
-ALTER TABLE companies ADD COLUMN IF NOT EXISTS attendance_kiosk_mode VARCHAR(20) DEFAULT 'barcode_pin';
-ALTER TABLE companies ADD COLUMN IF NOT EXISTS attendance_kiosk_delay INTEGER DEFAULT 10;
-ALTER TABLE companies ADD COLUMN IF NOT EXISTS overtime_company_threshold INTEGER DEFAULT 0;
-ALTER TABLE companies ADD COLUMN IF NOT EXISTS auto_check_out_tolerance DOUBLE PRECISION DEFAULT 0;
+ALTER TABLE res_companies ADD COLUMN IF NOT EXISTS attendance_kiosk_mode VARCHAR(20) DEFAULT 'barcode_pin';
+ALTER TABLE res_companies ADD COLUMN IF NOT EXISTS attendance_kiosk_delay INTEGER DEFAULT 10;
+ALTER TABLE res_companies ADD COLUMN IF NOT EXISTS overtime_company_threshold INTEGER DEFAULT 0;
+ALTER TABLE res_companies ADD COLUMN IF NOT EXISTS auto_check_out_tolerance DOUBLE PRECISION DEFAULT 0;
 
 -- Add Overtime Threshold to Employees
 ALTER TABLE hr_employees ADD COLUMN IF NOT EXISTS overtime_employee_threshold INTEGER DEFAULT 0;

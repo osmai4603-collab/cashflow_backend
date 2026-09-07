@@ -18,7 +18,7 @@ CREATE TABLE IF NOT EXISTS hr_expenses (
     currency_id BIGINT NOT NULL REFERENCES res_currencies(id) ON DELETE RESTRICT,
     payment_mode VARCHAR(50) NOT NULL DEFAULT 'own_account', -- 'own_account', 'company_account'
     account_id BIGINT REFERENCES account_accounts(id) ON DELETE SET NULL,
-    analytic_account_id BIGINT REFERENCES analytic_accounts(id) ON DELETE SET NULL,
+    analytic_account_id BIGINT REFERENCES account_analytic_account(id) ON DELETE SET NULL,
     account_move_id BIGINT REFERENCES account_moves(id) ON DELETE SET NULL,
     vendor_id BIGINT REFERENCES res_partners(id) ON DELETE SET NULL,
     description TEXT,

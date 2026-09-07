@@ -31,7 +31,7 @@ CREATE TABLE mrp_boms (
     code VARCHAR(64),
     product_id BIGINT NOT NULL REFERENCES product_variants(id),
     product_qty DOUBLE PRECISION NOT NULL DEFAULT 1.0,
-    uom_id BIGINT NOT NULL REFERENCES unit_of_measures(id),
+    uom_id BIGINT NOT NULL REFERENCES uom_uoms(id),
     type VARCHAR(32) NOT NULL DEFAULT 'normal', -- normal, phantom
     ready_to_produce VARCHAR(32) DEFAULT 'all_available', -- all_available, asap
     consumption VARCHAR(32) DEFAULT 'flexible', -- flexible, warning, strict
@@ -62,7 +62,7 @@ CREATE TABLE mrp_bom_lines (
     bom_id BIGINT NOT NULL REFERENCES mrp_boms(id) ON DELETE CASCADE,
     product_id BIGINT NOT NULL REFERENCES product_variants(id),
     quantity DOUBLE PRECISION NOT NULL DEFAULT 1.0,
-    uom_id BIGINT NOT NULL REFERENCES unit_of_measures(id),
+    uom_id BIGINT NOT NULL REFERENCES uom_uoms(id),
     operation_id BIGINT REFERENCES mrp_routing_operations(id) ON DELETE SET NULL,
     sequence INTEGER DEFAULT 10
 );
@@ -82,7 +82,7 @@ CREATE TABLE mrp_productions (
 
     product_id BIGINT NOT NULL REFERENCES product_variants(id),
     product_qty DOUBLE PRECISION NOT NULL DEFAULT 1.0,
-    uom_id BIGINT NOT NULL REFERENCES unit_of_measures(id),
+    uom_id BIGINT NOT NULL REFERENCES uom_uoms(id),
     qty_producing DOUBLE PRECISION DEFAULT 0,
     qty_produced DOUBLE PRECISION DEFAULT 0,
 
@@ -145,7 +145,7 @@ CREATE TABLE mrp_unbuilds (
     bom_id BIGINT NOT NULL REFERENCES mrp_boms(id),
     mo_id BIGINT REFERENCES mrp_productions(id) ON DELETE SET NULL,
     quantity DOUBLE PRECISION NOT NULL DEFAULT 1.0,
-    uom_id BIGINT NOT NULL REFERENCES unit_of_measures(id),
+    uom_id BIGINT NOT NULL REFERENCES uom_uoms(id),
     location_id BIGINT NOT NULL, -- references stock_locations
     dest_location_id BIGINT NOT NULL,
 

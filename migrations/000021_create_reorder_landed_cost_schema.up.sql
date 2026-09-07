@@ -10,7 +10,7 @@ CREATE TABLE IF NOT EXISTS stock_orderpoints (
     product_id BIGINT NOT NULL REFERENCES product_templates(id) ON DELETE CASCADE,
     warehouse_id BIGINT REFERENCES stock_warehouses(id) ON DELETE CASCADE,
     location_id BIGINT NOT NULL REFERENCES stock_locations(id) ON DELETE CASCADE,
-    vendor_id BIGINT REFERENCES partners(id) ON DELETE SET NULL,   -- preferred supplier (Odoo res.partner)
+    vendor_id BIGINT REFERENCES res_partners(id) ON DELETE SET NULL,   -- preferred supplier (Odoo res.partner)
     min_qty NUMERIC(15, 4) NOT NULL DEFAULT 0.0,                  -- qty_forecast lower bound
     max_qty NUMERIC(15, 4) NOT NULL DEFAULT 0.0,                  -- qty_forecast upper bound
     qty_multiple NUMERIC(15, 4) NOT NULL DEFAULT 1.0,             -- qty ordering multiple
@@ -119,7 +119,7 @@ ALTER TABLE product_templates
     ADD COLUMN IF NOT EXISTS split_method_landed_cost VARCHAR(24) NOT NULL DEFAULT 'equal';
 
 -- 6. Company default journal for landed-cost entries (stock_landed_costs res.company: lc_journal_id)
-ALTER TABLE companies
+ALTER TABLE res_companies
     ADD COLUMN IF NOT EXISTS lc_journal_id BIGINT REFERENCES account_journals(id) ON DELETE SET NULL;
 
 -- 7. Orderpoint sequence

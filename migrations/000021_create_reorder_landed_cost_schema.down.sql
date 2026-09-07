@@ -9,7 +9,7 @@ ALTER TABLE product_templates
     DROP COLUMN IF EXISTS landed_cost_ok,
     DROP COLUMN IF EXISTS split_method_landed_cost;
 
-ALTER TABLE companies
+ALTER TABLE res_companies
     DROP COLUMN IF EXISTS lc_journal_id;
 
 DROP SEQUENCE IF EXISTS stock_orderpoint_sequence;
