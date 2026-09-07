@@ -29,10 +29,10 @@ type MemoryRepo struct {
 // NewMemoryRepo initializes an empty MemoryRepo.
 func NewMemoryRepo() *MemoryRepo {
 	return &MemoryRepo{
-		orders:      make(map[int64]*purchase.PurchaseOrder),
-		orderLines:  make(map[int64]*purchase.PurchaseOrderLine),
-		orderBills:  make(map[int64][]int64),
-		seqCounter:  make(map[int]int64),
+		orders:     make(map[int64]*purchase.PurchaseOrder),
+		orderLines: make(map[int64]*purchase.PurchaseOrderLine),
+		orderBills: make(map[int64][]int64),
+		seqCounter: make(map[int]int64),
 	}
 }
 
@@ -203,6 +203,10 @@ func (r *MemoryRepo) ListOrders(ctx context.Context, f *filter.Filter, page pagi
 					}
 				case "name":
 					if !strings.Contains(strings.ToLower(o.Name), strings.ToLower(fmt.Sprintf("%v", crit.Value))) {
+						match = false
+					}
+				case "requisition_id":
+					if o.RequisitionID == nil || fmt.Sprintf("%d", *o.RequisitionID) != fmt.Sprintf("%v", crit.Value) {
 						match = false
 					}
 				}

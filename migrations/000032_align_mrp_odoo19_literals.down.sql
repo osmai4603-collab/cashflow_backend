@@ -1,0 +1,1 @@
+-- Legacy literals are intentionally not restored: the application now enforces Odoo 19 values.

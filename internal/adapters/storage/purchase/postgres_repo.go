@@ -24,6 +24,7 @@ var allowedPurchaseOrderFilterFields = map[string]string{
 	"invoice_status":       "invoice_status",
 	"receipt_status":       "receipt_status",
 	"procurement_group_id": "procurement_group_id",
+	"requisition_id":       "requisition_id",
 	"name":                 "name",
 	"active":               "active",
 	"company_id":           "company_id",
@@ -49,11 +50,12 @@ func (r *PostgresRepo) CreateOrder(ctx context.Context, order *purchase.Purchase
 			INSERT INTO purchase_orders (
 				name, partner_id, date_order, date_planned, state, invoice_status,
 				payment_term_id, user_id, company_id, currency, note,
-				amount_untaxed, amount_tax, amount_total, receipt_status, procurement_group_id, active, created_at, updated_at
+				amount_untaxed, amount_tax, amount_total, receipt_status, procurement_group_id,
+				requisition_id, requisition_type, active, created_at, updated_at
 			) VALUES (
 				$1, $2, $3, $4, $5, $6,
 				$7, $8, $9, $10, $11,
-				$12, $13, $14, $15, $16, true, NOW(), NOW()
+				$12, $13, $14, $15, $16, $17, $18, true, NOW(), NOW()
 			) RETURNING id, created_at, updated_at
 		`
 		now := time.Now().UTC()
@@ -77,6 +79,7 @@ func (r *PostgresRepo) CreateOrder(ctx context.Context, order *purchase.Purchase
 			order.Name, order.PartnerID, order.DateOrder, order.DatePlanned, string(order.State), string(order.InvoiceStatus),
 			order.PaymentTermID, order.UserID, order.CompanyID, order.Currency, order.Note,
 			order.AmountUntaxed, order.AmountTax, order.AmountTotal, order.ReceiptStatus, order.ProcurementGroupID,
+			order.RequisitionID, order.RequisitionType,
 		).Scan(&order.ID, &order.Audit.CreatedAt, &order.Audit.UpdatedAt)
 
 		if err != nil {
@@ -124,7 +127,8 @@ func (r *PostgresRepo) GetOrderByID(ctx context.Context, id int64) (*purchase.Pu
 	query := `
 		SELECT id, name, partner_id, date_order, date_planned, state, invoice_status,
 		       payment_term_id, user_id, company_id, currency, COALESCE(note, ''),
-		       amount_untaxed, amount_tax, amount_total, receipt_status, procurement_group_id, active, created_at, updated_at
+		       amount_untaxed, amount_tax, amount_total, receipt_status, procurement_group_id,
+		       requisition_id, requisition_type, active, created_at, updated_at
 		FROM purchase_orders
 		WHERE id = $1 AND active = true
 	`
@@ -138,7 +142,8 @@ func (r *PostgresRepo) GetOrderByID(ctx context.Context, id int64) (*purchase.Pu
 	err := r.pool.QueryRow(ctx, query, args...).Scan(
 		&o.ID, &o.Name, &o.PartnerID, &o.DateOrder, &o.DatePlanned, &stateStr, &invStatusStr,
 		&o.PaymentTermID, &o.UserID, &o.CompanyID, &o.Currency, &o.Note,
-		&o.AmountUntaxed, &o.AmountTax, &o.AmountTotal, &o.ReceiptStatus, &o.ProcurementGroupID, &o.Active, &o.Audit.CreatedAt, &o.Audit.UpdatedAt,
+		&o.AmountUntaxed, &o.AmountTax, &o.AmountTotal, &o.ReceiptStatus, &o.ProcurementGroupID,
+		&o.RequisitionID, &o.RequisitionType, &o.Active, &o.Audit.CreatedAt, &o.Audit.UpdatedAt,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -171,7 +176,8 @@ func (r *PostgresRepo) GetOrderByName(ctx context.Context, name string) (*purcha
 	query := `
 		SELECT id, name, partner_id, date_order, date_planned, state, invoice_status,
 		       payment_term_id, user_id, company_id, currency, COALESCE(note, ''),
-		       amount_untaxed, amount_tax, amount_total, receipt_status, procurement_group_id, active, created_at, updated_at
+		       amount_untaxed, amount_tax, amount_total, receipt_status, procurement_group_id,
+		       requisition_id, requisition_type, active, created_at, updated_at
 		FROM purchase_orders
 		WHERE name = $1 AND active = true
 	`
@@ -185,7 +191,8 @@ func (r *PostgresRepo) GetOrderByName(ctx context.Context, name string) (*purcha
 	err := r.pool.QueryRow(ctx, query, args...).Scan(
 		&o.ID, &o.Name, &o.PartnerID, &o.DateOrder, &o.DatePlanned, &stateStr, &invStatusStr,
 		&o.PaymentTermID, &o.UserID, &o.CompanyID, &o.Currency, &o.Note,
-		&o.AmountUntaxed, &o.AmountTax, &o.AmountTotal, &o.ReceiptStatus, &o.ProcurementGroupID, &o.Active, &o.Audit.CreatedAt, &o.Audit.UpdatedAt,
+		&o.AmountUntaxed, &o.AmountTax, &o.AmountTotal, &o.ReceiptStatus, &o.ProcurementGroupID,
+		&o.RequisitionID, &o.RequisitionType, &o.Active, &o.Audit.CreatedAt, &o.Audit.UpdatedAt,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -219,10 +226,11 @@ func (r *PostgresRepo) UpdateOrder(ctx context.Context, order *purchase.Purchase
 			SET name = $1, partner_id = $2, date_order = $3, date_planned = $4,
 			    state = $5, invoice_status = $6, payment_term_id = $7,
 			    user_id = $8, company_id = $9, currency = $10, note = $11,
-			    amount_untaxed = $12, amount_tax = $13, amount_total = $14,
-			    receipt_status = $15, procurement_group_id = $16,
+				amount_untaxed = $12, amount_tax = $13, amount_total = $14,
+				receipt_status = $15, procurement_group_id = $16,
+				requisition_id = $17, requisition_type = $18,
 			    updated_at = NOW()
-			WHERE id = $17 AND active = true
+				WHERE id = $19 AND active = true
 			RETURNING updated_at
 		`
 		args := []any{
@@ -230,10 +238,10 @@ func (r *PostgresRepo) UpdateOrder(ctx context.Context, order *purchase.Purchase
 			string(order.State), string(order.InvoiceStatus), order.PaymentTermID,
 			order.UserID, order.CompanyID, order.Currency, order.Note,
 			order.AmountUntaxed, order.AmountTax, order.AmountTotal,
-			order.ReceiptStatus, order.ProcurementGroupID, order.ID,
+			order.ReceiptStatus, order.ProcurementGroupID, order.RequisitionID, order.RequisitionType, order.ID,
 		}
 		if companyID := audit.CompanyIDFromContext(ctx); companyID != nil {
-			query = strings.Replace(query, "WHERE id = $17 AND active = true", "WHERE id = $17 AND active = true AND company_id = $18", 1)
+			query = strings.Replace(query, "WHERE id = $19 AND active = true", "WHERE id = $19 AND active = true AND company_id = $20", 1)
 			args = append(args, *companyID)
 		}
 		err := tx.QueryRow(ctx, query, args...).Scan(&order.Audit.UpdatedAt)

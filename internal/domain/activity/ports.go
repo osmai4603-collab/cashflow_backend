@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"cashflow_backend/internal/domain/user"
 	"cashflow_backend/internal/platform/pagination"
 )
 
@@ -50,6 +51,10 @@ type EmailQueueRepository interface {
 	PushEmail(ctx context.Context, value *EmailQueueItem) error
 	PopEmails(ctx context.Context, limit int) ([]EmailQueueItem, error)
 	UpdateEmail(ctx context.Context, value *EmailQueueItem) error
+}
+
+type UserRepository interface {
+	GetByID(ctx context.Context, id int64) (*user.User, error)
 }
 
 type Bus interface {

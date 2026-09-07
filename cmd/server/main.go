@@ -14,6 +14,7 @@ import (
 
 	httpadapter "cashflow_backend/internal/adapters/http"
 	accountinghttp "cashflow_backend/internal/adapters/http/accounting"
+	activityhttp "cashflow_backend/internal/adapters/http/activity"
 	analytichttp "cashflow_backend/internal/adapters/http/analytic"
 	attachmenthttp "cashflow_backend/internal/adapters/http/attachment"
 	bankstatementhttp "cashflow_backend/internal/adapters/http/bankstatement"
@@ -21,6 +22,7 @@ import (
 	crmhttp "cashflow_backend/internal/adapters/http/crm"
 	currencyhttp "cashflow_backend/internal/adapters/http/currency"
 	hrhttp "cashflow_backend/internal/adapters/http/hr"
+	mrphttp "cashflow_backend/internal/adapters/http/mrp"
 	partnerhttp "cashflow_backend/internal/adapters/http/partner"
 	paymenthttp "cashflow_backend/internal/adapters/http/payment"
 	producthttp "cashflow_backend/internal/adapters/http/product"
@@ -30,9 +32,8 @@ import (
 	sequencehttp "cashflow_backend/internal/adapters/http/sequence"
 	stockhttp "cashflow_backend/internal/adapters/http/stock"
 	userhttp "cashflow_backend/internal/adapters/http/user"
-	activityhttp "cashflow_backend/internal/adapters/http/activity"
-	mrphttp "cashflow_backend/internal/adapters/http/mrp"
 	accountingstorage "cashflow_backend/internal/adapters/storage/accounting"
+	activitystorage "cashflow_backend/internal/adapters/storage/activity"
 	analyticstorage "cashflow_backend/internal/adapters/storage/analytic"
 	attachmentstorage "cashflow_backend/internal/adapters/storage/attachment"
 	bankstatementstorage "cashflow_backend/internal/adapters/storage/bankstatement"
@@ -41,6 +42,7 @@ import (
 	currencystorage "cashflow_backend/internal/adapters/storage/currency"
 	groupstorage "cashflow_backend/internal/adapters/storage/group"
 	hrstorage "cashflow_backend/internal/adapters/storage/hr"
+	mrpstorage "cashflow_backend/internal/adapters/storage/mrp"
 	partnerstorage "cashflow_backend/internal/adapters/storage/partner"
 	paymentstorage "cashflow_backend/internal/adapters/storage/payment"
 	productstorage "cashflow_backend/internal/adapters/storage/product"
@@ -50,9 +52,8 @@ import (
 	sequencestorage "cashflow_backend/internal/adapters/storage/sequence"
 	stockstorage "cashflow_backend/internal/adapters/storage/stock"
 	userstorage "cashflow_backend/internal/adapters/storage/user"
-	activitystorage "cashflow_backend/internal/adapters/storage/activity"
-	mrpstorage "cashflow_backend/internal/adapters/storage/mrp"
 	"cashflow_backend/internal/domain/accounting"
+	"cashflow_backend/internal/domain/activity"
 	"cashflow_backend/internal/domain/analytic"
 	"cashflow_backend/internal/domain/attachment"
 	bankstatement "cashflow_backend/internal/domain/bankstatement"
@@ -71,7 +72,6 @@ import (
 	"cashflow_backend/internal/domain/sequence"
 	"cashflow_backend/internal/domain/stock"
 	"cashflow_backend/internal/domain/user"
-	"cashflow_backend/internal/domain/activity"
 	"cashflow_backend/internal/infrastructure/config"
 	"cashflow_backend/internal/infrastructure/health"
 	"cashflow_backend/internal/infrastructure/server"
@@ -81,7 +81,9 @@ import (
 	platformcurrency "cashflow_backend/internal/platform/currency"
 	"cashflow_backend/internal/platform/database"
 	"cashflow_backend/internal/platform/email"
+	"cashflow_backend/internal/platform/notificationbus"
 	accountingusecase "cashflow_backend/internal/usecase/accounting"
+	activityusecase "cashflow_backend/internal/usecase/activity"
 	analyticusecase "cashflow_backend/internal/usecase/analytic"
 	attachmentusecase "cashflow_backend/internal/usecase/attachment"
 	bankstatementusecase "cashflow_backend/internal/usecase/bankstatement"
@@ -89,6 +91,7 @@ import (
 	crmusecase "cashflow_backend/internal/usecase/crm"
 	currencyusecase "cashflow_backend/internal/usecase/currency"
 	hrusecase "cashflow_backend/internal/usecase/hr"
+	mrpusecase "cashflow_backend/internal/usecase/mrp"
 	partnerusecase "cashflow_backend/internal/usecase/partner"
 	paymentusecase "cashflow_backend/internal/usecase/payment"
 	productusecase "cashflow_backend/internal/usecase/product"
@@ -98,8 +101,6 @@ import (
 	sequenceusecase "cashflow_backend/internal/usecase/sequence"
 	stockusecase "cashflow_backend/internal/usecase/stock"
 	userusecase "cashflow_backend/internal/usecase/user"
-	activityusecase "cashflow_backend/internal/usecase/activity"
-	mrpusecase "cashflow_backend/internal/usecase/mrp"
 	"cashflow_backend/migrations"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -200,33 +201,36 @@ func main() {
 
 	// 1c. Initialize storage and dependencies
 	var (
-		pinger         health.Pinger
-		closer         io.Closer
-		partnerRepo    partner.Repository
-		productRepo    product.Repository
-		accountingRepo accounting.Repository
-		analyticRepo   analytic.Repository
-		saleRepo       sale.Repository
-		purchaseRepo   purchase.Repository
-		stockRepo      stock.Repository
-		crmRepo        crm.Repository
-		paymentRepo    payment.Repository
-		hrRepo         hr.Repository
-		companyRepo    company.Repository
-		userRepo       user.Repository
-		currencyRepo   currency.Repository
-		currencyRates  currency.RateRepository
-		sequenceRepo   sequence.Repository
-		attachmentRepo attachment.Repository
-		bankstatementRepo bankstatement.Repository
-		projectRepo    projectdomain.Repository
-		permissionRepo domaingroup.PermissionRepository
-		mrpRepo        mrp.Repository
-		activityRepo   activity.ActivityRepository
-		activityTypeRepo activity.ActivityTypeRepository
-		activityMsgRepo  activity.MessageRepository
-		activityNotifRepo activity.NotificationRepository
-		emailQueueRepo activity.EmailQueueRepository
+		pinger               health.Pinger
+		closer               io.Closer
+		partnerRepo          partner.Repository
+		productRepo          product.Repository
+		accountingRepo       accounting.Repository
+		analyticRepo         analytic.Repository
+		saleRepo             sale.Repository
+		purchaseRepo         purchase.Repository
+		stockRepo            stock.Repository
+		crmRepo              crm.Repository
+		paymentRepo          payment.Repository
+		hrRepo               hr.Repository
+		companyRepo          company.Repository
+		userRepo             user.Repository
+		currencyRepo         currency.Repository
+		currencyRates        currency.RateRepository
+		sequenceRepo         sequence.Repository
+		attachmentRepo       attachment.Repository
+		bankstatementRepo    bankstatement.Repository
+		projectRepo          projectdomain.Repository
+		permissionRepo       domaingroup.PermissionRepository
+		mrpRepo              mrp.Repository
+		activityRepo         activity.ActivityRepository
+		activityTypeRepo     activity.ActivityTypeRepository
+		activityMsgRepo      activity.MessageRepository
+		activityNotifRepo    activity.NotificationRepository
+		emailQueueRepo       activity.EmailQueueRepository
+		requisitionRepo      purchaseusecase.RequisitionRepository
+		localNotificationBus = notificationbus.New()
+		notificationRelay    *notificationbus.PostgresRelay
 	)
 
 	switch cfg.Database.StorageDriver {
@@ -263,6 +267,7 @@ func main() {
 			logger.Error("failed to ping postgres database — fail-fast", "error", err)
 			os.Exit(1)
 		}
+		notificationRelay = notificationbus.NewPostgresRelay(pool, localNotificationBus)
 		cancel()
 
 		// Run database schema migrations
@@ -301,6 +306,7 @@ func main() {
 		projectRepo = projectstorage.NewPostgresRepo(pool)
 		permissionRepo = groupstorage.NewPostgresRepo(pool)
 		mrpRepo = mrpstorage.NewPostgresRepo(pool)
+		requisitionRepo = purchasestorage.NewRequisitionPostgresRepo(pool)
 
 		activityPostgres := activitystorage.NewPostgresRepo(pool)
 		activityRepo = activityPostgres
@@ -334,6 +340,7 @@ func main() {
 		groupMemoryRepo := groupstorage.NewMemoryRepo()
 		permissionRepo = groupMemoryRepo
 		mrpRepo = mrpstorage.NewMemoryRepo()
+		requisitionRepo = purchasestorage.NewMemoryRequisitionRepo()
 
 		activityMemory := activitystorage.NewMemoryRepo()
 		activityRepo = activityMemory
@@ -366,8 +373,9 @@ func main() {
 	saleUseCase := saleusecase.New(saleRepo, partnerRepo, productRepo, accountingRepo, accountingUseCase, logger)
 	saleHandler := salehttp.NewHandler(saleUseCase, logger)
 	purchaseUseCase := purchaseusecase.New(purchaseRepo, partnerRepo, productRepo, accountingRepo, accountingUseCase, logger)
-	purchaseHandler := purchasehttp.NewHandler(purchaseUseCase, logger)
-	stockUseCase := stockusecase.New(stockRepo, partnerRepo, productRepo, saleRepo, purchaseRepo, accountingUseCase, logger)
+	requisitionUseCase := purchaseusecase.NewRequisitionUseCase(requisitionRepo, purchaseRepo)
+	purchaseHandler := purchasehttp.NewHandler(purchaseUseCase, logger, requisitionUseCase)
+	stockUseCase := stockusecase.New(stockRepo, partnerRepo, productRepo, saleRepo, purchaseRepo, accountingUseCase, companyRepo, logger)
 	stockHandler := stockhttp.NewHandler(stockUseCase, logger)
 	crmUseCase := crmusecase.New(crmRepo, partnerUseCase, saleUseCase, logger)
 	crmHandler := crmhttp.NewHandler(crmUseCase, logger)
@@ -396,13 +404,17 @@ func main() {
 	attachmentUseCase := attachmentusecase.New(attachmentRepo, logger)
 	attachmentHandler := attachmenthttp.NewHandler(attachmentUseCase, logger)
 
-	activityUseCase := activityusecase.NewUseCase(activityRepo, activityTypeRepo, activityMsgRepo, activityNotifRepo, emailQueueRepo, nil)
-	activityHandler := activityhttp.NewHandler(activityUseCase, logger)
+	var activityBus activity.Bus = localNotificationBus
+	if notificationRelay != nil {
+		activityBus = notificationRelay
+	}
+	activityUseCase := activityusecase.NewUseCase(activityRepo, activityTypeRepo, activityMsgRepo, activityNotifRepo, emailQueueRepo, activityBus, userRepo)
+	activityHandler := activityhttp.NewHandler(activityUseCase, logger, localNotificationBus)
 
 	projectUseCase := projectusecase.New(projectRepo)
 	projectHandler := projecthttp.NewHandler(projectUseCase)
 
-	mrpUseCase := mrpusecase.NewUsecase(mrpRepo, sequenceUseCase, stockRepo, accountingUseCase)
+	mrpUseCase := mrpusecase.NewUsecase(mrpRepo, sequenceUseCase, stockRepo, accountingUseCase, productRepo)
 	mrpHandler := mrphttp.NewHandler(mrpUseCase, logger)
 
 	// ─────────────────────────────────────────────────────────────────────
@@ -448,6 +460,13 @@ func main() {
 		syscall.SIGTERM, // SIGTERM (Kubernetes, Docker, systemd)
 	)
 	defer sigStop()
+	if notificationRelay != nil {
+		go func() {
+			if err := notificationRelay.Start(sigCtx); err != nil {
+				logger.Error("notification relay stopped", "error", err)
+			}
+		}()
+	}
 
 	// Run executes Phases 3 (Startup), 4 (Serving), 5 (Drain), 6 (Graceful Shutdown), and 7 (Cleanup)
 	if err := srv.Run(sigCtx); err != nil {

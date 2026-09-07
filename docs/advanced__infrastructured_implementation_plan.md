@@ -418,14 +418,14 @@ type LandedCostLine struct {
     ProductID     int64         // منتج التكلفة (شحن، جمارك، تأمين)
     AccountID     int64
     Amount        decimal.Decimal
-    SplitMethod   SplitMethod   // equal, by_quantity, by_current_cost, by_weight, by_volume
+    SplitMethod   SplitMethod   // equal, by_quantity, by_current_cost_price, by_weight, by_volume
 }
 
 type SplitMethod string
 const (
     SplitEqual       SplitMethod = "equal"
     SplitByQuantity  SplitMethod = "by_quantity"
-    SplitByCost      SplitMethod = "by_current_cost"
+    SplitByCost      SplitMethod = "by_current_cost_price"
     SplitByWeight    SplitMethod = "by_weight"
     SplitByVolume    SplitMethod = "by_volume"
 )
@@ -738,7 +738,7 @@ type Workorder struct {
     OperationID     int64
     Name            string
     Sequence        int
-    State           WorkorderState   // pending, ready, progress, done, cancel
+    State           WorkorderState   // blocked, ready, progress, done, cancel
     DurationExpected float64
     Duration         float64
     DateStart        *time.Time

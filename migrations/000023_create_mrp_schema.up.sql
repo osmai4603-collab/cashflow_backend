@@ -119,7 +119,7 @@ CREATE TABLE mrp_workorders (
     operation_id BIGINT NOT NULL REFERENCES mrp_routing_operations(id),
     name VARCHAR(255) NOT NULL,
     sequence INTEGER DEFAULT 10,
-    state VARCHAR(32) NOT NULL DEFAULT 'pending',
+    state VARCHAR(32) NOT NULL DEFAULT 'ready',
 
     duration_expected DOUBLE PRECISION DEFAULT 0,
     duration DOUBLE PRECISION DEFAULT 0,

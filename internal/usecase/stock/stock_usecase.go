@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	companydomain "cashflow_backend/internal/domain/company"
 	"cashflow_backend/internal/domain/partner"
 	"cashflow_backend/internal/domain/product"
 	"cashflow_backend/internal/domain/purchase"
@@ -113,6 +114,7 @@ type UseCase struct {
 	productRepo   product.Repository
 	saleRepo      sale.Repository
 	purchaseRepo  purchase.Repository
+	companyRepo   companydomain.Repository
 	accountingSvc AccountingGateway
 	logger        *slog.Logger
 }
@@ -141,7 +143,8 @@ func New(
 	if accountingSvc == nil {
 		accountingSvc = noopAccountingGateway{}
 	}
-	return &UseCase{
+
+	uc := &UseCase{
 		repo:          repo,
 		partnerRepo:   partnerRepo,
 		productRepo:   productRepo,
@@ -150,6 +153,17 @@ func New(
 		accountingSvc: accountingSvc,
 		logger:        logger,
 	}
+	for _, value := range optional {
+		switch typed := value.(type) {
+		case companydomain.Repository:
+			uc.companyRepo = typed
+		case *slog.Logger:
+			uc.logger = typed
+		case AccountingGateway:
+			uc.accountingSvc = typed
+		}
+	}
+	return uc
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

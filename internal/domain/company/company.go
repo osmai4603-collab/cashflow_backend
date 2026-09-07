@@ -31,6 +31,9 @@ type Company struct {
 	OvertimeCompanyThreshold int     `json:"overtime_company_threshold"`
 	AutoCheckOutTolerance    float64 `json:"auto_check_out_tolerance"`
 
+	// Landed cost default journal for stock landed-cost accounting.
+	LandedCostJournalID *int64 `json:"landed_cost_journal_id,omitempty"`
+
 	Audit audit.Fields `json:"audit"`
 }
 

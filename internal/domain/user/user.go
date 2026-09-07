@@ -15,17 +15,18 @@ const bcryptCost = 10
 
 // User represents a system user (res.users in Odoo).
 type User struct {
-	ID           int64        `json:"id"`
-	Login        string       `json:"login"`
-	Email        string       `json:"email,omitempty"`
-	Name         string       `json:"name"`
-	PasswordHash string       `json:"-"`
-	PartnerID    int64        `json:"partner_id"`
-	CompanyID    int64        `json:"company_id"`
-	Active       bool         `json:"active"`
-	IsSuperuser  bool         `json:"is_superuser"`
-	LastLoginAt  *time.Time   `json:"last_login_at,omitempty"`
-	Audit        audit.Fields `json:"audit"`
+	ID                        int64        `json:"id"`
+	Login                     string       `json:"login"`
+	Email                     string       `json:"email,omitempty"`
+	EmailNotificationsEnabled bool         `json:"email_notifications_enabled"`
+	Name                      string       `json:"name"`
+	PasswordHash              string       `json:"-"`
+	PartnerID                 int64        `json:"partner_id"`
+	CompanyID                 int64        `json:"company_id"`
+	Active                    bool         `json:"active"`
+	IsSuperuser               bool         `json:"is_superuser"`
+	LastLoginAt               *time.Time   `json:"last_login_at,omitempty"`
+	Audit                     audit.Fields `json:"audit"`
 }
 
 // Validate ensures the user entity satisfies all domain invariants.

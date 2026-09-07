@@ -18,18 +18,24 @@ import (
 
 // Handler serves HTTP requests for the Purchase domain.
 type Handler struct {
-	useCase *purchaseusecase.UseCase
-	logger  *slog.Logger
+	useCase            *purchaseusecase.UseCase
+	requisitionUseCase *purchaseusecase.RequisitionUseCase
+	logger             *slog.Logger
 }
 
 // NewHandler constructs a Purchase HTTP Handler.
-func NewHandler(useCase *purchaseusecase.UseCase, logger *slog.Logger) *Handler {
+func NewHandler(useCase *purchaseusecase.UseCase, logger *slog.Logger, requisitionUseCase ...*purchaseusecase.RequisitionUseCase) *Handler {
 	if logger == nil {
 		logger = slog.Default()
 	}
+	var reqUC *purchaseusecase.RequisitionUseCase
+	if len(requisitionUseCase) > 0 {
+		reqUC = requisitionUseCase[0]
+	}
 	return &Handler{
-		useCase: useCase,
-		logger:  logger,
+		useCase:            useCase,
+		requisitionUseCase: reqUC,
+		logger:             logger,
 	}
 }
 
@@ -251,4 +257,190 @@ func (h *Handler) GetOrderBills(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response.JSON(w, http.StatusOK, bills)
+}
+
+// CreateRequisition handles POST /api/v1/purchase-requisitions
+func (h *Handler) CreateRequisition(w http.ResponseWriter, r *http.Request) {
+	if h.requisitionUseCase == nil {
+		response.Error(w, platformerrors.Internal("purchase requisition use case is not configured"))
+		return
+	}
+
+	var req CreatePurchaseRequisitionRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		response.Error(w, platformerrors.BadRequest("invalid JSON request body", err))
+		return
+	}
+
+	requisition, err := h.requisitionUseCase.CreateRequisition(r.Context(), req.ToInput())
+	if err != nil {
+		response.Error(w, err)
+		return
+	}
+
+	response.Created(w, ToPurchaseRequisitionResponse(requisition))
+}
+
+// GetRequisition handles GET /api/v1/purchase-requisitions/{id}
+func (h *Handler) GetRequisition(w http.ResponseWriter, r *http.Request) {
+	if h.requisitionUseCase == nil {
+		response.Error(w, platformerrors.Internal("purchase requisition use case is not configured"))
+		return
+	}
+	id, err := parseID(chi.URLParam(r, "id"))
+	if err != nil {
+		response.Error(w, platformerrors.BadRequest("invalid purchase requisition ID in path", err))
+		return
+	}
+
+	requisition, err := h.requisitionUseCase.GetRequisitionByID(r.Context(), id)
+	if err != nil {
+		response.Error(w, err)
+		return
+	}
+
+	response.JSON(w, http.StatusOK, ToPurchaseRequisitionResponse(requisition))
+}
+
+// UpdateRequisition handles PUT /api/v1/purchase-requisitions/{id}.
+func (h *Handler) UpdateRequisition(w http.ResponseWriter, r *http.Request) {
+	if h.requisitionUseCase == nil {
+		response.Error(w, platformerrors.Internal("purchase requisition use case is not configured"))
+		return
+	}
+	id, err := parseID(chi.URLParam(r, "id"))
+	if err != nil {
+		response.Error(w, platformerrors.BadRequest("invalid purchase requisition ID in path", err))
+		return
+	}
+	var req UpdatePurchaseRequisitionRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		response.Error(w, platformerrors.BadRequest("invalid JSON request body", err))
+		return
+	}
+	requisition, err := h.requisitionUseCase.UpdateRequisition(r.Context(), id, req.ToInput())
+	if err != nil {
+		response.Error(w, err)
+		return
+	}
+	response.JSON(w, http.StatusOK, ToPurchaseRequisitionResponse(requisition))
+}
+
+// DeleteRequisition handles DELETE /api/v1/purchase-requisitions/{id}.
+func (h *Handler) DeleteRequisition(w http.ResponseWriter, r *http.Request) {
+	if h.requisitionUseCase == nil {
+		response.Error(w, platformerrors.Internal("purchase requisition use case is not configured"))
+		return
+	}
+	id, err := parseID(chi.URLParam(r, "id"))
+	if err != nil {
+		response.Error(w, platformerrors.BadRequest("invalid purchase requisition ID in path", err))
+		return
+	}
+	if err := h.requisitionUseCase.DeleteRequisition(r.Context(), id); err != nil {
+		response.Error(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// ListRequisitions handles GET /api/v1/purchase-requisitions
+func (h *Handler) ListRequisitions(w http.ResponseWriter, r *http.Request) {
+	if h.requisitionUseCase == nil {
+		response.Error(w, platformerrors.Internal("purchase requisition use case is not configured"))
+		return
+	}
+
+	pageReq := pagination.Parse(r)
+	result, err := h.requisitionUseCase.ListRequisitions(r.Context(), pageReq)
+	if err != nil {
+		response.Error(w, err)
+		return
+	}
+
+	response.Paginated(w, http.StatusOK, result.Items, result)
+}
+
+// ConfirmRequisition handles POST /api/v1/purchase-requisitions/{id}/confirm
+func (h *Handler) ConfirmRequisition(w http.ResponseWriter, r *http.Request) {
+	if h.requisitionUseCase == nil {
+		response.Error(w, platformerrors.Internal("purchase requisition use case is not configured"))
+		return
+	}
+	id, err := parseID(chi.URLParam(r, "id"))
+	if err != nil {
+		response.Error(w, platformerrors.BadRequest("invalid purchase requisition ID in path", err))
+		return
+	}
+
+	requisition, err := h.requisitionUseCase.ConfirmRequisition(r.Context(), id)
+	if err != nil {
+		response.Error(w, err)
+		return
+	}
+
+	response.JSON(w, http.StatusOK, ToPurchaseRequisitionResponse(requisition))
+}
+
+// CloseRequisition handles POST /api/v1/purchase-requisitions/{id}/close
+func (h *Handler) CloseRequisition(w http.ResponseWriter, r *http.Request) {
+	if h.requisitionUseCase == nil {
+		response.Error(w, platformerrors.Internal("purchase requisition use case is not configured"))
+		return
+	}
+	id, err := parseID(chi.URLParam(r, "id"))
+	if err != nil {
+		response.Error(w, platformerrors.BadRequest("invalid purchase requisition ID in path", err))
+		return
+	}
+
+	requisition, err := h.requisitionUseCase.CloseRequisition(r.Context(), id)
+	if err != nil {
+		response.Error(w, err)
+		return
+	}
+
+	response.JSON(w, http.StatusOK, ToPurchaseRequisitionResponse(requisition))
+}
+
+// CancelRequisition handles POST /api/v1/purchase-requisitions/{id}/cancel
+func (h *Handler) CancelRequisition(w http.ResponseWriter, r *http.Request) {
+	if h.requisitionUseCase == nil {
+		response.Error(w, platformerrors.Internal("purchase requisition use case is not configured"))
+		return
+	}
+	id, err := parseID(chi.URLParam(r, "id"))
+	if err != nil {
+		response.Error(w, platformerrors.BadRequest("invalid purchase requisition ID in path", err))
+		return
+	}
+
+	requisition, err := h.requisitionUseCase.CancelRequisition(r.Context(), id)
+	if err != nil {
+		response.Error(w, err)
+		return
+	}
+
+	response.JSON(w, http.StatusOK, ToPurchaseRequisitionResponse(requisition))
+}
+
+// CreatePOFromRequisition handles POST /api/v1/purchase-requisitions/{id}/create-po
+func (h *Handler) CreatePOFromRequisition(w http.ResponseWriter, r *http.Request) {
+	if h.requisitionUseCase == nil {
+		response.Error(w, platformerrors.Internal("purchase requisition use case is not configured"))
+		return
+	}
+	id, err := parseID(chi.URLParam(r, "id"))
+	if err != nil {
+		response.Error(w, platformerrors.BadRequest("invalid purchase requisition ID in path", err))
+		return
+	}
+
+	order, err := h.requisitionUseCase.CreatePurchaseOrderFromRequisition(r.Context(), id)
+	if err != nil {
+		response.Error(w, err)
+		return
+	}
+
+	response.Created(w, ToPurchaseOrderResponse(order))
 }

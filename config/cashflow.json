@@ -25,7 +25,7 @@
     "password": "postgres",
     "name": "cashflow",
     "sslmode": "disable",
-    "app_name": "odoo-{pid}",
+    "app_name": "cashflow-{pid}",
     "pg_path": "",
     "replica_host": "",
     "replica_port": "",
@@ -40,7 +40,7 @@
     "max_conn_idle_time": "30m"
   },
   "app": {
-    "name": "odoo_go_backend",
+    "name": "cashflow_go_backend",
     "version": "0.1.0",
     "company_mode": "single",
     "default_productivity_apps": false
@@ -50,12 +50,12 @@
     "redis_port": "6379"
   },
   "auth": {
-    "jwt_secret": "odoo-go-insecure-dev-secret-key-change-in-production"
+    "jwt_secret": "cashflow-go-insecure-dev-secret-key-change-in-production"
   },
   "security": {
     "admin_passwd": "",
     "proxy_access_token": "",
-    "publisher_warranty_url": "http://services.odoo.com/publisher-warranty/"
+    "publisher_warranty_url": "http://services.cashflow.com/publisher-warranty/"
   },
   "log": {
     "level": "info",
@@ -119,7 +119,7 @@
     "test_file": "",
     "test_tags": "",
     "screencasts": "",
-    "screenshots": "/tmp/odoo_tests"
+    "screenshots": "/tmp/cashflow_tests"
   },
   "transient": {
     "osv_memory_count_limit": 0,

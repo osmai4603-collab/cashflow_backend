@@ -1,8 +1,8 @@
 package activityhttp
 
 import (
-	"github.com/go-chi/chi/v5"
 	"cashflow_backend/internal/platform/auth"
+	"github.com/go-chi/chi/v5"
 )
 
 // RegisterRoutes mounts all Activity and Notification endpoints.
@@ -27,6 +27,7 @@ func RegisterRoutes(r chi.Router, h *Handler, authorizers ...auth.Authorizer) {
 
 	r.Route("/notifications", func(r chi.Router) {
 		withAccess(r, authorizer, "mail.notification", auth.ActionRead).Get("/", h.ListNotifications)
+		withAccess(r, authorizer, "mail.notification", auth.ActionRead).Get("/stream", h.StreamNotifications)
 		withAccess(r, authorizer, "mail.notification", auth.ActionWrite).Post("/mark-all-read", h.MarkAllNotifsRead)
 		withAccess(r, authorizer, "mail.notification", auth.ActionWrite).Post("/{id}/mark-read", h.MarkNotifRead)
 	})

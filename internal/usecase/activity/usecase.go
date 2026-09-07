@@ -2,6 +2,8 @@ package activityusecase
 
 import (
 	"context"
+	"net/mail"
+	"strings"
 	"time"
 
 	"cashflow_backend/internal/domain/activity"
@@ -10,11 +12,12 @@ import (
 )
 
 type UseCase struct {
-	repo     activity.ActivityRepository
-	typeRepo activity.ActivityTypeRepository
-	msgRepo  activity.MessageRepository
+	repo      activity.ActivityRepository
+	typeRepo  activity.ActivityTypeRepository
+	msgRepo   activity.MessageRepository
 	notifRepo activity.NotificationRepository
 	emailRepo activity.EmailQueueRepository
+	userRepo  activity.UserRepository
 	bus       activity.Bus
 }
 
@@ -24,14 +27,16 @@ func NewUseCase(
 	msgRepo activity.MessageRepository,
 	notifRepo activity.NotificationRepository,
 	emailRepo activity.EmailQueueRepository,
-	bus       activity.Bus,
+	bus activity.Bus,
+	userRepo activity.UserRepository,
 ) *UseCase {
 	return &UseCase{
-		repo:     repo,
-		typeRepo: typeRepo,
-		msgRepo:  msgRepo,
+		repo:      repo,
+		typeRepo:  typeRepo,
+		msgRepo:   msgRepo,
 		notifRepo: notifRepo,
 		emailRepo: emailRepo,
+		userRepo:  userRepo,
 		bus:       bus,
 	}
 }
@@ -67,7 +72,7 @@ func (u *UseCase) ListTypes(ctx context.Context, companyID *int64) ([]activity.A
 // --- Activity Operations ---
 
 var allowedModels = map[string]bool{
-	"res.partner":     true,
+	"res.partner":      true,
 	"product.template": true,
 	"sale.order":       true,
 	"purchase.order":   true,
@@ -166,26 +171,38 @@ func (u *UseCase) notifyAssignment(ctx context.Context, a *activity.Activity) {
 	}
 	if err := u.msgRepo.CreateMessage(ctx, msg); err == nil {
 		notif := &activity.Notification{
-			MessageID:       &msg.ID,
-			ActivityID:      &a.ID,
-			RecipientUserID: a.AssignedUserID,
+			MessageID:        &msg.ID,
+			ActivityID:       &a.ID,
+			RecipientUserID:  a.AssignedUserID,
 			NotificationType: activity.NotificationTypeInbox,
-			Status:          activity.NotificationStatusUnread,
-			CompanyID:       a.CompanyID,
+			Status:           activity.NotificationStatusUnread,
+			CompanyID:        a.CompanyID,
 		}
 		if err := u.notifRepo.CreateNotification(ctx, notif); err == nil {
-			// Also queue email if needed (logic can be expanded based on user preferences)
-			// For now, let's assume we want to send an email for every assignment
-			emailItem := &activity.EmailQueueItem{
-				NotificationID: &notif.ID,
-				RecipientEmail: "user@example.com", // Should be fetched from user record
-				Subject:        msg.Subject,
-				Body:           msg.Body,
-				Status:         activity.EmailStatusQueued,
-				NextAttemptAt:  time.Now().UTC(),
-				CompanyID:       a.CompanyID,
+			recipientEmail := ""
+			if u.userRepo != nil {
+				if userRecord, err := u.userRepo.GetByID(ctx, a.AssignedUserID); err == nil && userRecord != nil && userRecord.EmailNotificationsEnabled {
+					recipientEmail = strings.TrimSpace(userRecord.Email)
+					if recipientEmail != "" {
+						if _, err := mail.ParseAddress(recipientEmail); err != nil {
+							recipientEmail = ""
+						}
+					}
+				}
 			}
-			_ = u.emailRepo.PushEmail(ctx, emailItem)
+
+			if recipientEmail != "" {
+				emailItem := &activity.EmailQueueItem{
+					NotificationID: &notif.ID,
+					RecipientEmail: recipientEmail,
+					Subject:        msg.Subject,
+					Body:           msg.Body,
+					Status:         activity.EmailStatusQueued,
+					NextAttemptAt:  time.Now().UTC(),
+					CompanyID:      a.CompanyID,
+				}
+				_ = u.emailRepo.PushEmail(ctx, emailItem)
+			}
 
 			if u.bus != nil {
 				_ = u.bus.NotifyUser(ctx, a.AssignedUserID, "mail.notification", notif)

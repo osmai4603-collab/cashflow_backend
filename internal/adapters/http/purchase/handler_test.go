@@ -30,13 +30,15 @@ func setupTestRouter(t *testing.T) (chi.Router, int64, int64) {
 	ctx := context.Background()
 
 	purchaseRepo := purchasestorage.NewMemoryRepo()
+	requisitionRepo := purchasestorage.NewMemoryRequisitionRepo()
 	partnerRepo := partnerstorage.NewMemoryRepo()
 	productRepo := productstorage.NewMemoryRepo()
 	accountingRepo := accountingstorage.NewMemoryRepo()
 
 	accountingUC := accountingusecase.New(accountingRepo, logger)
 	purchaseUC := purchaseusecase.New(purchaseRepo, partnerRepo, productRepo, accountingRepo, accountingUC, logger)
-	handler := purchasehttp.NewHandler(purchaseUC, logger)
+	requisitionUC := purchaseusecase.NewRequisitionUseCase(requisitionRepo, purchaseRepo)
+	handler := purchasehttp.NewHandler(purchaseUC, logger, requisitionUC)
 
 	// Seed vendor partner
 	vendor := &partner.Partner{Name: "Acme Industrial Supplies", IsSupplier: true, Active: true}
@@ -148,5 +150,69 @@ func TestPurchaseHTTP_EndToEnd(t *testing.T) {
 	r.ServeHTTP(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("expected 200 on /purchase-orders list, got %d", w.Code)
+	}
+}
+
+func TestPurchaseRequisitionHTTP_EndToEnd(t *testing.T) {
+	r, vendorID, prodID := setupTestRouter(t)
+
+	createReq := purchasehttp.CreatePurchaseRequisitionRequest{
+		Name:      "REQ-2026-0001",
+		Type:      purchasehttp.RequisitionType("blanket_order"),
+		VendorID:  &vendorID,
+		UserID:    1,
+		CurrencyID: 1,
+		CompanyID: 1,
+		Description: "Annual pump requisition",
+		Lines: []purchasehttp.CreateRequisitionLineRequest{
+			{
+				ProductID:   prodID,
+				ProductQty:  4,
+				PriceUnit:   120,
+				Description: "Hydraulic Pump",
+			},
+		},
+	}
+	body, _ := json.Marshal(createReq)
+	req := httptest.NewRequest(http.MethodPost, "/purchase-requisitions", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("expected 201 on requisition create, got %d. Body: %s", w.Code, w.Body.String())
+	}
+
+	var env response.Envelope
+	if err := json.NewDecoder(w.Body).Decode(&env); err != nil {
+		t.Fatalf("failed to decode requisition response: %v", err)
+	}
+	data, _ := json.Marshal(env.Data)
+	var created purchasehttp.PurchaseRequisitionResponse
+	if err := json.Unmarshal(data, &created); err != nil {
+		t.Fatalf("failed to unmarshal requisition response: %v", err)
+	}
+	if created.ID <= 0 {
+		t.Fatalf("expected positive requisition ID, got %d", created.ID)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/purchase-requisitions/"+strconv.FormatInt(created.ID, 10), nil)
+	w = httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 on requisition GET, got %d. Body: %s", w.Code, w.Body.String())
+	}
+
+	req = httptest.NewRequest(http.MethodPost, "/purchase-requisitions/"+strconv.FormatInt(created.ID, 10)+"/confirm", nil)
+	w = httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 on requisition confirm, got %d. Body: %s", w.Code, w.Body.String())
+	}
+
+	req = httptest.NewRequest(http.MethodPost, "/purchase-requisitions/"+strconv.FormatInt(created.ID, 10)+"/create-po", nil)
+	w = httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("expected 201 on create PO from requisition, got %d. Body: %s", w.Code, w.Body.String())
 	}
 }

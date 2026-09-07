@@ -75,7 +75,7 @@ CREATE TABLE IF NOT EXISTS stock_landed_cost_lines (
     product_id BIGINT REFERENCES product_templates(id) ON DELETE SET NULL, -- cost product (non-inventory)
     account_id BIGINT REFERENCES account_accounts(id) ON DELETE RESTRICT,  -- expense account (account_expense_line)
     price_unit NUMERIC(15, 4) NOT NULL DEFAULT 0.0,
-    split_method VARCHAR(24) NOT NULL DEFAULT 'equal', -- 'equal' | 'by_quantity' | 'by_current_cost' | 'by_weight' | 'by_volume'
+    split_method VARCHAR(24) NOT NULL DEFAULT 'equal', -- 'equal' | 'by_quantity' | 'by_current_cost_price' | 'by_weight' | 'by_volume'
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );

@@ -24,11 +24,18 @@ type AccountingGateway interface {
 type noopAccountingGateway struct{}
 
 func (noopAccountingGateway) CreateJournalEntry(ctx context.Context, in accountingusecase.CreateJournalEntryInput) (*accounting.AccountMove, error) {
-	return &accounting.AccountMove{ID: 0}, nil
+	return &accounting.AccountMove{
+		ID:        1,
+		JournalID: in.JournalID,
+		Date:      in.Date,
+		Ref:       in.Ref,
+		State:     accounting.MoveStatePosted,
+		Lines:     make([]accounting.AccountMoveLine, len(in.Lines)),
+	}, nil
 }
 
 func (noopAccountingGateway) PostMove(ctx context.Context, id int64) (*accounting.AccountMove, error) {
-	return &accounting.AccountMove{ID: id}, nil
+	return &accounting.AccountMove{ID: id, State: accounting.MoveStatePosted}, nil
 }
 
 func (noopAccountingGateway) GetMove(ctx context.Context, id int64) (*accounting.AccountMove, error) {

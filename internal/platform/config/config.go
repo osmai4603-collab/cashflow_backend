@@ -1,8 +1,8 @@
 // Package config provides the runtime configuration model and engine for the
-// ERP backend, inspired by Odoo's layered configuration system
-// (odoo.tools.config) and Mattermost's JSON + environment override model.
+// ERP backend, inspired by Cashflow's layered configuration system
+// (cashflow.tools.config) and Mattermost's JSON + environment override model.
 //
-// Priority order (lowest to highest), mirroring Odoo's ChainMap:
+// Priority order (lowest to highest), mirroring Cashflow's ChainMap:
 //
 //	defaults < config file < environment variables < CLI flags < runtime overrides
 package config
@@ -15,7 +15,7 @@ import (
 
 // Configuration is the complete runtime configuration, structured in sections
 // following Mattermost's model.Config approach. Every property described in the
-// Odoo configuration report is represented here, including those that are not
+// Cashflow configuration report is represented here, including those that are not
 // yet consumed by the Go backend (marked with an inline "reserved" note).
 type Configuration struct {
 	Server    ServerSettings    `json:"server,omitempty"`
@@ -38,24 +38,24 @@ type Configuration struct {
 	WebSocket WebSocketSettings `json:"websocket,omitempty"`
 }
 
-// ServerSettings maps the Odoo HTTP service group plus the go-server-lifecycle
+// ServerSettings maps the Cashflow HTTP service group plus the go-server-lifecycle
 // timeouts.
 type ServerSettings struct {
-	// Odoo: --http-interface (legacy env HTTP_INTERFACE)
+	// Cashflow: --http-interface (legacy env HTTP_INTERFACE)
 	Interface string `json:"interface" env:"HTTP_INTERFACE"`
-	// Odoo: --http-port (legacy env PORT)
+	// Cashflow: --http-port (legacy env PORT)
 	Port string `json:"port" env:"PORT"`
-	// Odoo: --no-http
+	// Cashflow: --no-http
 	HTTPEnable bool `json:"http_enable" env:"HTTP_ENABLE"`
-	// Odoo: --gevent-port (reserved: no gevent in Go)
+	// Cashflow: --gevent-port (reserved: no gevent in Go)
 	GeventPort int `json:"gevent_port" env:"GEVENT_PORT"`
-	// Odoo: --proxy-mode
+	// Cashflow: --proxy-mode
 	ProxyMode bool `json:"proxy_mode" env:"PROXY_MODE"`
-	// Odoo: --x-sendfile
+	// Cashflow: --x-sendfile
 	XSendfile bool `json:"x_sendfile" env:"X_SENDFILE"`
-	// Odoo: --pidfile
+	// Cashflow: --pidfile
 	Pidfile string `json:"pidfile" env:"PIDFILE"`
-	// Odoo: data_dir
+	// Cashflow: data_dir
 	DataDir string `json:"data_dir" env:"DATA_DIR"`
 
 	// go-server-lifecycle timeouts (legacy env names kept).
@@ -68,29 +68,29 @@ type ServerSettings struct {
 	MaxHeaderBytes    int           `json:"max_header_bytes" env:"MAX_HEADER_BYTES"`
 }
 
-// DatabaseSettings maps the Odoo database group (with PG* aliases).
+// DatabaseSettings maps the Cashflow database group (with PG* aliases).
 type DatabaseSettings struct {
 	// Legacy storage driver selection ("postgres" | "memory").
 	StorageDriver string `json:"storage_driver" env:"STORAGE_DRIVER"`
 	// Optional full connection string; takes precedence over individual fields in DSN().
 	DatabaseURL string `json:"database_url" env:"DATABASE_URL"`
 
-	Host        string `json:"host" env:"DB_HOST"`            // PG alias: PGHOST
-	Port        string `json:"port" env:"DB_PORT"`            // PG alias: PGPORT
-	User        string `json:"user" env:"DB_USER"`            // PG alias: PGUSER
-	Password    string `json:"password" env:"DB_PASSWORD"`    // PG alias: PGPASSWORD
-	Name        string `json:"name" env:"DB_NAME"`            // PG alias: PGDATABASE
-	SSLMode     string `json:"sslmode" env:"DB_SSLMODE"`      // PG alias: PGSSLMODE
-	AppName     string `json:"app_name" env:"DB_APP_NAME"`    // PG alias: PGAPPNAME
-	PGPath      string `json:"pg_path" env:"PG_PATH"`         // PG alias: PGPATH
+	Host        string `json:"host" env:"DB_HOST"`                 // PG alias: PGHOST
+	Port        string `json:"port" env:"DB_PORT"`                 // PG alias: PGPORT
+	User        string `json:"user" env:"DB_USER"`                 // PG alias: PGUSER
+	Password    string `json:"password" env:"DB_PASSWORD"`         // PG alias: PGPASSWORD
+	Name        string `json:"name" env:"DB_NAME"`                 // PG alias: PGDATABASE
+	SSLMode     string `json:"sslmode" env:"DB_SSLMODE"`           // PG alias: PGSSLMODE
+	AppName     string `json:"app_name" env:"DB_APP_NAME"`         // PG alias: PGAPPNAME
+	PGPath      string `json:"pg_path" env:"PG_PATH"`              // PG alias: PGPATH
 	ReplicaHost string `json:"replica_host" env:"DB_REPLICA_HOST"` // PG alias: PGHOST_REPLICA
 	ReplicaPort string `json:"replica_port" env:"DB_REPLICA_PORT"` // PG alias: PGPORT_REPLICA
-	Template    string `json:"template" env:"DB_TEMPLATE"`    // PG alias: PGDATABASE_TEMPLATE
+	Template    string `json:"template" env:"DB_TEMPLATE"`         // PG alias: PGDATABASE_TEMPLATE
 	Unaccent    bool   `json:"unaccent" env:"DB_UNACCENT"`
 
-	// Odoo: --db-filter
+	// Cashflow: --db-filter
 	DBFilter string `json:"dbfilter" env:"DB_FILTER"`
-	// Odoo: --no-database-list inverse (true = list DBs allowed)
+	// Cashflow: --no-database-list inverse (true = list DBs allowed)
 	ListDB bool `json:"list_db" env:"LIST_DB"`
 
 	MaxConns        int32         `json:"max_conns" env:"DB_MAX_CONNS"`
@@ -100,7 +100,7 @@ type DatabaseSettings struct {
 	MaxConnIdleTime time.Duration `json:"max_conn_idle_time" env:"DB_MAX_CONN_IDLE_TIME_MINUTES"`
 }
 
-// AppSettings maps application metadata and Odoo's default_productivity_apps.
+// AppSettings maps application metadata and Cashflow's default_productivity_apps.
 type AppSettings struct {
 	Name                    string `json:"name" env:"APP_NAME"`
 	Version                 string `json:"version" env:"APP_VERSION"`
@@ -119,44 +119,44 @@ type AuthSettings struct {
 	JWTSecret string `json:"jwt_secret" env:"JWT_SECRET"`
 }
 
-// SecuritySettings maps the Odoo security group. AdminHash stores a PBKDF2-SHA512
+// SecuritySettings maps the Cashflow security group. AdminHash stores a PBKDF2-SHA512
 // hash instead of plaintext (mirrors passlib pbkdf2_sha512).
 type SecuritySettings struct {
 	AdminHash            string `json:"admin_passwd" env:"ADMIN_PASSWD"`
-	ProxyAccessToken     string `json:"proxy_access_token" env:"PROXY_ACCESS_TOKEN"`        // reserved
+	ProxyAccessToken     string `json:"proxy_access_token" env:"PROXY_ACCESS_TOKEN"`         // reserved
 	PublisherWarrantyURL string `json:"publisher_warranty_url" env:"PUBLISHER_WARRANTY_URL"` // reserved
 }
 
-// LogSettings maps the Odoo logging group.
+// LogSettings maps the Cashflow logging group.
 type LogSettings struct {
-	Level    string   `json:"level" env:"LOG_LEVEL"`   // info | debug | warn | error | ...
-	File     string   `json:"file" env:"LOG_FILE"`     // Odoo: --logfile
-	Syslog   bool     `json:"syslog" env:"LOG_SYSLOG"` // Odoo: --syslog
-	Handlers []string `json:"handlers" env:"LOG_HANDLER"` // Odoo: --log-handler
-	DB       string   `json:"db" env:"LOG_DB"`         // reserved
+	Level    string   `json:"level" env:"LOG_LEVEL"`      // info | debug | warn | error | ...
+	File     string   `json:"file" env:"LOG_FILE"`        // Cashflow: --logfile
+	Syslog   bool     `json:"syslog" env:"LOG_SYSLOG"`    // Cashflow: --syslog
+	Handlers []string `json:"handlers" env:"LOG_HANDLER"` // Cashflow: --log-handler
+	DB       string   `json:"db" env:"LOG_DB"`            // reserved
 	DBLevel  string   `json:"db_level" env:"LOG_DB_LEVEL"`
 	Config   string   `json:"config" env:"LOG_CONFIG"` // reserved
 }
 
-// EmailSettings maps the Odoo SMTP group. Fully defined but reserved until a
+// EmailSettings maps the Cashflow SMTP group. Fully defined but reserved until a
 // mailer subsystem is built.
 type EmailSettings struct {
-	From                 string `json:"from" env:"EMAIL_FROM"`
-	FromFilter           string `json:"from_filter" env:"FROM_FILTER"`
-	SMTPHost             string `json:"smtp_server" env:"SMTP_SERVER"`
-	SMTPPort             int    `json:"smtp_port" env:"SMTP_PORT"`
-	SSL                  bool   `json:"smtp_ssl" env:"SMTP_SSL"`
-	User                 string `json:"smtp_user" env:"SMTP_USER"`
-	Password             string `json:"smtp_password" env:"SMTP_PASSWORD"`
-	CertificateFilename  string `json:"smtp_ssl_certificate_filename" env:"SMTP_SSL_CERTIFICATE_FILENAME"`
-	PrivateKeyFilename   string `json:"smtp_ssl_private_key_filename" env:"SMTP_SSL_PRIVATE_KEY_FILENAME"`
+	From                string `json:"from" env:"EMAIL_FROM"`
+	FromFilter          string `json:"from_filter" env:"FROM_FILTER"`
+	SMTPHost            string `json:"smtp_server" env:"SMTP_SERVER"`
+	SMTPPort            int    `json:"smtp_port" env:"SMTP_PORT"`
+	SSL                 bool   `json:"smtp_ssl" env:"SMTP_SSL"`
+	User                string `json:"smtp_user" env:"SMTP_USER"`
+	Password            string `json:"smtp_password" env:"SMTP_PASSWORD"`
+	CertificateFilename string `json:"smtp_ssl_certificate_filename" env:"SMTP_SSL_CERTIFICATE_FILENAME"`
+	PrivateKeyFilename  string `json:"smtp_ssl_private_key_filename" env:"SMTP_SSL_PRIVATE_KEY_FILENAME"`
 }
 
-// WorkerSettings maps Odoo's multiprocessing and cron options.
+// WorkerSettings maps Cashflow's multiprocessing and cron options.
 type WorkerSettings struct {
-	Workers        int           `json:"workers" env:"WORKERS"`                 // 0 disables the prefork-like pool
-	MaxCronThreads int           `json:"max_cron_threads" env:"MAX_CRON_THREADS"` // Odoo: --max-cron-threads
-	TimeWorkerCron time.Duration `json:"time_worker_cron" env:"LIMIT_TIME_WORKER_CRON"` // Odoo: --limit-time-worker-cron
+	Workers        int           `json:"workers" env:"WORKERS"`                         // 0 disables the prefork-like pool
+	MaxCronThreads int           `json:"max_cron_threads" env:"MAX_CRON_THREADS"`       // Cashflow: --max-cron-threads
+	TimeWorkerCron time.Duration `json:"time_worker_cron" env:"LIMIT_TIME_WORKER_CRON"` // Cashflow: --limit-time-worker-cron
 }
 
 // StockSettings maps the reorder and landed-cost runtime options
@@ -168,7 +168,7 @@ type StockSettings struct {
 	ReorderInterval time.Duration `json:"reorder_interval" env:"STOCK_REORDER_INTERVAL"`
 }
 
-// LimitSettings maps Odoo's memory/time/request limits.
+// LimitSettings maps Cashflow's memory/time/request limits.
 type LimitSettings struct {
 	MemorySoft       int64         `json:"memory_soft" env:"LIMIT_MEMORY_SOFT"`
 	MemoryHard       int64         `json:"memory_hard" env:"LIMIT_MEMORY_HARD"`
@@ -180,23 +180,23 @@ type LimitSettings struct {
 	Requests         uint64        `json:"requests" env:"LIMIT_REQUEST"` // reserved
 }
 
-// RuntimeSettings maps Odoo module/demo/import runtime options.
+// RuntimeSettings maps Cashflow module/demo/import runtime options.
 type RuntimeSettings struct {
-	ServerWideModules []string `json:"server_wide_modules" env:"SERVER_WIDE_MODULES"` // Odoo: --load
-	InitModules       []string `json:"init_modules" env:"INIT_MODULES"`               // Odoo: --init
-	UpdateModules     []string `json:"update_modules" env:"UPDATE_MODULES"`           // Odoo: --update
-	ReinitModules     []string `json:"reinit_modules" env:"REINIT_MODULES"`           // Odoo: --reinit
-	WithDemo          bool     `json:"with_demo" env:"WITH_DEMO"`                     // Odoo: --with-demo
-	SkipAutoInstall   bool     `json:"skip_auto_install" env:"SKIP_AUTO_INSTALL"`     // Odoo: --skip-auto-install
-	ImportPartial     string   `json:"import_partial" env:"IMPORT_PARTIAL"`           // Odoo: -P
-	StopAfterInit     bool     `json:"stop_after_init" env:"STOP_AFTER_INIT"`         // Odoo: --stop-after-init
-	DevMode           []string `json:"dev_mode" env:"DEV_MODE"`                       // Odoo: --dev
+	ServerWideModules []string `json:"server_wide_modules" env:"SERVER_WIDE_MODULES"` // Cashflow: --load
+	InitModules       []string `json:"init_modules" env:"INIT_MODULES"`               // Cashflow: --init
+	UpdateModules     []string `json:"update_modules" env:"UPDATE_MODULES"`           // Cashflow: --update
+	ReinitModules     []string `json:"reinit_modules" env:"REINIT_MODULES"`           // Cashflow: --reinit
+	WithDemo          bool     `json:"with_demo" env:"WITH_DEMO"`                     // Cashflow: --with-demo
+	SkipAutoInstall   bool     `json:"skip_auto_install" env:"SKIP_AUTO_INSTALL"`     // Cashflow: --skip-auto-install
+	ImportPartial     string   `json:"import_partial" env:"IMPORT_PARTIAL"`           // Cashflow: -P
+	StopAfterInit     bool     `json:"stop_after_init" env:"STOP_AFTER_INIT"`         // Cashflow: --stop-after-init
+	DevMode           []string `json:"dev_mode" env:"DEV_MODE"`                       // Cashflow: --dev
 	AddonsPath        []string `json:"addons_path" env:"ADDONS_PATH"`                 // reserved
 	UpgradePath       []string `json:"upgrade_path" env:"UPGRADE_PATH"`               // reserved
 	PreUpgradeScripts []string `json:"pre_upgrade_scripts" env:"PRE_UPGRADE_SCRIPTS"` // reserved
 }
 
-// FeatureSettings maps Odoo file-only import/export options.
+// FeatureSettings maps Cashflow file-only import/export options.
 type FeatureSettings struct {
 	ImportMaxBytes int    `json:"import_file_maxbytes" env:"IMPORT_FILE_MAXBYTES"`
 	ImportTimeout  int    `json:"import_file_timeout" env:"IMPORT_FILE_TIMEOUT"`
@@ -206,7 +206,7 @@ type FeatureSettings struct {
 	BinPath        string `json:"bin_path" env:"BIN_PATH"` // reserved
 }
 
-// TestSettings maps the Odoo testing group.
+// TestSettings maps the Cashflow testing group.
 type TestSettings struct {
 	Enable      bool   `json:"test_enable" env:"TEST_ENABLE"`
 	File        string `json:"test_file" env:"TEST_FILE"`
@@ -215,25 +215,25 @@ type TestSettings struct {
 	Screenshots string `json:"screenshots" env:"SCREENSHOTS"`
 }
 
-// TransientSettings maps the Odoo transient-model limits (reserved in Go).
+// TransientSettings maps the Cashflow transient-model limits (reserved in Go).
 type TransientSettings struct {
 	MaxCount    int     `json:"osv_memory_count_limit" env:"OSV_MEMORY_COUNT_LIMIT"`
 	MaxAgeHours float64 `json:"transient_age_limit" env:"TRANSIENT_AGE_LIMIT"`
 }
 
-// GeoIPSettings maps the Odoo GeoIP database paths (reserved).
+// GeoIPSettings maps the Cashflow GeoIP database paths (reserved).
 type GeoIPSettings struct {
 	CityDB    string `json:"geoip_city_db" env:"GEOIP_CITY_DB"`
 	CountryDB string `json:"geoip_country_db" env:"GEOIP_COUNTRY_DB"`
 }
 
-// I18nSettings maps the Odoo internationalisation group (reserved).
+// I18nSettings maps the Cashflow internationalisation group (reserved).
 type I18nSettings struct {
 	LoadLanguage string `json:"load_language" env:"LOAD_LANGUAGE"`
 	Overwrite    bool   `json:"i18n_overwrite" env:"I18N_OVERWRITE"`
 }
 
-// WebSocketSettings maps the Odoo websocket file-only options (reserved for the
+// WebSocketSettings maps the Cashflow websocket file-only options (reserved for the
 // future bus subsystem).
 type WebSocketSettings struct {
 	KeepAliveTimeout int     `json:"websocket_keep_alive_timeout" env:"WEBSOCKET_KEEP_ALIVE_TIMEOUT"`
@@ -242,7 +242,7 @@ type WebSocketSettings struct {
 }
 
 // Defaults returns a fully populated Configuration with production-safe
-// defaults matching the odoo_19_configuration_system_report.
+// defaults matching the cashflow_19_configuration_system_report.
 func Defaults() *Configuration {
 	return &Configuration{
 		Server: ServerSettings{
@@ -267,7 +267,7 @@ func Defaults() *Configuration {
 			Password:        "postgres",
 			Name:            "cashflow",
 			SSLMode:         "disable",
-			AppName:         "odoo-{pid}",
+			AppName:         "cashflow-{pid}",
 			Template:        "template0",
 			ListDB:          true,
 			MaxConns:        25,
@@ -276,7 +276,7 @@ func Defaults() *Configuration {
 			MaxConnIdleTime: 30 * time.Minute,
 		},
 		App: AppSettings{
-			Name:        "odoo_go_backend",
+			Name:        "cashflow_go_backend",
 			Version:     "0.1.0",
 			CompanyMode: "single",
 		},
@@ -285,10 +285,10 @@ func Defaults() *Configuration {
 			RedisPort: "6379",
 		},
 		Auth: AuthSettings{
-			JWTSecret: "odoo-go-insecure-dev-secret-key-change-in-production",
+			JWTSecret: "cashflow-go-insecure-dev-secret-key-change-in-production",
 		},
 		Security: SecuritySettings{
-			PublisherWarrantyURL: "http://services.odoo.com/publisher-warranty/",
+			PublisherWarrantyURL: "http://services.cashflow.com/publisher-warranty/",
 		},
 		Log: LogSettings{
 			Level:    "info",
@@ -322,7 +322,7 @@ func Defaults() *Configuration {
 			CSVInternalSep: ",",
 		},
 		Test: TestSettings{
-			Screenshots: "/tmp/odoo_tests",
+			Screenshots: "/tmp/cashflow_tests",
 		},
 		Transient: TransientSettings{
 			MaxAgeHours: 1.0,
@@ -374,12 +374,12 @@ func (c *Configuration) DataDir() string {
 	return filepath.Join(".", "data")
 }
 
-// SessionsDir returns the session directory within the data dir (Odoo session_dir).
+// SessionsDir returns the session directory within the data dir (Cashflow session_dir).
 func (c *Configuration) SessionsDir() string {
 	return filepath.Join(c.DataDir(), "sessions")
 }
 
-// Filestore returns the filestore directory for the given database (Odoo filestore).
+// Filestore returns the filestore directory for the given database (Cashflow filestore).
 func (c *Configuration) Filestore(dbname string) string {
 	return filepath.Join(c.DataDir(), "filestore", dbname)
 }

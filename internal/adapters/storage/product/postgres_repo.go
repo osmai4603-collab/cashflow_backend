@@ -34,6 +34,7 @@ const selectTemplateFields = `
 	pt.id,
 	pt.name,
 	pt.type,
+	pt.tracking,
 	pt.category_id,
 	COALESCE(pt.internal_ref, ''),
 	COALESCE(pt.barcode, ''),
@@ -74,23 +75,26 @@ func NewPostgresRepo(pool *pgxpool.Pool) *PostgresRepo {
 // ─────────────────────────────────────────────────────────────────────────────
 
 func (r *PostgresRepo) CreateTemplate(ctx context.Context, pt *product.ProductTemplate) error {
+	if err := pt.Validate(); err != nil {
+		return err
+	}
 	query := `
 		INSERT INTO product_templates (
-			name, type, category_id, internal_ref, barcode,
+			name, type, tracking, category_id, internal_ref, barcode,
 			sale_price, cost_price, uom_id, sale_ok, purchase_ok,
 			weight, volume, description, company_id,
 			active, created_at, updated_at, created_by, updated_by
 		) VALUES (
-			$1, $2, $3, NULLIF($4, ''), NULLIF($5, ''),
-			$6, $7, $8, $9, $10,
-			$11, $12, NULLIF($13, ''), $14,
-			$15, $16, $17, $18, $19
+			$1, $2, $3, $4, NULLIF($5, ''), NULLIF($6, ''),
+			$7, $8, $9, $10, $11,
+			$12, $13, NULLIF($14, ''), $15,
+			$16, $17, $18, $19, $20
 		) RETURNING id, created_at, updated_at
 	`
 
 	pt.Active = true
 	err := r.pool.QueryRow(ctx, query,
-		pt.Name, string(pt.Type), pt.CategoryID, pt.InternalRef, pt.Barcode,
+		pt.Name, string(pt.Type), string(pt.Tracking), pt.CategoryID, pt.InternalRef, pt.Barcode,
 		pt.SalePrice, pt.CostPrice, pt.UoMID, pt.SaleOK, pt.PurchaseOK,
 		pt.Weight, pt.Volume, pt.Description, pt.CompanyID,
 		pt.Active, pt.Audit.CreatedAt, pt.Audit.UpdatedAt, pt.Audit.CreatedBy, pt.Audit.UpdatedBy,
@@ -122,6 +126,7 @@ func (r *PostgresRepo) GetTemplateByID(ctx context.Context, id int64) (*product.
 		&pt.ID,
 		&pt.Name,
 		&pType,
+		&pt.Tracking,
 		&pt.CategoryID,
 		&pt.InternalRef,
 		&pt.Barcode,
@@ -178,30 +183,34 @@ func (r *PostgresRepo) GetTemplateByID(ctx context.Context, id int64) (*product.
 }
 
 func (r *PostgresRepo) UpdateTemplate(ctx context.Context, pt *product.ProductTemplate) error {
+	if err := pt.Validate(); err != nil {
+		return err
+	}
 	query := `
 		UPDATE product_templates SET
 			name = $1,
 			type = $2,
-			category_id = $3,
-			internal_ref = NULLIF($4, ''),
-			barcode = NULLIF($5, ''),
-			sale_price = $6,
-			cost_price = $7,
-			uom_id = $8,
-			sale_ok = $9,
-			purchase_ok = $10,
-			weight = $11,
-			volume = $12,
-			description = NULLIF($13, ''),
-			company_id = $14,
-			updated_at = $15,
-			updated_by = $16
-		WHERE id = $17 AND active = true
+			tracking = $3,
+			category_id = $4,
+			internal_ref = NULLIF($5, ''),
+			barcode = NULLIF($6, ''),
+			sale_price = $7,
+			cost_price = $8,
+			uom_id = $9,
+			sale_ok = $10,
+			purchase_ok = $11,
+			weight = $12,
+			volume = $13,
+			description = NULLIF($14, ''),
+			company_id = $15,
+			updated_at = $16,
+			updated_by = $17
+		WHERE id = $18 AND active = true
 		RETURNING updated_at
 	`
 
 	err := r.pool.QueryRow(ctx, query,
-		pt.Name, string(pt.Type), pt.CategoryID, pt.InternalRef, pt.Barcode,
+		pt.Name, string(pt.Type), string(pt.Tracking), pt.CategoryID, pt.InternalRef, pt.Barcode,
 		pt.SalePrice, pt.CostPrice, pt.UoMID, pt.SaleOK, pt.PurchaseOK,
 		pt.Weight, pt.Volume, pt.Description, pt.CompanyID,
 		pt.Audit.UpdatedAt, pt.Audit.UpdatedBy, pt.ID,
@@ -320,6 +329,7 @@ func (r *PostgresRepo) ListTemplates(ctx context.Context, f *filter.Filter, page
 			&pt.ID,
 			&pt.Name,
 			&pType,
+			&pt.Tracking,
 			&pt.CategoryID,
 			&pt.InternalRef,
 			&pt.Barcode,

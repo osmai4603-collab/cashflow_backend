@@ -113,8 +113,8 @@ func TestLoad_AppAndSecurityDefaults(t *testing.T) {
 		t.Fatalf("Load() error: %v", err)
 	}
 
-	if cfg.App.Name != "odoo_go_backend" {
-		t.Errorf("expected default AppName odoo_go_backend, got %s", cfg.App.Name)
+	if cfg.App.Name != "cashflow_go_backend" {
+		t.Errorf("expected default AppName cashflow_go_backend, got %s", cfg.App.Name)
 	}
 	if cfg.App.Version != "0.1.0" {
 		t.Errorf("expected default AppVersion 0.1.0, got %s", cfg.App.Version)

@@ -64,7 +64,7 @@ func TestComputeSplitValueByCurrentCost(t *testing.T) {
 	})
 	// 80/400*250 = 50 ; 80/400*150 = 30 → total == priceUnit
 	if total != 80 {
-		t.Fatalf("by_current_cost allocations must sum to price_unit, got %f", total)
+		t.Fatalf("by_current_cost_price allocations must sum to price_unit, got %f", total)
 	}
 }
 
@@ -92,9 +92,9 @@ func TestComputeSplitValueZeroGuards(t *testing.T) {
 
 func TestLandedCostJournalAmount(t *testing.T) {
 	cases := []struct {
-		name                string
+		name                 string
 		additional, qty, rem float64
-		want                float64
+		want                 float64
 	}{
 		{"no remaining stock booked", 5, 100, 0, 0},
 		{"zero quantity guard", 5, 0, 100, 0},

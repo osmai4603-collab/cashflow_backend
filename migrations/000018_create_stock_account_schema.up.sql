@@ -51,10 +51,11 @@ ALTER TABLE account_accounts
     ADD COLUMN IF NOT EXISTS account_stock_variation_id BIGINT REFERENCES account_accounts(id) ON DELETE SET NULL,
     ADD COLUMN IF NOT EXISTS account_stock_expense_id BIGINT REFERENCES account_accounts(id) ON DELETE SET NULL;
 
--- 6. Extend account_move_lines with COGS support fields (Anglo-Saxon)
+-- 6. Extend account_move_lines with COGS and landed-cost support fields (Anglo-Saxon)
 ALTER TABLE account_move_lines
     ADD COLUMN IF NOT EXISTS display_type VARCHAR(20),
-    ADD COLUMN IF NOT EXISTS cogs_origin_id BIGINT REFERENCES account_move_lines(id) ON DELETE SET NULL;
+    ADD COLUMN IF NOT EXISTS cogs_origin_id BIGINT REFERENCES account_move_lines(id) ON DELETE SET NULL,
+    ADD COLUMN IF NOT EXISTS is_landed_costs_line BOOLEAN NOT NULL DEFAULT false;
 
 -- 7. Product Values history table (equivalent of product.value / old stock.valuation.layer history)
 CREATE TABLE IF NOT EXISTS product_values (

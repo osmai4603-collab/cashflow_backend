@@ -23,7 +23,7 @@ type SplitMethod string
 const (
 	SplitEqual      SplitMethod = "equal"
 	SplitByQuantity SplitMethod = "by_quantity"
-	SplitByCost     SplitMethod = "by_current_cost"
+	SplitByCost     SplitMethod = "by_current_cost_price"
 	SplitByWeight   SplitMethod = "by_weight"
 	SplitByVolume   SplitMethod = "by_volume"
 )
@@ -106,7 +106,7 @@ func (c *LandedCost) Validate() error {
 		}
 		if !IsValidSplitMethod(c.CostLines[i].SplitMethod) {
 			return platformerrors.Validation("invalid split method", map[string]string{
-				"split_method": "must be equal, by_quantity, by_current_cost, by_weight or by_volume",
+				"split_method": "must be equal, by_quantity, by_current_cost_price, by_weight or by_volume",
 			})
 		}
 	}

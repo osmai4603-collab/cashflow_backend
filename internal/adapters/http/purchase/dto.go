@@ -184,6 +184,160 @@ type PurchaseOrderResponse struct {
 	UpdatedAt     time.Time                   `json:"updated_at"`
 }
 
+// RequisitionType is the DTO mirror of the purchase requisition type enum.
+type RequisitionType string
+
+const (
+	RequisitionBlanketOrder RequisitionType = "blanket_order"
+	RequisitionTemplate     RequisitionType = "purchase_template"
+)
+
+// RequisitionState is the DTO mirror of the purchase requisition lifecycle.
+type RequisitionState string
+
+const (
+	RequisitionDraft     RequisitionState = "draft"
+	RequisitionConfirmed RequisitionState = "confirmed"
+	RequisitionDone      RequisitionState = "done"
+	RequisitionCancel    RequisitionState = "cancel"
+)
+
+type CreateRequisitionLineRequest struct {
+	ProductID    int64      `json:"product_id"`
+	ProductQty   float64    `json:"product_qty"`
+	ProductUOMID *int64     `json:"product_uom_id,omitempty"`
+	PriceUnit    float64    `json:"price_unit"`
+	ScheduleDate *time.Time `json:"schedule_date,omitempty"`
+	SupplierID   *int64     `json:"supplier_id,omitempty"`
+	Description  string     `json:"description,omitempty"`
+}
+
+func (r CreateRequisitionLineRequest) ToInput() purchaseusecase.CreateRequisitionLineInput {
+	return purchaseusecase.CreateRequisitionLineInput{
+		ProductID:    r.ProductID,
+		ProductQty:   r.ProductQty,
+		ProductUOMID: r.ProductUOMID,
+		PriceUnit:    r.PriceUnit,
+		ScheduleDate: r.ScheduleDate,
+		SupplierID:   r.SupplierID,
+		Description:  r.Description,
+	}
+}
+
+type CreatePurchaseRequisitionRequest struct {
+	Name        string                         `json:"name,omitempty"`
+	Type        RequisitionType                `json:"type,omitempty"`
+	VendorID    *int64                         `json:"vendor_id,omitempty"`
+	UserID      int64                          `json:"user_id"`
+	DateStart   *time.Time                     `json:"date_start,omitempty"`
+	DateEnd     *time.Time                     `json:"date_end,omitempty"`
+	CurrencyID  int64                          `json:"currency_id"`
+	CompanyID   int64                          `json:"company_id"`
+	Description string                         `json:"description,omitempty"`
+	Lines       []CreateRequisitionLineRequest `json:"lines"`
+}
+
+type UpdatePurchaseRequisitionRequest = CreatePurchaseRequisitionRequest
+
+func (r CreatePurchaseRequisitionRequest) ToInput() purchaseusecase.CreatePurchaseRequisitionInput {
+	lines := make([]purchaseusecase.CreateRequisitionLineInput, len(r.Lines))
+	for i, l := range r.Lines {
+		lines[i] = l.ToInput()
+	}
+	return purchaseusecase.CreatePurchaseRequisitionInput{
+		Name:        r.Name,
+		Type:        purchase.RequisitionType(r.Type),
+		VendorID:    r.VendorID,
+		UserID:      r.UserID,
+		DateStart:   r.DateStart,
+		DateEnd:     r.DateEnd,
+		CurrencyID:  r.CurrencyID,
+		CompanyID:   r.CompanyID,
+		Description: r.Description,
+		Lines:       lines,
+	}
+}
+
+type PurchaseRequisitionLineResponse struct {
+	ID            int64      `json:"id"`
+	RequisitionID int64      `json:"requisition_id"`
+	ProductID     int64      `json:"product_id"`
+	ProductQty    float64    `json:"product_qty"`
+	ProductUOMID  *int64     `json:"product_uom_id,omitempty"`
+	PriceUnit     float64    `json:"price_unit"`
+	ScheduleDate  *time.Time `json:"schedule_date,omitempty"`
+	SupplierID    *int64     `json:"supplier_id,omitempty"`
+	Description   string     `json:"description,omitempty"`
+	CreatedAt     time.Time  `json:"created_at"`
+	UpdatedAt     time.Time  `json:"updated_at"`
+}
+
+type PurchaseRequisitionResponse struct {
+	ID               int64                             `json:"id"`
+	Name             string                            `json:"name"`
+	Type             purchase.RequisitionType          `json:"type"`
+	VendorID         *int64                            `json:"vendor_id,omitempty"`
+	UserID           int64                             `json:"user_id"`
+	DateStart        *time.Time                        `json:"date_start,omitempty"`
+	DateEnd          *time.Time                        `json:"date_end,omitempty"`
+	State            purchase.RequisitionState         `json:"state"`
+	CurrencyID       int64                             `json:"currency_id"`
+	CompanyID        int64                             `json:"company_id"`
+	Description      string                            `json:"description,omitempty"`
+	PurchaseOrderIDs []int64                           `json:"purchase_order_ids,omitempty"`
+	Lines            []PurchaseRequisitionLineResponse `json:"lines"`
+	CreatedAt        time.Time                         `json:"created_at"`
+	UpdatedAt        time.Time                         `json:"updated_at"`
+}
+
+func ToPurchaseRequisitionLineResponse(l purchase.PurchaseRequisitionLine) PurchaseRequisitionLineResponse {
+	return PurchaseRequisitionLineResponse{
+		ID:            l.ID,
+		RequisitionID: l.RequisitionID,
+		ProductID:     l.ProductID,
+		ProductQty:    l.ProductQty,
+		ProductUOMID:  l.ProductUOMID,
+		PriceUnit:     l.PriceUnit,
+		ScheduleDate:  l.ScheduleDate,
+		SupplierID:    l.SupplierID,
+		Description:   l.Description,
+		CreatedAt:     l.CreatedAt,
+		UpdatedAt:     l.UpdatedAt,
+	}
+}
+
+func ToPurchaseRequisitionResponse(r *purchase.PurchaseRequisition) PurchaseRequisitionResponse {
+	lines := make([]PurchaseRequisitionLineResponse, len(r.Lines))
+	for i, l := range r.Lines {
+		lines[i] = ToPurchaseRequisitionLineResponse(l)
+	}
+	return PurchaseRequisitionResponse{
+		ID:               r.ID,
+		Name:             r.Name,
+		Type:             r.Type,
+		VendorID:         r.VendorID,
+		UserID:           r.UserID,
+		DateStart:        r.DateStart,
+		DateEnd:          r.DateEnd,
+		State:            r.State,
+		CurrencyID:       r.CurrencyID,
+		CompanyID:        r.CompanyID,
+		Description:      r.Description,
+		PurchaseOrderIDs: r.PurchaseOrderIDs,
+		Lines:            lines,
+		CreatedAt:        r.CreatedAt,
+		UpdatedAt:        r.UpdatedAt,
+	}
+}
+
+func ToPurchaseRequisitionListResponse(items []purchase.PurchaseRequisition) []PurchaseRequisitionResponse {
+	res := make([]PurchaseRequisitionResponse, len(items))
+	for i := range items {
+		res[i] = ToPurchaseRequisitionResponse(&items[i])
+	}
+	return res
+}
+
 func ToPurchaseOrderLineResponse(l purchase.PurchaseOrderLine) PurchaseOrderLineResponse {
 	taxIDs := l.TaxIDs
 	if taxIDs == nil {

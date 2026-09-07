@@ -90,6 +90,9 @@ func NewMemoryRepo() *MemoryRepo {
 // ─────────────────────────────────────────────────────────────────────────────
 
 func (r *MemoryRepo) CreateTemplate(ctx context.Context, pt *product.ProductTemplate) error {
+	if err := pt.Validate(); err != nil {
+		return err
+	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -125,6 +128,9 @@ func (r *MemoryRepo) GetTemplateByID(ctx context.Context, id int64) (*product.Pr
 }
 
 func (r *MemoryRepo) UpdateTemplate(ctx context.Context, pt *product.ProductTemplate) error {
+	if err := pt.Validate(); err != nil {
+		return err
+	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 

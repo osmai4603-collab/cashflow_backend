@@ -681,12 +681,12 @@ func (r *PostgresRepo) CreateMove(ctx context.Context, m *accounting.AccountMove
 				move_id, account_id, partner_id, product_id, name,
 				quantity, price_unit, discount, debit, credit, balance,
 				tax_ids, tax_amount, reconcile, reconciled, amount_residual,
-				matching_number, statement_line_id, display_type, cogs_origin_id, created_at, updated_at
+				matching_number, statement_line_id, display_type, cogs_origin_id, is_landed_costs_line, created_at, updated_at
 			) VALUES (
 				$1, $2, $3, $4, $5,
 				$6, $7, $8, $9, $10, $11,
 				$12, $13, $14, $15, $16,
-				$17, $18, $19, $20, NOW(), NOW()
+				$17, $18, $19, $20, $21, NOW(), NOW()
 			) RETURNING id, created_at, updated_at
 		`
 		for i := range m.Lines {
@@ -701,7 +701,7 @@ func (r *PostgresRepo) CreateMove(ctx context.Context, m *accounting.AccountMove
 				m.ID, l.AccountID, l.PartnerID, l.ProductID, l.Name,
 				l.Quantity, l.PriceUnit, l.Discount, l.Debit, l.Credit, l.Balance,
 				l.TaxIDs, l.TaxAmount, l.Reconcile, l.Reconciled, l.AmountResidual,
-				l.MatchingNumber, l.StatementLineID, l.DisplayType, l.CogsOriginID, l.CreatedAt, l.UpdatedAt,
+				l.MatchingNumber, l.StatementLineID, l.DisplayType, l.CogsOriginID, l.IsLandedCostsLine, l.CreatedAt, l.UpdatedAt,
 			).Scan(&l.ID, &l.CreatedAt, &l.UpdatedAt); err != nil {
 				return platformerrors.Internal("failed to insert move line", err)
 			}
@@ -749,7 +749,7 @@ func (r *PostgresRepo) GetMoveWithLines(ctx context.Context, id int64) (*account
 		SELECT id, move_id, account_id, partner_id, product_id, name,
 		       quantity, price_unit, discount, debit, credit, balance,
 		       tax_ids, tax_amount, reconcile, reconciled, amount_residual,
-		       matching_number, statement_line_id, display_type, cogs_origin_id, created_at, updated_at
+		       matching_number, statement_line_id, display_type, cogs_origin_id, is_landed_costs_line, created_at, updated_at
 		FROM account_move_lines
 		WHERE move_id = $1
 		ORDER BY id ASC
@@ -766,7 +766,7 @@ func (r *PostgresRepo) GetMoveWithLines(ctx context.Context, id int64) (*account
 			&l.ID, &l.MoveID, &l.AccountID, &l.PartnerID, &l.ProductID, &l.Name,
 			&l.Quantity, &l.PriceUnit, &l.Discount, &l.Debit, &l.Credit, &l.Balance,
 			&l.TaxIDs, &l.TaxAmount, &l.Reconcile, &l.Reconciled, &l.AmountResidual,
-			&l.MatchingNumber, &l.StatementLineID, &l.DisplayType, &l.CogsOriginID, &l.CreatedAt, &l.UpdatedAt,
+			&l.MatchingNumber, &l.StatementLineID, &l.DisplayType, &l.CogsOriginID, &l.IsLandedCostsLine, &l.CreatedAt, &l.UpdatedAt,
 		); err != nil {
 			return nil, platformerrors.Internal("failed to scan move line", err)
 		}
@@ -813,12 +813,12 @@ func (r *PostgresRepo) UpdateMove(ctx context.Context, m *accounting.AccountMove
 					move_id, account_id, partner_id, product_id, name,
 					quantity, price_unit, discount, debit, credit, balance,
 					tax_ids, tax_amount, reconcile, reconciled, amount_residual,
-					matching_number, statement_line_id, display_type, cogs_origin_id, created_at, updated_at
+					matching_number, statement_line_id, display_type, cogs_origin_id, is_landed_costs_line, created_at, updated_at
 				) VALUES (
 					$1, $2, $3, $4, $5,
 					$6, $7, $8, $9, $10, $11,
 					$12, $13, $14, $15, $16,
-					$17, $18, $19, $20, NOW(), NOW()
+					$17, $18, $19, $20, $21, NOW(), NOW()
 				) RETURNING id
 			`
 			for i := range m.Lines {
@@ -830,7 +830,7 @@ func (r *PostgresRepo) UpdateMove(ctx context.Context, m *accounting.AccountMove
 					m.ID, l.AccountID, l.PartnerID, l.ProductID, l.Name,
 					l.Quantity, l.PriceUnit, l.Discount, l.Debit, l.Credit, l.Balance,
 					l.TaxIDs, l.TaxAmount, l.Reconcile, l.Reconciled, l.AmountResidual,
-					l.MatchingNumber, l.StatementLineID, l.DisplayType, l.CogsOriginID,
+					l.MatchingNumber, l.StatementLineID, l.DisplayType, l.CogsOriginID, l.IsLandedCostsLine,
 				).Scan(&l.ID); err != nil {
 					return platformerrors.Internal("failed to insert move line on update", err)
 				}
@@ -1262,6 +1262,207 @@ func (r *PostgresRepo) GetGeneralLedger(ctx context.Context, accountID *int64, p
 		items = append(items, it)
 	}
 	return items, nil
+}
+
+func (r *PostgresRepo) CreateEDIDocument(ctx context.Context, doc *accounting.EDIDocument) error {
+	query := `
+		INSERT INTO edi_documents (
+			move_id, format, transaction_type, state, xml_content, hash, qr_code,
+			error_msg, sent_at, created_at, updated_at
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+		RETURNING id, created_at, updated_at
+	`
+	if doc == nil {
+		return platformerrors.Validation("EDI document is required", nil)
+	}
+
+	now := time.Now().UTC()
+	doc.CreatedAt = now
+	doc.UpdatedAt = now
+	var sentAt *time.Time
+	if doc.SentAt != nil {
+		sentAt = doc.SentAt
+	}
+	if err := r.pool.QueryRow(ctx, query,
+		doc.MoveID, string(doc.Format), string(doc.TransactionType), string(doc.State), doc.XMLContent,
+		doc.Hash, doc.QRCode, doc.ErrorMsg, sentAt, doc.CreatedAt, doc.UpdatedAt,
+	).Scan(&doc.ID, &doc.CreatedAt, &doc.UpdatedAt); err != nil {
+		return platformerrors.Internal("failed to create EDI document", err)
+	}
+	return nil
+}
+
+func (r *PostgresRepo) GetEDIDocumentByID(ctx context.Context, id int64) (*accounting.EDIDocument, error) {
+	query := `
+		SELECT id, move_id, format, transaction_type, state, xml_content, hash, qr_code,
+		       error_msg, sent_at, created_at, updated_at
+		FROM edi_documents
+		WHERE id = $1
+	`
+	var doc accounting.EDIDocument
+	var format, transactionType, state string
+	var sentAt *time.Time
+	var xml []byte
+	if err := r.pool.QueryRow(ctx, query, id).Scan(
+		&doc.ID, &doc.MoveID, &format, &transactionType, &state, &xml,
+		&doc.Hash, &doc.QRCode, &doc.ErrorMsg, &sentAt, &doc.CreatedAt, &doc.UpdatedAt,
+	); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, platformerrors.NotFound(fmt.Sprintf("EDI document %d not found", id))
+		}
+		return nil, platformerrors.Internal("failed to fetch EDI document", err)
+	}
+	doc.Format = accounting.EDIFormat(format)
+	doc.TransactionType = accounting.EDITransactionType(transactionType)
+	doc.State = accounting.EDIState(state)
+	doc.XMLContent = xml
+	doc.SentAt = sentAt
+	return &doc, nil
+}
+
+func (r *PostgresRepo) GetEDIDocumentsByMoveID(ctx context.Context, moveID int64) ([]accounting.EDIDocument, error) {
+	query := `
+		SELECT id, move_id, format, transaction_type, state, xml_content, hash, qr_code,
+		       error_msg, sent_at, created_at, updated_at
+		FROM edi_documents
+		WHERE move_id = $1
+		ORDER BY id ASC
+	`
+	rows, err := r.pool.Query(ctx, query, moveID)
+	if err != nil {
+		return nil, platformerrors.Internal("failed to list EDI documents", err)
+	}
+	defer rows.Close()
+
+	var docs []accounting.EDIDocument
+	for rows.Next() {
+		var doc accounting.EDIDocument
+		var format, transactionType, state string
+		var sentAt *time.Time
+		var xml []byte
+		if err := rows.Scan(
+			&doc.ID, &doc.MoveID, &format, &transactionType, &state, &xml,
+			&doc.Hash, &doc.QRCode, &doc.ErrorMsg, &sentAt, &doc.CreatedAt, &doc.UpdatedAt,
+		); err != nil {
+			return nil, platformerrors.Internal("failed to scan EDI document", err)
+		}
+		doc.Format = accounting.EDIFormat(format)
+		doc.TransactionType = accounting.EDITransactionType(transactionType)
+		doc.State = accounting.EDIState(state)
+		doc.XMLContent = xml
+		doc.SentAt = sentAt
+		docs = append(docs, doc)
+	}
+	return docs, nil
+}
+
+func (r *PostgresRepo) UpdateEDIDocument(ctx context.Context, doc *accounting.EDIDocument) error {
+	query := `
+		UPDATE edi_documents
+		SET move_id = $1, format = $2, transaction_type = $3, state = $4,
+		    xml_content = $5, hash = $6, qr_code = $7, error_msg = $8,
+		    sent_at = $9, updated_at = $10
+		WHERE id = $11
+	`
+	if doc == nil {
+		return platformerrors.Validation("EDI document is required", nil)
+	}
+	var sentAt *time.Time
+	if doc.SentAt != nil {
+		sentAt = doc.SentAt
+	}
+	if _, err := r.pool.Exec(ctx, query,
+		doc.MoveID, string(doc.Format), string(doc.TransactionType), string(doc.State),
+		doc.XMLContent, doc.Hash, doc.QRCode, doc.ErrorMsg, sentAt, time.Now().UTC(), doc.ID,
+	); err != nil {
+		return platformerrors.Internal("failed to update EDI document", err)
+	}
+	return nil
+}
+
+func (r *PostgresRepo) CreateEDICertificate(ctx context.Context, cert *accounting.EDICertificate) error {
+	query := `
+		INSERT INTO edi_certificates (
+			name, cert_content, private_key, public_key, csr, csid, secret,
+			company_id, is_production, expiration_date, active, created_at
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+		RETURNING id, created_at
+	`
+	if cert == nil {
+		return platformerrors.Validation("EDI certificate is required", nil)
+	}
+	cert.CreatedAt = time.Now().UTC()
+	if err := r.pool.QueryRow(ctx, query,
+		cert.Name, cert.CertContent, cert.PrivateKey, cert.PublicKey, cert.CSR, cert.CSID,
+		cert.Secret, cert.CompanyID, cert.IsProduction, cert.ExpirationDate, cert.Active, cert.CreatedAt,
+	).Scan(&cert.ID, &cert.CreatedAt); err != nil {
+		return platformerrors.Internal("failed to create EDI certificate", err)
+	}
+	return nil
+}
+
+func (r *PostgresRepo) GetEDICertificateByID(ctx context.Context, id int64) (*accounting.EDICertificate, error) {
+	query := `
+		SELECT id, name, cert_content, private_key, public_key, csr, csid, secret,
+		       company_id, is_production, expiration_date, active, created_at
+		FROM edi_certificates
+		WHERE id = $1
+	`
+	var cert accounting.EDICertificate
+	if err := r.pool.QueryRow(ctx, query, id).Scan(
+		&cert.ID, &cert.Name, &cert.CertContent, &cert.PrivateKey, &cert.PublicKey, &cert.CSR,
+		&cert.CSID, &cert.Secret, &cert.CompanyID, &cert.IsProduction, &cert.ExpirationDate,
+		&cert.Active, &cert.CreatedAt,
+	); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, platformerrors.NotFound(fmt.Sprintf("EDI certificate %d not found", id))
+		}
+		return nil, platformerrors.Internal("failed to fetch EDI certificate", err)
+	}
+	return &cert, nil
+}
+
+func (r *PostgresRepo) GetActiveCertificate(ctx context.Context, companyID int64) (*accounting.EDICertificate, error) {
+	query := `
+		SELECT id, name, cert_content, private_key, public_key, csr, csid, secret,
+		       company_id, is_production, expiration_date, active, created_at
+		FROM edi_certificates
+		WHERE company_id = $1 AND active = true
+		ORDER BY created_at DESC
+		LIMIT 1
+	`
+	var cert accounting.EDICertificate
+	if err := r.pool.QueryRow(ctx, query, companyID).Scan(
+		&cert.ID, &cert.Name, &cert.CertContent, &cert.PrivateKey, &cert.PublicKey, &cert.CSR,
+		&cert.CSID, &cert.Secret, &cert.CompanyID, &cert.IsProduction, &cert.ExpirationDate,
+		&cert.Active, &cert.CreatedAt,
+	); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, platformerrors.NotFound("no active EDI certificate found for company")
+		}
+		return nil, platformerrors.Internal("failed to fetch active EDI certificate", err)
+	}
+	return &cert, nil
+}
+
+func (r *PostgresRepo) UpdateEDICertificate(ctx context.Context, cert *accounting.EDICertificate) error {
+	query := `
+		UPDATE edi_certificates
+		SET name = $1, cert_content = $2, private_key = $3, public_key = $4,
+		    csr = $5, csid = $6, secret = $7, company_id = $8,
+		    is_production = $9, expiration_date = $10, active = $11
+		WHERE id = $12
+	`
+	if cert == nil {
+		return platformerrors.Validation("EDI certificate is required", nil)
+	}
+	if _, err := r.pool.Exec(ctx, query,
+		cert.Name, cert.CertContent, cert.PrivateKey, cert.PublicKey, cert.CSR, cert.CSID,
+		cert.Secret, cert.CompanyID, cert.IsProduction, cert.ExpirationDate, cert.Active, cert.ID,
+	); err != nil {
+		return platformerrors.Internal("failed to update EDI certificate", err)
+	}
+	return nil
 }
 
 // moveLineQueryer abstracts pgxpool.Pool and pgx.Tx so reconcile flags can be

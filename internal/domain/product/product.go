@@ -108,6 +108,7 @@ type ProductTemplate struct {
 	CostMethod               stock.CostMethod    `json:"cost_method,omitempty"` // standard | fifo | average
 	Valuation                stock.ValuationMode `json:"valuation,omitempty"`   // real_time | periodic
 	LotValuated              bool                `json:"lot_valuated,omitempty"`
+	Tracking                 stock.TrackingMode  `json:"tracking"`
 	AvgCost                  float64             `json:"avg_cost,omitempty"`
 	TotalValue               float64             `json:"total_value,omitempty"`
 	StockValuationAccountID  *int64              `json:"stock_valuation_account_id,omitempty"`
@@ -148,6 +149,14 @@ func (pt *ProductTemplate) Validate() error {
 	if pt.Type != ProductTypeGoods && pt.Type != ProductTypeService && pt.Type != ProductTypeCombo {
 		return platformerrors.Validation("invalid product type", map[string]string{
 			"type": fmt.Sprintf("must be '%s', '%s', or '%s'", ProductTypeGoods, ProductTypeService, ProductTypeCombo),
+		})
+	}
+	if pt.Tracking == "" {
+		pt.Tracking = stock.TrackingNone
+	}
+	if pt.Tracking != stock.TrackingNone && pt.Tracking != stock.TrackingLot && pt.Tracking != stock.TrackingSerial {
+		return platformerrors.Validation("invalid product tracking mode", map[string]string{
+			"tracking": "must be none, lot or serial",
 		})
 	}
 

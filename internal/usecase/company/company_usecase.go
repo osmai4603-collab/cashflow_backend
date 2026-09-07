@@ -13,36 +13,38 @@ import (
 
 // CreateCompanyInput defines input parameters for creating a new company.
 type CreateCompanyInput struct {
-	Name       string `json:"name"`
-	PartnerID  *int64 `json:"partner_id"`
-	CurrencyID int64  `json:"currency_id"`
-	Phone      string `json:"phone"`
-	Email      string `json:"email"`
-	Website    string `json:"website"`
-	VAT        string `json:"vat"`
-	Street     string `json:"street"`
-	Street2    string `json:"street2"`
-	City       string `json:"city"`
-	State      string `json:"state"`
-	Country    string `json:"country"`
-	ZipCode    string `json:"zip_code"`
+	Name               string `json:"name"`
+	PartnerID          *int64 `json:"partner_id"`
+	CurrencyID         int64  `json:"currency_id"`
+	Phone              string `json:"phone"`
+	Email              string `json:"email"`
+	Website            string `json:"website"`
+	VAT                string `json:"vat"`
+	Street             string `json:"street"`
+	Street2            string `json:"street2"`
+	City               string `json:"city"`
+	State              string `json:"state"`
+	Country            string `json:"country"`
+	ZipCode            string `json:"zip_code"`
+	LandedCostJournalID *int64 `json:"landed_cost_journal_id,omitempty"`
 }
 
 // UpdateCompanyInput defines input parameters for modifying an existing company.
 type UpdateCompanyInput struct {
-	Name       *string `json:"name"`
-	PartnerID  *int64  `json:"partner_id"`
-	CurrencyID *int64  `json:"currency_id"`
-	Phone      *string `json:"phone"`
-	Email      *string `json:"email"`
-	Website    *string `json:"website"`
-	VAT        *string `json:"vat"`
-	Street     *string `json:"street"`
-	Street2    *string `json:"street2"`
-	City       *string `json:"city"`
-	State      *string `json:"state"`
-	Country    *string `json:"country"`
-	ZipCode    *string `json:"zip_code"`
+	Name               *string `json:"name"`
+	PartnerID          *int64  `json:"partner_id"`
+	CurrencyID         *int64  `json:"currency_id"`
+	Phone              *string `json:"phone"`
+	Email              *string `json:"email"`
+	Website            *string `json:"website"`
+	VAT                *string `json:"vat"`
+	Street             *string `json:"street"`
+	Street2            *string `json:"street2"`
+	City               *string `json:"city"`
+	State              *string `json:"state"`
+	Country            *string `json:"country"`
+	ZipCode            *string `json:"zip_code"`
+	LandedCostJournalID *int64  `json:"landed_cost_journal_id,omitempty"`
 }
 
 // UseCase defines the application interface for Company domain operations.
@@ -81,21 +83,22 @@ func (uc *CompanyUseCase) CreateCompany(ctx context.Context, in CreateCompanyInp
 	}
 
 	c := &company.Company{
-		Name:       in.Name,
-		PartnerID:  in.PartnerID,
-		CurrencyID: currencyID,
-		Phone:      in.Phone,
-		Email:      in.Email,
-		Website:    in.Website,
-		VAT:        in.VAT,
-		Street:     in.Street,
-		Street2:    in.Street2,
-		City:       in.City,
-		State:      in.State,
-		Country:    in.Country,
-		ZipCode:    in.ZipCode,
-		Active:     true,
-		Audit:      audit.NewFields(ctx),
+		Name:               in.Name,
+		PartnerID:          in.PartnerID,
+		CurrencyID:         currencyID,
+		Phone:              in.Phone,
+		Email:              in.Email,
+		Website:            in.Website,
+		VAT:                in.VAT,
+		Street:             in.Street,
+		Street2:            in.Street2,
+		City:               in.City,
+		State:              in.State,
+		Country:            in.Country,
+		ZipCode:            in.ZipCode,
+		LandedCostJournalID: in.LandedCostJournalID,
+		Active:             true,
+		Audit:              audit.NewFields(ctx),
 	}
 
 	if err := c.Validate(); err != nil {
@@ -166,6 +169,9 @@ func (uc *CompanyUseCase) UpdateCompany(ctx context.Context, id int64, in Update
 	}
 	if in.ZipCode != nil {
 		c.ZipCode = *in.ZipCode
+	}
+	if in.LandedCostJournalID != nil {
+		c.LandedCostJournalID = in.LandedCostJournalID
 	}
 
 	c.Audit.Touch(ctx)

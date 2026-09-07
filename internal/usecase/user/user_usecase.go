@@ -17,24 +17,26 @@ import (
 
 // CreateUserInput defines input parameters for creating a new user.
 type CreateUserInput struct {
-	Login       string `json:"login"`
-	Email       string `json:"email"`
-	Name        string `json:"name"`
-	Password    string `json:"password"`
-	PartnerID   *int64 `json:"partner_id"`
-	PartnerName string `json:"partner_name"`
-	CompanyID   int64  `json:"company_id"`
-	IsSuperuser bool   `json:"is_superuser"`
+	Login                     string `json:"login"`
+	Email                     string `json:"email"`
+	EmailNotificationsEnabled *bool  `json:"email_notifications_enabled"`
+	Name                      string `json:"name"`
+	Password                  string `json:"password"`
+	PartnerID                 *int64 `json:"partner_id"`
+	PartnerName               string `json:"partner_name"`
+	CompanyID                 int64  `json:"company_id"`
+	IsSuperuser               bool   `json:"is_superuser"`
 }
 
 // UpdateUserInput defines input parameters for modifying an existing user.
 type UpdateUserInput struct {
-	Login       *string `json:"login"`
-	Email       *string `json:"email"`
-	Name        *string `json:"name"`
-	Password    *string `json:"password"`
-	CompanyID   *int64  `json:"company_id"`
-	IsSuperuser *bool   `json:"is_superuser"`
+	Login                     *string `json:"login"`
+	Email                     *string `json:"email"`
+	EmailNotificationsEnabled *bool   `json:"email_notifications_enabled"`
+	Name                      *string `json:"name"`
+	Password                  *string `json:"password"`
+	CompanyID                 *int64  `json:"company_id"`
+	IsSuperuser               *bool   `json:"is_superuser"`
 }
 
 // LoginResult is returned after successful authentication.
@@ -134,14 +136,18 @@ func (uc *UserUseCase) CreateUser(ctx context.Context, in CreateUserInput) (*use
 	}
 
 	u := &user.User{
-		Login:       in.Login,
-		Email:       in.Email,
-		Name:        in.Name,
-		PartnerID:   partnerID,
-		CompanyID:   in.CompanyID,
-		IsSuperuser: in.IsSuperuser,
-		Active:      true,
-		Audit:       audit.NewFields(ctx),
+		Login:                     in.Login,
+		Email:                     in.Email,
+		EmailNotificationsEnabled: true,
+		Name:                      in.Name,
+		PartnerID:                 partnerID,
+		CompanyID:                 in.CompanyID,
+		IsSuperuser:               in.IsSuperuser,
+		Active:                    true,
+		Audit:                     audit.NewFields(ctx),
+	}
+	if in.EmailNotificationsEnabled != nil {
+		u.EmailNotificationsEnabled = *in.EmailNotificationsEnabled
 	}
 
 	if err := u.SetPassword(in.Password); err != nil {
@@ -183,6 +189,9 @@ func (uc *UserUseCase) UpdateUser(ctx context.Context, id int64, in UpdateUserIn
 	}
 	if in.Email != nil {
 		u.Email = *in.Email
+	}
+	if in.EmailNotificationsEnabled != nil {
+		u.EmailNotificationsEnabled = *in.EmailNotificationsEnabled
 	}
 	if in.Name != nil {
 		u.Name = *in.Name

@@ -31,7 +31,7 @@
 |---|---|
 | مورد PO التلقائي | حقل `VendorID` صريح على الـ Orderpoint |
 | المرحلة 12 | تُعامل كتسليم مكتمل (محرك التقييم موصول بـ `ValidatePicking`) |
-| طرق التوزيع | الخمس طرق كاملة (equal, by_quantity, by_current_cost, by_weight, by_volume) |
+| طرق التوزيع | الخمس طرق كاملة (equal, by_quantity, by_current_cost_price, by_weight, by_volume) |
 
 ## 3) Domain
 
@@ -69,7 +69,7 @@ type Orderpoint struct {
 ### `internal/domain/stock/landed_cost.go` (جديد)
 ```go
 type LandedCostState string // "draft" | "done" | "cancel"
-type SplitMethod string     // equal | by_quantity | by_current_cost | by_weight | by_volume
+type SplitMethod string     // equal | by_quantity | by_current_cost_price | by_weight | by_volume
 
 type LandedCost struct {
     ID                  int64
@@ -130,7 +130,7 @@ type ValuationAdjustment struct {
 | by_weight | `price_unit / total_weight × weight` |
 | by_volume | `price_unit / total_volume × volume` |
 | equal | `price_unit / total_line` |
-| by_current_cost | `price_unit / total_cost × former_cost` |
+| by_current_cost_price | `price_unit / total_cost × former_cost` |
 
 `round HALF-UP` بقيمة تحقيق العملة لكل قيمة؛ `rounding_diff = price_unit − Σ values` تضاف لآخر تعديل.
 

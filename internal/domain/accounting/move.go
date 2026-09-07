@@ -70,8 +70,10 @@ type AccountMoveLine struct {
 	DisplayType string `json:"display_type,omitempty"`
 	// CogsOriginID references the invoiced line that generated a COGS counterpart line.
 	CogsOriginID *int64 `json:"cogs_origin_id,omitempty"`
-	CreatedAt      time.Time `json:"created_at"`
-	UpdatedAt      time.Time `json:"updated_at"`
+	// IsLandedCostsLine marks cost-allocation journal lines created from landed costs.
+	IsLandedCostsLine bool `json:"is_landed_costs_line,omitempty"`
+	CreatedAt         time.Time `json:"created_at"`
+	UpdatedAt         time.Time `json:"updated_at"`
 }
 
 // IsDebit reports whether the line carries a debit balance.

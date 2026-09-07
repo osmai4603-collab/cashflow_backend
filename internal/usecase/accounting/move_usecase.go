@@ -18,13 +18,14 @@ import (
 // ─────────────────────────────────────────────────────────────────────────────
 
 type JournalEntryLineInput struct {
-	AccountID        int64   `json:"account_id"`
-	PartnerID        *int64  `json:"partner_id"`
-	ProductID        *int64  `json:"product_id"`
-	Name             string  `json:"name"`
-	Debit            float64 `json:"debit"`
-	Credit           float64 `json:"credit"`
-	StatementLineID  *int64  `json:"statement_line_id,omitempty"`
+	AccountID          int64   `json:"account_id"`
+	PartnerID          *int64  `json:"partner_id"`
+	ProductID          *int64  `json:"product_id"`
+	Name               string  `json:"name"`
+	Debit              float64 `json:"debit"`
+	Credit             float64 `json:"credit"`
+	StatementLineID    *int64  `json:"statement_line_id,omitempty"`
+	IsLandedCostsLine  bool    `json:"is_landed_costs_line,omitempty"`
 }
 
 type CreateJournalEntryInput struct {
@@ -99,14 +100,15 @@ func (uc *UseCase) CreateJournalEntry(ctx context.Context, in CreateJournalEntry
 
 	for i, l := range in.Lines {
 		move.Lines[i] = accounting.AccountMoveLine{
-			AccountID:      l.AccountID,
-			PartnerID:      l.PartnerID,
-			ProductID:      l.ProductID,
-			Name:           strings.TrimSpace(l.Name),
-			Debit:          roundTo4(l.Debit),
-			Credit:         roundTo4(l.Credit),
-			Balance:        roundTo4(l.Debit - l.Credit),
-			StatementLineID: l.StatementLineID,
+			AccountID:          l.AccountID,
+			PartnerID:          l.PartnerID,
+			ProductID:          l.ProductID,
+			Name:               strings.TrimSpace(l.Name),
+			Debit:              roundTo4(l.Debit),
+			Credit:             roundTo4(l.Credit),
+			Balance:            roundTo4(l.Debit - l.Credit),
+			StatementLineID:    l.StatementLineID,
+			IsLandedCostsLine:  l.IsLandedCostsLine,
 		}
 	}
 

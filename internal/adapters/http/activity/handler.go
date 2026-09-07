@@ -10,6 +10,7 @@ import (
 	"cashflow_backend/internal/domain/activity"
 	"cashflow_backend/internal/platform/auth"
 	platformerrors "cashflow_backend/internal/platform/errors"
+	"cashflow_backend/internal/platform/notificationbus"
 	"cashflow_backend/internal/platform/pagination"
 	"cashflow_backend/internal/platform/response"
 	activityusecase "cashflow_backend/internal/usecase/activity"
@@ -20,15 +21,21 @@ import (
 type Handler struct {
 	useCase *activityusecase.UseCase
 	logger  *slog.Logger
+	bus     *notificationbus.Bus
 }
 
-func NewHandler(useCase *activityusecase.UseCase, logger *slog.Logger) *Handler {
+func NewHandler(useCase *activityusecase.UseCase, logger *slog.Logger, buses ...*notificationbus.Bus) *Handler {
 	if logger == nil {
 		logger = slog.Default()
+	}
+	var bus *notificationbus.Bus
+	if len(buses) > 0 {
+		bus = buses[0]
 	}
 	return &Handler{
 		useCase: useCase,
 		logger:  logger,
+		bus:     bus,
 	}
 }
 
@@ -175,6 +182,55 @@ func (h *Handler) ListNotifications(w http.ResponseWriter, r *http.Request) {
 		res[i] = ToNotificationDTO(n)
 	}
 	response.Paginated(w, http.StatusOK, res, result)
+}
+
+func (h *Handler) StreamNotifications(w http.ResponseWriter, r *http.Request) {
+	claims := auth.ClaimsFromContext(r.Context())
+	if claims == nil {
+		response.Error(w, platformerrors.Unauthorized("unauthenticated"))
+		return
+	}
+	if h.bus == nil {
+		response.Error(w, platformerrors.Internal("notification stream is unavailable", nil))
+		return
+	}
+
+	events, unsubscribe := h.bus.Subscribe(claims.UserID)
+	defer unsubscribe()
+
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		response.Error(w, platformerrors.Internal("streaming is not supported", nil))
+		return
+	}
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write([]byte(": connected\n\n"))
+	flusher.Flush()
+
+	encoder := json.NewEncoder(w)
+	for {
+		select {
+		case <-r.Context().Done():
+			return
+		case event, ok := <-events:
+			if !ok {
+				return
+			}
+			if _, err := w.Write([]byte("event: " + event.Channel + "\ndata: ")); err != nil {
+				return
+			}
+			if err := encoder.Encode(event.Payload); err != nil {
+				return
+			}
+			if _, err := w.Write([]byte("\n")); err != nil {
+				return
+			}
+			flusher.Flush()
+		}
+	}
 }
 
 func (h *Handler) MarkNotifRead(w http.ResponseWriter, r *http.Request) {

@@ -31,26 +31,26 @@ const (
 
 // StockPicking represents a delivery order, receipt, or internal transfer document.
 type StockPicking struct {
-	ID             int64        `json:"id"`
-	Name           string       `json:"name"` // e.g. "WH/IN/2026/00001"
-	PickingType    PickingType  `json:"picking_type"`
-	State          PickingState `json:"state"`
-	PartnerID      *int64       `json:"partner_id,omitempty"`
-	LocationID     int64        `json:"location_id"`
-	LocationDestID int64        `json:"location_dest_id"`
-	ScheduledDate  time.Time    `json:"scheduled_date"`
-	DateDone       *time.Time   `json:"date_done,omitempty"`
-	Origin         string       `json:"origin,omitempty"` // e.g. "SO/2026/00001", "PO/2026/00001"
-	SourceOrderID  *int64       `json:"source_order_id,omitempty"`
-	ProcurementGroupID *int64    `json:"procurement_group_id,omitempty"`
-	CompanyID      *int64       `json:"company_id,omitempty"`
-	Note           string       `json:"note,omitempty"`
-	Active         bool         `json:"active"`
-	Moves          []StockMove  `json:"moves,omitempty"`
-	CreatedAt      time.Time    `json:"created_at"`
-	UpdatedAt      time.Time    `json:"updated_at"`
-	CreatedBy      *int64       `json:"created_by,omitempty"`
-	UpdatedBy      *int64       `json:"updated_by,omitempty"`
+	ID                 int64        `json:"id"`
+	Name               string       `json:"name"` // e.g. "WH/IN/2026/00001"
+	PickingType        PickingType  `json:"picking_type"`
+	State              PickingState `json:"state"`
+	PartnerID          *int64       `json:"partner_id,omitempty"`
+	LocationID         int64        `json:"location_id"`
+	LocationDestID     int64        `json:"location_dest_id"`
+	ScheduledDate      time.Time    `json:"scheduled_date"`
+	DateDone           *time.Time   `json:"date_done,omitempty"`
+	Origin             string       `json:"origin,omitempty"` // e.g. "SO/2026/00001", "PO/2026/00001"
+	SourceOrderID      *int64       `json:"source_order_id,omitempty"`
+	ProcurementGroupID *int64       `json:"procurement_group_id,omitempty"`
+	CompanyID          *int64       `json:"company_id,omitempty"`
+	Note               string       `json:"note,omitempty"`
+	Active             bool         `json:"active"`
+	Moves              []StockMove  `json:"moves,omitempty"`
+	CreatedAt          time.Time    `json:"created_at"`
+	UpdatedAt          time.Time    `json:"updated_at"`
+	CreatedBy          *int64       `json:"created_by,omitempty"`
+	UpdatedBy          *int64       `json:"updated_by,omitempty"`
 }
 
 // Validate checks business invariants for StockPicking.
@@ -165,7 +165,9 @@ func (p *StockPicking) ActionValidate(effectiveDate time.Time) error {
 		if qty <= 0 {
 			qty = p.Moves[i].ProductQty
 		}
-		_ = p.Moves[i].ActionDone(qty)
+		if err := p.Moves[i].ActionDone(qty); err != nil {
+			return err
+		}
 	}
 
 	return nil

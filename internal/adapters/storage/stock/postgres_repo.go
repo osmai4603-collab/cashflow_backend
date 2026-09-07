@@ -474,10 +474,10 @@ func (r *PostgresRepo) CreatePicking(ctx context.Context, picking *stock.StockPi
 		// Insert moves
 		moveQuery := `
 			INSERT INTO stock_moves (
-				picking_id, sequence, name, product_id, product_uom, product_qty, quantity_done,
+				picking_id, sequence, name, product_id, product_uom, product_qty, quantity_done, reserved_quantity,
 				location_id, location_dest_id, state, sale_line_id, purchase_line_id, procurement_group_id, date, created_at, updated_at
 			) VALUES (
-				$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, NOW(), NOW()
+				$1, $2, $3, $4, $5, $6, $7, 0, $8, $9, $10, $11, $12, $13, $14, NOW(), NOW()
 			) RETURNING id, created_at, updated_at
 		`
 		for i := range picking.Moves {
@@ -601,11 +601,11 @@ func (r *PostgresRepo) UpdatePicking(ctx context.Context, picking *stock.StockPi
 
 		moveQuery := `
 			INSERT INTO stock_moves (
-				picking_id, sequence, name, product_id, product_uom, product_qty, quantity_done,
+				picking_id, sequence, name, product_id, product_uom, product_qty, quantity_done, reserved_quantity,
 				location_id, location_dest_id, state, sale_line_id, purchase_line_id,
 				procurement_group_id, date, created_at, updated_at
 			) VALUES (
-				$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, NOW(), NOW()
+				$1, $2, $3, $4, $5, $6, $7, 0, $8, $9, $10, $11, $12, $13, $14, NOW(), NOW()
 			) RETURNING id, created_at, updated_at
 		`
 		for i := range picking.Moves {
@@ -708,11 +708,11 @@ func (r *PostgresRepo) ListPickings(ctx context.Context, f *filter.Filter, page 
 func (r *PostgresRepo) CreateMove(ctx context.Context, move *stock.StockMove) error {
 	query := `
 		INSERT INTO stock_moves (
-			picking_id, sequence, name, product_id, product_uom, product_qty, quantity_done,
+			picking_id, sequence, name, product_id, product_uom, product_qty, quantity_done, reserved_quantity,
 			location_id, location_dest_id, state, sale_line_id, purchase_line_id,
 			production_id, production_finished_id, procurement_group_id, date, created_at, updated_at
 		) VALUES (
-			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, NOW(), NOW()
+			$1, $2, $3, $4, $5, $6, $7, 0, $8, $9, $10, $11, $12, $13, $14, $15, $16, NOW(), NOW()
 		) RETURNING id, created_at, updated_at
 	`
 	if move.Date.IsZero() {
@@ -737,7 +737,7 @@ func (r *PostgresRepo) CreateMove(ctx context.Context, move *stock.StockMove) er
 
 func (r *PostgresRepo) GetMoveByID(ctx context.Context, id int64) (*stock.StockMove, error) {
 	query := `
-		SELECT id, picking_id, sequence, name, product_id, product_uom, product_qty, quantity_done,
+		SELECT id, picking_id, sequence, name, product_id, product_uom, product_qty, quantity_done, reserved_quantity,
 		       location_id, location_dest_id, state, sale_line_id, purchase_line_id,
 		       production_id, production_finished_id, procurement_group_id,
 		       date, value, value_manual, standard_price, is_in, is_out, is_dropship, remaining_qty,
@@ -749,7 +749,7 @@ func (r *PostgresRepo) GetMoveByID(ctx context.Context, id int64) (*stock.StockM
 	var stateStr string
 	err := r.pool.QueryRow(ctx, query, id).Scan(
 		&m.ID, &m.PickingID, &m.Sequence, &m.Name, &m.ProductID, &m.ProductUom,
-		&m.ProductQty, &m.QuantityDone, &m.LocationID, &m.LocationDestID, &stateStr,
+		&m.ProductQty, &m.QuantityDone, &m.ReservedQuantity, &m.LocationID, &m.LocationDestID, &stateStr,
 		&m.SaleLineID, &m.PurchaseLineID, &m.ProductionID, &m.ProductionFinishedID, &m.ProcurementGroupID, &m.Date, &m.Value, &m.ValueManual,
 		&m.StandardPrice, &m.IsIn, &m.IsOut, &m.IsDropship, &m.RemainingQty, &m.RemainingValue,
 		&m.AccountMoveID, &m.CreatedAt, &m.UpdatedAt,
@@ -761,6 +761,11 @@ func (r *PostgresRepo) GetMoveByID(ctx context.Context, id int64) (*stock.StockM
 		return nil, platformerrors.Internal("failed to fetch stock move", err)
 	}
 	m.State = stock.MoveState(stateStr)
+	moveLines, err := r.ListMoveLinesByMoveID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	m.MoveLines = moveLines
 	return &m, nil
 }
 
@@ -791,6 +796,273 @@ func (r *PostgresRepo) UpdateMove(ctx context.Context, move *stock.StockMove) er
 		}
 		return platformerrors.Internal("failed to update stock move", err)
 	}
+	if _, err := r.pool.Exec(ctx, `UPDATE stock_moves SET reserved_quantity = $1, updated_at = NOW() WHERE id = $2`, move.ReservedQuantity, move.ID); err != nil {
+		return platformerrors.Internal("failed to update stock move reservation", err)
+	}
+	return nil
+}
+
+func (r *PostgresRepo) ReserveMove(ctx context.Context, move *stock.StockMove) error {
+	remaining := move.ProductQty - move.ReservedQuantity
+	if remaining <= 0 {
+		return nil
+	}
+
+	return database.WithTx(ctx, r.pool, func(tx pgx.Tx) error {
+		var reserved float64
+		reserveQuery := `
+			WITH candidate AS (
+				SELECT id, LEAST($1, quantity - reserved_quantity) AS amount
+				FROM stock_quants
+				WHERE product_id = $2 AND location_id = $3
+				  AND quantity - reserved_quantity > 0
+				FOR UPDATE
+			)
+			UPDATE stock_quants AS q
+			SET reserved_quantity = q.reserved_quantity + candidate.amount, updated_at = NOW()
+			FROM candidate
+			WHERE q.id = candidate.id
+			RETURNING candidate.amount
+		`
+		if err := tx.QueryRow(ctx, reserveQuery, remaining, move.ProductID, move.LocationID).Scan(&reserved); err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return nil
+			}
+			return platformerrors.Internal("failed to reserve stock for move", err)
+		}
+
+		move.ReservedQuantity += reserved
+		if move.ReservedQuantity >= move.ProductQty {
+			move.State = stock.MoveStateAssigned
+		}
+		move.UpdatedAt = time.Now().UTC()
+		updateMove := `
+			UPDATE stock_moves SET reserved_quantity = $1, state = $2, updated_at = NOW()
+			WHERE id = $3
+		`
+		if result, err := tx.Exec(ctx, updateMove, move.ReservedQuantity, string(move.State), move.ID); err != nil {
+			return platformerrors.Internal("failed to update reserved stock move", err)
+		} else if result.RowsAffected() == 0 {
+			return platformerrors.NotFound(fmt.Sprintf("stock move #%d not found", move.ID))
+		}
+
+		line := &stock.StockMoveLine{
+			MoveID:           move.ID,
+			ProductID:        move.ProductID,
+			ProductUom:       move.ProductUom,
+			LocationID:       move.LocationID,
+			LocationDestID:   move.LocationDestID,
+			ReservedQuantity: reserved,
+			Date:             move.Date,
+		}
+		if line.Date.IsZero() {
+			line.Date = time.Now().UTC()
+		}
+		insertLine := `
+			INSERT INTO stock_move_lines (
+				move_id, product_id, product_uom, location_id, location_dest_id,
+				reserved_quantity, quantity_done, date
+			) VALUES ($1, $2, $3, $4, $5, $6, 0, $7)
+			RETURNING id, created_at, updated_at
+		`
+		if err := tx.QueryRow(ctx, insertLine,
+			line.MoveID, line.ProductID, line.ProductUom, line.LocationID, line.LocationDestID,
+			line.ReservedQuantity, line.Date,
+		).Scan(&line.ID, &line.CreatedAt, &line.UpdatedAt); err != nil {
+			return platformerrors.Internal("failed to create reserved move line", err)
+		}
+		move.MoveLines = append(move.MoveLines, *line)
+		return nil
+	})
+}
+
+func (r *PostgresRepo) CreateMoveLine(ctx context.Context, line *stock.StockMoveLine) error {
+	if err := line.Validate(); err != nil {
+		return err
+	}
+	if line.LotID != nil {
+		lot, err := r.GetLotByID(ctx, *line.LotID)
+		if err != nil {
+			return err
+		}
+		if lot.ProductID != line.ProductID {
+			return platformerrors.Validation("lot product does not match move line product", nil)
+		}
+		if lot.TrackingMode == stock.TrackingSerial && (line.ReservedQuantity > 1 || line.QuantityDone > 1) {
+			return platformerrors.Validation("serial move line quantity cannot exceed one", nil)
+		}
+	}
+	query := `
+		INSERT INTO stock_move_lines (
+			move_id, product_id, product_uom, lot_id, package_id, owner_id, tracking_mode,
+			location_id, location_dest_id, reserved_quantity, quantity_done, date
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+		RETURNING id, created_at, updated_at
+	`
+	if line.Date.IsZero() {
+		line.Date = time.Now().UTC()
+	}
+	if err := r.pool.QueryRow(ctx, query,
+		line.MoveID, line.ProductID, line.ProductUom, line.LotID, line.PackageID, line.OwnerID, string(line.TrackingMode),
+		line.LocationID, line.LocationDestID, line.ReservedQuantity, line.QuantityDone, line.Date,
+	).Scan(&line.ID, &line.CreatedAt, &line.UpdatedAt); err != nil {
+		return platformerrors.Internal("failed to create stock move line", err)
+	}
+	return nil
+}
+
+func (r *PostgresRepo) GetMoveLineByID(ctx context.Context, id int64) (*stock.StockMoveLine, error) {
+	line := &stock.StockMoveLine{}
+	query := `
+		SELECT id, move_id, product_id, product_uom, lot_id, package_id, owner_id, tracking_mode,
+		       location_id, location_dest_id, reserved_quantity, quantity_done, date, created_at, updated_at
+		FROM stock_move_lines WHERE id = $1
+	`
+	if err := r.pool.QueryRow(ctx, query, id).Scan(
+		&line.ID, &line.MoveID, &line.ProductID, &line.ProductUom, &line.LotID, &line.PackageID, &line.OwnerID, &line.TrackingMode,
+		&line.LocationID, &line.LocationDestID, &line.ReservedQuantity, &line.QuantityDone, &line.Date, &line.CreatedAt, &line.UpdatedAt,
+	); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, platformerrors.NotFound(fmt.Sprintf("stock move line #%d not found", id))
+		}
+		return nil, platformerrors.Internal("failed to fetch stock move line", err)
+	}
+	return line, nil
+}
+
+func (r *PostgresRepo) ListMoveLinesByMoveID(ctx context.Context, moveID int64) ([]stock.StockMoveLine, error) {
+	query := `
+		SELECT id, move_id, product_id, product_uom, lot_id, package_id, owner_id, tracking_mode,
+		       location_id, location_dest_id, reserved_quantity, quantity_done, date, created_at, updated_at
+		FROM stock_move_lines WHERE move_id = $1 ORDER BY id ASC
+	`
+	rows, err := r.pool.Query(ctx, query, moveID)
+	if err != nil {
+		return nil, platformerrors.Internal("failed to list stock move lines", err)
+	}
+	defer rows.Close()
+	var lines []stock.StockMoveLine
+	for rows.Next() {
+		var line stock.StockMoveLine
+		if err := rows.Scan(
+			&line.ID, &line.MoveID, &line.ProductID, &line.ProductUom, &line.LotID, &line.PackageID, &line.OwnerID, &line.TrackingMode,
+			&line.LocationID, &line.LocationDestID, &line.ReservedQuantity, &line.QuantityDone, &line.Date, &line.CreatedAt, &line.UpdatedAt,
+		); err != nil {
+			return nil, platformerrors.Internal("failed to scan stock move line", err)
+		}
+		lines = append(lines, line)
+	}
+	return lines, nil
+}
+
+func (r *PostgresRepo) UpdateMoveLine(ctx context.Context, line *stock.StockMoveLine) error {
+	if err := line.Validate(); err != nil {
+		return err
+	}
+	query := `
+		UPDATE stock_move_lines SET
+			product_id = $1, product_uom = $2, lot_id = $3, package_id = $4, owner_id = $5, tracking_mode = $6,
+			location_id = $7, location_dest_id = $8, reserved_quantity = $9, quantity_done = $10,
+			date = $11, updated_at = NOW()
+		WHERE id = $12 RETURNING updated_at
+	`
+	if err := r.pool.QueryRow(ctx, query,
+		line.ProductID, line.ProductUom, line.LotID, line.PackageID, line.OwnerID, string(line.TrackingMode),
+		line.LocationID, line.LocationDestID, line.ReservedQuantity, line.QuantityDone, line.Date, line.ID,
+	).Scan(&line.UpdatedAt); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return platformerrors.NotFound(fmt.Sprintf("stock move line #%d not found", line.ID))
+		}
+		return platformerrors.Internal("failed to update stock move line", err)
+	}
+	return nil
+}
+
+func (r *PostgresRepo) DeleteMoveLine(ctx context.Context, id int64) error {
+	result, err := r.pool.Exec(ctx, "DELETE FROM stock_move_lines WHERE id = $1", id)
+	if err != nil {
+		return platformerrors.Internal("failed to delete stock move line", err)
+	}
+	if result.RowsAffected() == 0 {
+		return platformerrors.NotFound(fmt.Sprintf("stock move line #%d not found", id))
+	}
+	return nil
+}
+
+func (r *PostgresRepo) CreateLot(ctx context.Context, lot *stock.StockLot) error {
+	if err := lot.Validate(); err != nil {
+		return err
+	}
+	query := `
+		INSERT INTO stock_lots (product_id, name, tracking_mode, company_id, expiration_at, active)
+		VALUES ($1, $2, $3, $4, $5, true)
+		RETURNING id, created_at, updated_at
+	`
+	if err := r.pool.QueryRow(ctx, query, lot.ProductID, lot.Name, string(lot.TrackingMode), lot.CompanyID, lot.ExpirationAt).
+		Scan(&lot.ID, &lot.CreatedAt, &lot.UpdatedAt); err != nil {
+		if strings.Contains(err.Error(), "stock_lots_product_name_unique") {
+			return platformerrors.Conflict("lot name already exists for product", err)
+		}
+		return platformerrors.Internal("failed to create stock lot", err)
+	}
+	lot.Active = true
+	return nil
+}
+
+func (r *PostgresRepo) GetLotByID(ctx context.Context, id int64) (*stock.StockLot, error) {
+	lot := &stock.StockLot{}
+	var tracking string
+	err := r.pool.QueryRow(ctx, `
+		SELECT id, product_id, name, tracking_mode, company_id, expiration_at, active, created_at, updated_at
+		FROM stock_lots WHERE id = $1
+	`, id).Scan(&lot.ID, &lot.ProductID, &lot.Name, &tracking, &lot.CompanyID, &lot.ExpirationAt, &lot.Active, &lot.CreatedAt, &lot.UpdatedAt)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, platformerrors.NotFound(fmt.Sprintf("stock lot #%d not found", id))
+		}
+		return nil, platformerrors.Internal("failed to fetch stock lot", err)
+	}
+	lot.TrackingMode = stock.TrackingMode(tracking)
+	return lot, nil
+}
+
+func (r *PostgresRepo) ListLotsByProduct(ctx context.Context, productID int64) ([]stock.StockLot, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT id, product_id, name, tracking_mode, company_id, expiration_at, active, created_at, updated_at
+		FROM stock_lots WHERE product_id = $1 AND active = true ORDER BY id ASC
+	`, productID)
+	if err != nil {
+		return nil, platformerrors.Internal("failed to list stock lots", err)
+	}
+	defer rows.Close()
+	var lots []stock.StockLot
+	for rows.Next() {
+		var lot stock.StockLot
+		var tracking string
+		if err := rows.Scan(&lot.ID, &lot.ProductID, &lot.Name, &tracking, &lot.CompanyID, &lot.ExpirationAt, &lot.Active, &lot.CreatedAt, &lot.UpdatedAt); err != nil {
+			return nil, platformerrors.Internal("failed to scan stock lot", err)
+		}
+		lot.TrackingMode = stock.TrackingMode(tracking)
+		lots = append(lots, lot)
+	}
+	return lots, nil
+}
+
+func (r *PostgresRepo) UpdateLot(ctx context.Context, lot *stock.StockLot) error {
+	if err := lot.Validate(); err != nil {
+		return err
+	}
+	err := r.pool.QueryRow(ctx, `
+		UPDATE stock_lots SET product_id = $1, name = $2, tracking_mode = $3,
+			company_id = $4, expiration_at = $5, active = $6, updated_at = NOW()
+		WHERE id = $7 RETURNING updated_at
+	`, lot.ProductID, lot.Name, string(lot.TrackingMode), lot.CompanyID, lot.ExpirationAt, lot.Active, lot.ID).Scan(&lot.UpdatedAt)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return platformerrors.NotFound(fmt.Sprintf("stock lot #%d not found", lot.ID))
+		}
+		return platformerrors.Internal("failed to update stock lot", err)
+	}
 	return nil
 }
 
@@ -807,7 +1079,7 @@ func (r *PostgresRepo) ListMoves(ctx context.Context, f *filter.Filter, page pag
 	}
 
 	query := fmt.Sprintf(`
-		SELECT id, picking_id, sequence, name, product_id, product_uom, product_qty, quantity_done,
+		SELECT id, picking_id, sequence, name, product_id, product_uom, product_qty, quantity_done, reserved_quantity,
 		       location_id, location_dest_id, state, sale_line_id, purchase_line_id,
 		       production_id, production_finished_id, procurement_group_id,
 		       date, value, value_manual, standard_price, is_in, is_out, is_dropship, remaining_qty,
@@ -831,7 +1103,7 @@ func (r *PostgresRepo) ListMoves(ctx context.Context, f *filter.Filter, page pag
 		var stateStr string
 		if err := rows.Scan(
 			&m.ID, &m.PickingID, &m.Sequence, &m.Name, &m.ProductID, &m.ProductUom,
-			&m.ProductQty, &m.QuantityDone, &m.LocationID, &m.LocationDestID, &stateStr,
+			&m.ProductQty, &m.QuantityDone, &m.ReservedQuantity, &m.LocationID, &m.LocationDestID, &stateStr,
 			&m.SaleLineID, &m.PurchaseLineID, &m.ProductionID, &m.ProductionFinishedID, &m.ProcurementGroupID, &m.Date, &m.Value, &m.ValueManual,
 			&m.StandardPrice, &m.IsIn, &m.IsOut, &m.IsDropship, &m.RemainingQty, &m.RemainingValue,
 			&m.AccountMoveID, &m.CreatedAt, &m.UpdatedAt,
@@ -847,8 +1119,9 @@ func (r *PostgresRepo) ListMoves(ctx context.Context, f *filter.Filter, page pag
 
 func (r *PostgresRepo) GetMovesByPickingID(ctx context.Context, pickingID int64) ([]stock.StockMove, error) {
 	query := `
-		SELECT id, picking_id, sequence, name, product_id, product_uom, product_qty, quantity_done,
-		       location_id, location_dest_id, state, sale_line_id, purchase_line_id, procurement_group_id,
+		SELECT id, picking_id, sequence, name, product_id, product_uom, product_qty, quantity_done, reserved_quantity,
+		       location_id, location_dest_id, state, sale_line_id, purchase_line_id,
+		       production_id, production_finished_id, procurement_group_id,
 		       date, value, value_manual, standard_price, is_in, is_out, is_dropship, remaining_qty,
 		       remaining_value, account_move_id, created_at, updated_at
 		FROM stock_moves
@@ -867,7 +1140,7 @@ func (r *PostgresRepo) GetMovesByPickingID(ctx context.Context, pickingID int64)
 		var stateStr string
 		if err := rows.Scan(
 			&m.ID, &m.PickingID, &m.Sequence, &m.Name, &m.ProductID, &m.ProductUom,
-			&m.ProductQty, &m.QuantityDone, &m.LocationID, &m.LocationDestID, &stateStr,
+			&m.ProductQty, &m.QuantityDone, &m.ReservedQuantity, &m.LocationID, &m.LocationDestID, &stateStr,
 			&m.SaleLineID, &m.PurchaseLineID, &m.ProductionID, &m.ProductionFinishedID, &m.ProcurementGroupID, &m.Date, &m.Value, &m.ValueManual,
 			&m.StandardPrice, &m.IsIn, &m.IsOut, &m.IsDropship, &m.RemainingQty, &m.RemainingValue,
 			&m.AccountMoveID, &m.CreatedAt, &m.UpdatedAt,
@@ -906,6 +1179,38 @@ func (r *PostgresRepo) GetQuant(ctx context.Context, productID, locationID int64
 		return nil, platformerrors.Internal("failed to fetch stock quant", err)
 	}
 	return &q, nil
+}
+
+func (r *PostgresRepo) ReserveQuantity(ctx context.Context, productID, locationID int64, quantity float64) (float64, error) {
+	if quantity <= 0 {
+		return 0, platformerrors.Validation("reservation quantity must be positive", nil)
+	}
+
+	var reserved float64
+	err := database.WithTx(ctx, r.pool, func(tx pgx.Tx) error {
+		query := `
+			WITH candidate AS (
+				SELECT id, LEAST($1, quantity - reserved_quantity) AS amount
+				FROM stock_quants
+				WHERE product_id = $2 AND location_id = $3
+				  AND quantity - reserved_quantity > 0
+				FOR UPDATE
+			)
+			UPDATE stock_quants AS q
+			SET reserved_quantity = q.reserved_quantity + candidate.amount, updated_at = NOW()
+			FROM candidate
+			WHERE q.id = candidate.id
+			RETURNING candidate.amount
+		`
+		return tx.QueryRow(ctx, query, quantity, productID, locationID).Scan(&reserved)
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return 0, nil
+		}
+		return 0, platformerrors.Internal("failed to reserve stock quantity", err)
+	}
+	return reserved, nil
 }
 
 func (r *PostgresRepo) UpdateQuantQuantity(ctx context.Context, productID, locationID int64, deltaQty float64) error {
@@ -1045,14 +1350,95 @@ func (r *PostgresRepo) GetOnHandStock(ctx context.Context, productID *int64, loc
 	return items, nil
 }
 
+// ValidateMovesTx updates moves to done and executes double-entry quant transfers atomically.
+func (r *PostgresRepo) ValidateMovesTx(ctx context.Context, moves []stock.StockMove) error {
+	return database.WithTx(ctx, r.pool, func(tx pgx.Tx) error {
+		return r.validateMovesTx(ctx, tx, moves)
+	})
+}
+
+func (r *PostgresRepo) validateMovesTx(ctx context.Context, tx pgx.Tx, moves []stock.StockMove) error {
+	// Update moves and apply quant deltas
+	upsertQuantQ := `
+			INSERT INTO stock_quants (product_id, location_id, quantity, reserved_quantity, created_at, updated_at)
+			VALUES ($1, $2, $3, 0, NOW(), NOW())
+			ON CONFLICT (product_id, location_id)
+			DO UPDATE SET quantity = stock_quants.quantity + EXCLUDED.quantity, updated_at = NOW()
+		`
+
+	for i := range moves {
+		m := &moves[i]
+		qty := m.QuantityDone
+		if qty <= 0 {
+			qty = m.ProductQty
+		}
+		if qty <= 0 || qty > m.ProductQty {
+			return platformerrors.Validation("move quantity is outside the requested quantity", nil)
+		}
+		reservedToConsume := m.ReservedQuantity
+		if reservedToConsume > qty {
+			reservedToConsume = qty
+		}
+		m.ReservedQuantity -= reservedToConsume
+		m.QuantityDone = qty
+		m.State = stock.MoveStateDone
+
+		// Update move record
+		updateMoveQ := `
+				UPDATE stock_moves
+				SET state = 'done', quantity_done = $1, reserved_quantity = $2, updated_at = NOW()
+				WHERE id = $3
+			`
+		if _, err := tx.Exec(ctx, updateMoveQ, qty, m.ReservedQuantity, m.ID); err != nil {
+			return platformerrors.Internal("failed to update move status to done", err)
+		}
+
+		// Decrease source location
+		if _, err := tx.Exec(ctx, upsertQuantQ, m.ProductID, m.LocationID, -qty); err != nil {
+			return platformerrors.Internal("failed to debit source location quant", err)
+		}
+		if reservedToConsume > 0 {
+			if _, err := tx.Exec(ctx, `
+				UPDATE stock_quants
+				SET reserved_quantity = GREATEST(reserved_quantity - $1, 0), updated_at = NOW()
+				WHERE product_id = $2 AND location_id = $3
+			`, reservedToConsume, m.ProductID, m.LocationID); err != nil {
+				return platformerrors.Internal("failed to release consumed reservation", err)
+			}
+		}
+		if _, err := tx.Exec(ctx, `
+			WITH allocation AS (
+				SELECT id, GREATEST(LEAST(reserved_quantity,
+					$1 - COALESCE(SUM(reserved_quantity) OVER (
+						ORDER BY id ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING
+					), 0)), 0) AS done_quantity
+				FROM stock_move_lines
+				WHERE move_id = $2
+			)
+			UPDATE stock_move_lines AS line
+			SET reserved_quantity = line.reserved_quantity - allocation.done_quantity,
+				quantity_done = line.quantity_done + allocation.done_quantity,
+				updated_at = NOW()
+			FROM allocation
+			WHERE line.id = allocation.id AND allocation.done_quantity > 0
+		`, qty, m.ID); err != nil {
+			return platformerrors.Internal("failed to complete stock move lines", err)
+		}
+
+		// Increase destination location
+		if _, err := tx.Exec(ctx, upsertQuantQ, m.ProductID, m.LocationDestID, qty); err != nil {
+			return platformerrors.Internal("failed to credit destination location quant", err)
+		}
+	}
+	return nil
+}
+
 // ValidatePickingTx updates picking and moves to done, and executes double-entry quant transfers atomically.
 func (r *PostgresRepo) ValidatePickingTx(ctx context.Context, picking *stock.StockPicking) error {
 	return database.WithTx(ctx, r.pool, func(tx pgx.Tx) error {
 		now := time.Now().UTC()
 		picking.State = stock.PickingStateDone
 		picking.DateDone = &now
-
-		// Update picking state
 		updatePickingQ := `
 			UPDATE stock_pickings
 			SET state = 'done', date_done = $1, updated_at = NOW()
@@ -1061,46 +1447,7 @@ func (r *PostgresRepo) ValidatePickingTx(ctx context.Context, picking *stock.Sto
 		if _, err := tx.Exec(ctx, updatePickingQ, picking.DateDone, picking.ID); err != nil {
 			return platformerrors.Internal("failed to update picking status to done", err)
 		}
-
-		// Update moves and apply quant deltas
-		upsertQuantQ := `
-			INSERT INTO stock_quants (product_id, location_id, quantity, reserved_quantity, created_at, updated_at)
-			VALUES ($1, $2, $3, 0, NOW(), NOW())
-			ON CONFLICT (product_id, location_id)
-			DO UPDATE SET quantity = stock_quants.quantity + EXCLUDED.quantity, updated_at = NOW()
-		`
-
-		for i := range picking.Moves {
-			m := &picking.Moves[i]
-			qty := m.QuantityDone
-			if qty <= 0 {
-				qty = m.ProductQty
-			}
-			m.QuantityDone = qty
-			m.State = stock.MoveStateDone
-
-			// Update move record
-			updateMoveQ := `
-				UPDATE stock_moves
-				SET state = 'done', quantity_done = $1, updated_at = NOW()
-				WHERE id = $2
-			`
-			if _, err := tx.Exec(ctx, updateMoveQ, qty, m.ID); err != nil {
-				return platformerrors.Internal("failed to update move status to done", err)
-			}
-
-			// Decrease source location
-			if _, err := tx.Exec(ctx, upsertQuantQ, m.ProductID, m.LocationID, -qty); err != nil {
-				return platformerrors.Internal("failed to debit source location quant", err)
-			}
-
-			// Increase destination location
-			if _, err := tx.Exec(ctx, upsertQuantQ, m.ProductID, m.LocationDestID, qty); err != nil {
-				return platformerrors.Internal("failed to credit destination location quant", err)
-			}
-		}
-
-		return nil
+		return r.validateMovesTx(ctx, tx, picking.Moves)
 	})
 }
 

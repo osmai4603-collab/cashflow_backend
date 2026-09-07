@@ -100,6 +100,25 @@ func TestCompanyMemoryRepo_ListAndGetDefault(t *testing.T) {
 	}
 }
 
+func TestCompanyMemoryRepo_LandedCostJournal(t *testing.T) {
+	ctx := context.Background()
+	repo := companystorage.NewMemoryRepo()
+	journalID := int64(42)
+
+	c := &company.Company{Name: "Freight Co", CurrencyID: 1, LandedCostJournalID: &journalID}
+	if err := repo.Create(ctx, c); err != nil {
+		t.Fatalf("unexpected error creating company: %v", err)
+	}
+
+	fetched, err := repo.GetByID(ctx, c.ID)
+	if err != nil {
+		t.Fatalf("unexpected error fetching company: %v", err)
+	}
+	if fetched.LandedCostJournalID == nil || *fetched.LandedCostJournalID != journalID {
+		t.Fatalf("expected landed cost journal ID %d, got %#v", journalID, fetched.LandedCostJournalID)
+	}
+}
+
 func TestCompanyMemoryRepo_ConcurrentAccess(t *testing.T) {
 	ctx := context.Background()
 	repo := companystorage.NewMemoryRepo()

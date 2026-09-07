@@ -102,6 +102,9 @@ type PurchaseOrder struct {
 	PickingIDs    []int64             `json:"picking_ids,omitempty"`    // Linked stock pickings (receipts)
 	ReceiptStatus string              `json:"receipt_status"`           // nothing, partial, full
 	ProcurementGroupID *int64          `json:"procurement_group_id,omitempty"`
+	RequisitionID *int64               `json:"requisition_id,omitempty"`
+	RequisitionType *string            `json:"requisition_type,omitempty"`
+	AlternativePOIDs []int64           `json:"alternative_po_ids,omitempty"`
 	Active        bool                `json:"active"`
 	Audit         audit.Fields        `json:"audit"`
 }

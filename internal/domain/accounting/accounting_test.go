@@ -150,7 +150,7 @@ func TestMoveBalanceAndPosting(t *testing.T) {
 			Date:      time.Now(),
 			MoveType:  accounting.MoveTypeEntry,
 			Lines: []accounting.AccountMoveLine{
-				{AccountID: 1, Name: "Debit line", Debit: 250.0, Credit: 0.0},
+				{AccountID: 1, Name: "Debit line", Debit: 250.0, Credit: 0.0, IsLandedCostsLine: true},
 				{AccountID: 2, Name: "Credit line", Debit: 0.0, Credit: 250.0},
 			},
 		}

@@ -29,6 +29,7 @@ const selectUserFields = `
 	id,
 	login,
 	COALESCE(email, ''),
+	email_notifications_enabled,
 	name,
 	password_hash,
 	partner_id,
@@ -56,17 +57,17 @@ func (r *PostgresRepo) Create(ctx context.Context, u *user.User) error {
 	query := `
 		INSERT INTO res_users (
 			login, email, name, password_hash, partner_id, company_id,
-			active, is_superuser, created_at, updated_at, created_by, updated_by
+			active, is_superuser, email_notifications_enabled, created_at, updated_at, created_by, updated_by
 		) VALUES (
 			$1, NULLIF($2, ''), $3, $4, $5, $6,
-			$7, $8, $9, $10, $11, $12
+			$7, $8, $9, $10, $11, $12, $13
 		) RETURNING id, created_at, updated_at
 	`
 
 	u.Active = true
 	err := r.pool.QueryRow(ctx, query,
 		u.Login, u.Email, u.Name, u.PasswordHash, u.PartnerID, u.CompanyID,
-		u.Active, u.IsSuperuser, u.Audit.CreatedAt, u.Audit.UpdatedAt, u.Audit.CreatedBy, u.Audit.UpdatedBy,
+		u.Active, u.IsSuperuser, u.EmailNotificationsEnabled, u.Audit.CreatedAt, u.Audit.UpdatedAt, u.Audit.CreatedBy, u.Audit.UpdatedBy,
 	).Scan(&u.ID, &u.Audit.CreatedAt, &u.Audit.UpdatedAt)
 
 	if err != nil {
@@ -84,6 +85,7 @@ func (r *PostgresRepo) GetByID(ctx context.Context, id int64) (*user.User, error
 		&u.ID,
 		&u.Login,
 		&u.Email,
+		&u.EmailNotificationsEnabled,
 		&u.Name,
 		&u.PasswordHash,
 		&u.PartnerID,
@@ -118,6 +120,7 @@ func (r *PostgresRepo) GetByLogin(ctx context.Context, login string) (*user.User
 		&u.ID,
 		&u.Login,
 		&u.Email,
+		&u.EmailNotificationsEnabled,
 		&u.Name,
 		&u.PasswordHash,
 		&u.PartnerID,
@@ -151,15 +154,16 @@ func (r *PostgresRepo) Update(ctx context.Context, u *user.User) error {
 			partner_id = $5,
 			company_id = $6,
 			is_superuser = $7,
-			updated_at = $8,
-			updated_by = $9
-		WHERE id = $10 AND active = true
+			email_notifications_enabled = $8,
+			updated_at = $9,
+			updated_by = $10
+		WHERE id = $11 AND active = true
 		RETURNING updated_at
 	`
 
 	err := r.pool.QueryRow(ctx, query,
 		u.Login, u.Email, u.Name, u.PasswordHash, u.PartnerID, u.CompanyID,
-		u.IsSuperuser, u.Audit.UpdatedAt, u.Audit.UpdatedBy, u.ID,
+		u.IsSuperuser, u.EmailNotificationsEnabled, u.Audit.UpdatedAt, u.Audit.UpdatedBy, u.ID,
 	).Scan(&u.Audit.UpdatedAt)
 
 	if err != nil {

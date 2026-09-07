@@ -43,15 +43,28 @@ type Repository interface {
 	UpdateMove(ctx context.Context, move *StockMove) error
 	ListMoves(ctx context.Context, f *filter.Filter, page pagination.PageRequest) (pagination.PageResult[StockMove], error)
 	GetMovesByPickingID(ctx context.Context, pickingID int64) ([]StockMove, error)
+	ReserveMove(ctx context.Context, move *StockMove) error
+	CreateMoveLine(ctx context.Context, line *StockMoveLine) error
+	GetMoveLineByID(ctx context.Context, id int64) (*StockMoveLine, error)
+	ListMoveLinesByMoveID(ctx context.Context, moveID int64) ([]StockMoveLine, error)
+	UpdateMoveLine(ctx context.Context, line *StockMoveLine) error
+	DeleteMoveLine(ctx context.Context, id int64) error
+	CreateLot(ctx context.Context, lot *StockLot) error
+	GetLotByID(ctx context.Context, id int64) (*StockLot, error)
+	ListLotsByProduct(ctx context.Context, productID int64) ([]StockLot, error)
+	UpdateLot(ctx context.Context, lot *StockLot) error
 
 	// Quants & Balances
 	GetQuant(ctx context.Context, productID, locationID int64) (*StockQuant, error)
+	// ReserveQuantity atomically reserves available stock and returns the quantity reserved.
+	ReserveQuantity(ctx context.Context, productID, locationID int64, quantity float64) (float64, error)
 	UpdateQuantQuantity(ctx context.Context, productID, locationID int64, deltaQty float64) error
 	SetQuantQuantity(ctx context.Context, productID, locationID int64, newQty float64) error
 	ListQuants(ctx context.Context, f *filter.Filter, page pagination.PageRequest) (pagination.PageResult[StockQuant], error)
 	GetOnHandStock(ctx context.Context, productID *int64, locationID *int64, warehouseID *int64) ([]StockOnHandItem, error)
 
 	// Atomic Execution
+	ValidateMovesTx(ctx context.Context, moves []StockMove) error
 	ValidatePickingTx(ctx context.Context, picking *StockPicking) error
 
 	// Valuations (Phase 12 — stock-account integration)

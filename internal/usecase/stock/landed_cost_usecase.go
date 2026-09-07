@@ -3,6 +3,7 @@ package stockusecase
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"cashflow_backend/internal/domain/accounting"
@@ -54,7 +55,18 @@ type CreateLandedCostFromBillInput struct {
 // ─────────────────────────────────────────────────────────────────────────────
 
 func (uc *UseCase) CreateLandedCost(ctx context.Context, in CreateLandedCostInput) (*stock.LandedCost, error) {
-	lc, err := buildLandedCost(in.PickingIDs, in.Date, in.JournalID, in.VendorBillID, in.Description, in.CompanyID, in.CostLines)
+	if uc.logger == nil {
+		uc.logger = slog.Default()
+	}
+	journalID := in.JournalID
+	if journalID <= 0 {
+		resolved, err := uc.resolveLandedCostJournal(ctx, &stock.LandedCost{CompanyID: in.CompanyID})
+		if err != nil {
+			return nil, err
+		}
+		journalID = resolved
+	}
+	lc, err := buildLandedCost(in.PickingIDs, in.Date, journalID, in.VendorBillID, in.Description, in.CompanyID, in.CostLines)
 	if err != nil {
 		return nil, err
 	}
@@ -144,6 +156,12 @@ func (uc *UseCase) CancelLandedCost(ctx context.Context, id int64) (*stock.Lande
 // from the *billable* product lines of an existing vendor bill (Odoo purchase →
 // stock_landed_costs "Create Bill" flow).
 func (uc *UseCase) CreateLandedCostFromVendorBill(ctx context.Context, in CreateLandedCostFromBillInput) (*stock.LandedCost, error) {
+	if uc.logger == nil {
+		uc.logger = slog.Default()
+	}
+	if uc.accountingSvc == nil {
+		uc.accountingSvc = noopAccountingGateway{}
+	}
 	if in.VendorBillID <= 0 {
 		return nil, platformerrors.Validation("vendor_bill_id is required", nil)
 	}
@@ -205,8 +223,18 @@ func (uc *UseCase) CreateLandedCostFromVendorBill(ctx context.Context, in Create
 		companyID = 1
 	}
 	journalID := bill.JournalID
-	if journalID <= 0 {
-		journalID = 6 // STJ — Stock Operations
+	if uc.companyRepo != nil && companyID > 0 {
+		resolved, err := uc.resolveLandedCostJournal(ctx, &stock.LandedCost{CompanyID: companyID})
+		if err != nil {
+			return nil, err
+		}
+		journalID = resolved
+	} else if journalID <= 0 {
+		resolved, err := uc.resolveLandedCostJournal(ctx, &stock.LandedCost{CompanyID: companyID})
+		if err != nil {
+			return nil, err
+		}
+		journalID = resolved
 	}
 	billID := bill.ID
 	lc, err := buildLandedCost(in.PickingIDs, time.Now().UTC(), journalID, &billID, in.Description, companyID, toLineInputs(lines))
@@ -227,6 +255,9 @@ func (uc *UseCase) CreateLandedCostFromVendorBill(ctx context.Context, in Create
 // ComputeLandedCost reallocates every cost line across the eligible received moves
 // and persists the valuation adjustments (Odoo stock_landed_cost.compute_landed_cost).
 func (uc *UseCase) ComputeLandedCost(ctx context.Context, id int64) (*stock.LandedCost, error) {
+	if uc.logger == nil {
+		uc.logger = slog.Default()
+	}
 	lc, err := uc.repo.GetLandedCostByID(ctx, id)
 	if err != nil {
 		return nil, err
@@ -236,6 +267,13 @@ func (uc *UseCase) ComputeLandedCost(ctx context.Context, id int64) (*stock.Land
 	}
 	if uc.productRepo == nil {
 		return nil, platformerrors.Conflict("product repository is not wired")
+	}
+	if lc.JournalID <= 0 {
+		journal, err := uc.resolveLandedCostJournal(ctx, lc)
+		if err != nil {
+			return nil, err
+		}
+		lc.JournalID = journal
 	}
 
 	type target struct {
@@ -345,6 +383,9 @@ func (uc *UseCase) ComputeLandedCost(ctx context.Context, id int64) (*stock.Land
 // ValidateLandedCost posts the valuation journal entry for the computed adjustments
 // and revalues the affected moves (Odoo stock_landed_cost.action_validate).
 func (uc *UseCase) ValidateLandedCost(ctx context.Context, id int64) (*stock.LandedCost, error) {
+	if uc.logger == nil {
+		uc.logger = slog.Default()
+	}
 	lc, err := uc.repo.GetLandedCostByID(ctx, id)
 	if err != nil {
 		return nil, err
@@ -369,7 +410,11 @@ func (uc *UseCase) ValidateLandedCost(ctx context.Context, id int64) (*stock.Lan
 	perMove := map[int64]*moveDelta{}
 
 	for _, adj := range lc.ValuationAdjustments {
-		amount := stock.LandedCostJournalAmount(adj.AdditionalCost, adj.Quantity, adj.MoveRemainingQty)
+		remainingQty := adj.MoveRemainingQty
+		if remainingQty == 0 && adj.Quantity > 0 {
+			remainingQty = adj.Quantity
+		}
+		amount := stock.LandedCostJournalAmount(adj.AdditionalCost, adj.Quantity, remainingQty)
 		if amount == 0 {
 			continue
 		}
@@ -378,13 +423,13 @@ func (uc *UseCase) ValidateLandedCost(ctx context.Context, id int64) (*stock.Lan
 		name := fmt.Sprintf("%s / move %d", lc.Name, adj.MoveID)
 		if amount > 0 {
 			entryLines = append(entryLines,
-				accountingusecase.JournalEntryLineInput{AccountID: stockAccount, ProductID: &adj.ProductID, Name: name, Debit: amount, Credit: 0},
-				accountingusecase.JournalEntryLineInput{AccountID: expenseAccount, Name: name, Debit: 0, Credit: amount},
+				accountingusecase.JournalEntryLineInput{AccountID: stockAccount, ProductID: &adj.ProductID, Name: name, Debit: amount, Credit: 0, IsLandedCostsLine: true},
+				accountingusecase.JournalEntryLineInput{AccountID: expenseAccount, Name: name, Debit: 0, Credit: amount, IsLandedCostsLine: true},
 			)
 		} else {
 			entryLines = append(entryLines,
-				accountingusecase.JournalEntryLineInput{AccountID: stockAccount, ProductID: &adj.ProductID, Name: name, Debit: 0, Credit: -amount},
-				accountingusecase.JournalEntryLineInput{AccountID: expenseAccount, Name: name, Debit: -amount, Credit: 0},
+				accountingusecase.JournalEntryLineInput{AccountID: stockAccount, ProductID: &adj.ProductID, Name: name, Debit: 0, Credit: -amount, IsLandedCostsLine: true},
+				accountingusecase.JournalEntryLineInput{AccountID: expenseAccount, Name: name, Debit: -amount, Credit: 0, IsLandedCostsLine: true},
 			)
 		}
 
@@ -480,6 +525,22 @@ func (uc *UseCase) stockValuationAccountForProduct(ctx context.Context, productI
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
 // ─────────────────────────────────────────────────────────────────────────────
+
+func (uc *UseCase) resolveLandedCostJournal(ctx context.Context, lc *stock.LandedCost) (int64, error) {
+	if lc != nil && lc.JournalID > 0 {
+		return lc.JournalID, nil
+	}
+	if uc.companyRepo != nil {
+		companyID := lc.CompanyID
+		if companyID <= 0 {
+			companyID = 1
+		}
+		if c, err := uc.companyRepo.GetByID(ctx, companyID); err == nil && c != nil && c.LandedCostJournalID != nil && *c.LandedCostJournalID > 0 {
+			return *c.LandedCostJournalID, nil
+		}
+	}
+	return 6, nil
+}
 
 func buildLandedCost(pickingIDs []int64, date time.Time, journalID int64, vendorBillID *int64, description string, companyID int64, lineInputs []CreateLandedCostLineInput) (*stock.LandedCost, error) {
 	if date.IsZero() {

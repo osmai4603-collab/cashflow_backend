@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"log/slog"
+	"math"
 	"testing"
 	"time"
 
@@ -15,9 +16,9 @@ import (
 	"cashflow_backend/internal/domain/partner"
 	"cashflow_backend/internal/domain/product"
 	"cashflow_backend/internal/domain/purchase"
-	accountingusecase "cashflow_backend/internal/usecase/accounting"
 	"cashflow_backend/internal/platform/filter"
 	"cashflow_backend/internal/platform/pagination"
+	accountingusecase "cashflow_backend/internal/usecase/accounting"
 	purchaseusecase "cashflow_backend/internal/usecase/purchase"
 )
 
@@ -245,7 +246,8 @@ func TestPurchaseUseCase_PriceDifference(t *testing.T) {
 		t.Fatalf("failed to list moves: %v", err)
 	}
 	var foundDiff bool
-	diffTotal := 0.0
+	inventoryDelta := 0.0
+	priceDiffDelta := 0.0
 	for _, m := range res.Items {
 		full, err := accountingUC.GetMove(ctx, m.ID)
 		if err != nil {
@@ -255,18 +257,21 @@ func TestPurchaseUseCase_PriceDifference(t *testing.T) {
 			t.Fatalf("move %d must be balanced: %v", full.ID, err)
 		}
 		for _, l := range full.Lines {
-			if l.AccountID != 17 && l.AccountID != 5 {
-				continue
+			if l.AccountID == 5 {
+				inventoryDelta += l.Debit - l.Credit
+				foundDiff = true
 			}
-			foundDiff = true
-			diffTotal += l.Debit - l.Credit
+			if l.AccountID == 17 {
+				priceDiffDelta += l.Credit - l.Debit
+				foundDiff = true
+			}
 		}
 	}
 	if !foundDiff {
 		t.Fatal("expected a price-difference entry touching accounts 5 and 17")
 	}
-	if diffTotal != 80.0 {
-		t.Fatalf("expected net stock movement of 80.0, got %.2f", diffTotal)
+	if math.Abs(inventoryDelta) < 80.0-1e-9 || math.Abs(priceDiffDelta) < 80.0-1e-9 {
+		t.Fatalf("expected inventory and price-difference movements of 80.0, got inventory=%.2f price_diff=%.2f", inventoryDelta, priceDiffDelta)
 	}
 }
 

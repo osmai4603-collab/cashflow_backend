@@ -44,6 +44,7 @@ const selectCompanyFields = `
 	COALESCE(attendance_kiosk_delay, 10),
 	COALESCE(overtime_company_threshold, 0),
 	COALESCE(auto_check_out_tolerance, 0),
+	lc_journal_id,
 	created_at,
 	updated_at,
 	created_by,
@@ -66,12 +67,12 @@ func (r *PostgresRepo) Create(ctx context.Context, c *company.Company) error {
 			name, partner_id, currency_id, phone, email, website, vat,
 			street, street2, city, state, country, zip_code,
 			active, attendance_kiosk_mode, attendance_kiosk_delay,
-			overtime_company_threshold, auto_check_out_tolerance,
+			overtime_company_threshold, auto_check_out_tolerance, lc_journal_id,
 			created_at, updated_at, created_by, updated_by
 		) VALUES (
 			$1, $2, $3, NULLIF($4, ''), NULLIF($5, ''), NULLIF($6, ''), NULLIF($7, ''),
 			NULLIF($8, ''), NULLIF($9, ''), NULLIF($10, ''), NULLIF($11, ''), NULLIF($12, ''), NULLIF($13, ''),
-			$14, $15, $16, $17, $18, $19, $20, $21, $22
+			$14, $15, $16, $17, $18, $19, $20, $21, $22, $23
 		) RETURNING id, created_at, updated_at
 	`
 
@@ -80,7 +81,7 @@ func (r *PostgresRepo) Create(ctx context.Context, c *company.Company) error {
 		c.Name, c.PartnerID, c.CurrencyID, c.Phone, c.Email, c.Website, c.VAT,
 		c.Street, c.Street2, c.City, c.State, c.Country, c.ZipCode,
 		c.Active, c.AttendanceKioskMode, c.AttendanceKioskDelay,
-		c.OvertimeCompanyThreshold, c.AutoCheckOutTolerance,
+		c.OvertimeCompanyThreshold, c.AutoCheckOutTolerance, c.LandedCostJournalID,
 		c.Audit.CreatedAt, c.Audit.UpdatedAt, c.Audit.CreatedBy, c.Audit.UpdatedBy,
 	).Scan(&c.ID, &c.Audit.CreatedAt, &c.Audit.UpdatedAt)
 
@@ -115,6 +116,7 @@ func (r *PostgresRepo) GetByID(ctx context.Context, id int64) (*company.Company,
 		&c.AttendanceKioskDelay,
 		&c.OvertimeCompanyThreshold,
 		&c.AutoCheckOutTolerance,
+		&c.LandedCostJournalID,
 		&c.Audit.CreatedAt,
 		&c.Audit.UpdatedAt,
 		&c.Audit.CreatedBy,
@@ -151,9 +153,10 @@ func (r *PostgresRepo) Update(ctx context.Context, c *company.Company) error {
 			attendance_kiosk_delay = $15,
 			overtime_company_threshold = $16,
 			auto_check_out_tolerance = $17,
-			updated_at = $18,
-			updated_by = $19
-		WHERE id = $20 AND active = true
+			lc_journal_id = $18,
+			updated_at = $19,
+			updated_by = $20
+		WHERE id = $21 AND active = true
 		RETURNING updated_at
 	`
 
@@ -161,7 +164,7 @@ func (r *PostgresRepo) Update(ctx context.Context, c *company.Company) error {
 		c.Name, c.PartnerID, c.CurrencyID, c.Phone, c.Email, c.Website, c.VAT,
 		c.Street, c.Street2, c.City, c.State, c.Country, c.ZipCode,
 		c.AttendanceKioskMode, c.AttendanceKioskDelay,
-		c.OvertimeCompanyThreshold, c.AutoCheckOutTolerance,
+		c.OvertimeCompanyThreshold, c.AutoCheckOutTolerance, c.LandedCostJournalID,
 		c.Audit.UpdatedAt, c.Audit.UpdatedBy, c.ID,
 	).Scan(&c.Audit.UpdatedAt)
 

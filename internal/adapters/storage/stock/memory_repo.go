@@ -21,6 +21,8 @@ type MemoryRepo struct {
 	warehouses     map[int64]*stock.Warehouse
 	pickings       map[int64]*stock.StockPicking
 	moves          map[int64]*stock.StockMove
+	moveLines      map[int64]*stock.StockMoveLine
+	lots           map[int64]*stock.StockLot
 	quants         map[string]*stock.StockQuant // key: "productID:locationID"
 	productValues  map[int64]*stock.ProductValue
 	periods        map[int64]*stock.AccountingPeriod
@@ -36,6 +38,8 @@ type MemoryRepo struct {
 	lastWhID       int64
 	lastPickingID  int64
 	lastMoveID     int64
+	lastMoveLineID int64
+	lastLotID      int64
 	lastQuantID    int64
 	lastValueID    int64
 	lastPeriodID   int64
@@ -51,6 +55,8 @@ func NewMemoryRepo() *MemoryRepo {
 		warehouses:     make(map[int64]*stock.Warehouse),
 		pickings:       make(map[int64]*stock.StockPicking),
 		moves:          make(map[int64]*stock.StockMove),
+		moveLines:      make(map[int64]*stock.StockMoveLine),
+		lots:           make(map[int64]*stock.StockLot),
 		quants:         make(map[string]*stock.StockQuant),
 		productValues:  make(map[int64]*stock.ProductValue),
 		periods:        make(map[int64]*stock.AccountingPeriod),
@@ -673,6 +679,12 @@ func (r *MemoryRepo) GetMoveByID(ctx context.Context, id int64) (*stock.StockMov
 		return nil, platformerrors.NotFound(fmt.Sprintf("stock move #%d not found", id))
 	}
 	clone := *m
+	for _, line := range r.moveLines {
+		if line.MoveID == id {
+			clone.MoveLines = append(clone.MoveLines, *line)
+		}
+	}
+	sort.Slice(clone.MoveLines, func(i, j int) bool { return clone.MoveLines[i].ID < clone.MoveLines[j].ID })
 	return &clone, nil
 }
 
@@ -689,6 +701,201 @@ func (r *MemoryRepo) UpdateMove(ctx context.Context, move *stock.StockMove) erro
 	clone := *move
 	r.moves[move.ID] = &clone
 	_ = existing
+	return nil
+}
+
+func (r *MemoryRepo) ReserveMove(ctx context.Context, move *stock.StockMove) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	existing, ok := r.moves[move.ID]
+	if !ok {
+		return platformerrors.NotFound(fmt.Sprintf("stock move #%d not found", move.ID))
+	}
+	remaining := move.ProductQty - move.ReservedQuantity
+	if remaining <= 0 {
+		return nil
+	}
+	quant, ok := r.quants[quantKey(move.ProductID, move.LocationID)]
+	if !ok || quant.Quantity-quant.ReservedQuantity <= 0 {
+		return nil
+	}
+	available := quant.Quantity - quant.ReservedQuantity
+	reserved := remaining
+	if reserved > available {
+		reserved = available
+	}
+	quant.ReservedQuantity += reserved
+	quant.UpdatedAt = time.Now().UTC()
+
+	move.ReservedQuantity += reserved
+	if move.ReservedQuantity >= move.ProductQty {
+		move.State = stock.MoveStateAssigned
+	}
+	move.UpdatedAt = time.Now().UTC()
+	clone := *move
+	r.moves[move.ID] = &clone
+
+	r.lastMoveLineID++
+	line := &stock.StockMoveLine{
+		ID:               r.lastMoveLineID,
+		MoveID:           move.ID,
+		ProductID:        move.ProductID,
+		ProductUom:       move.ProductUom,
+		LocationID:       move.LocationID,
+		LocationDestID:   move.LocationDestID,
+		ReservedQuantity: reserved,
+		Date:             move.Date,
+		CreatedAt:        time.Now().UTC(),
+		UpdatedAt:        time.Now().UTC(),
+	}
+	r.moveLines[line.ID] = line
+	move.MoveLines = append(move.MoveLines, *line)
+	_ = existing
+	return nil
+}
+
+func (r *MemoryRepo) CreateMoveLine(ctx context.Context, line *stock.StockMoveLine) error {
+	if err := line.Validate(); err != nil {
+		return err
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if _, ok := r.moves[line.MoveID]; !ok {
+		return platformerrors.NotFound(fmt.Sprintf("stock move #%d not found", line.MoveID))
+	}
+	if line.LotID != nil {
+		lot, ok := r.lots[*line.LotID]
+		if !ok || !lot.Active {
+			return platformerrors.NotFound(fmt.Sprintf("stock lot #%d not found", *line.LotID))
+		}
+		if lot.ProductID != line.ProductID {
+			return platformerrors.Validation("lot product does not match move line product", nil)
+		}
+		if lot.TrackingMode == stock.TrackingSerial && (line.ReservedQuantity > 1 || line.QuantityDone > 1) {
+			return platformerrors.Validation("serial move line quantity cannot exceed one", nil)
+		}
+	}
+	r.lastMoveLineID++
+	line.ID = r.lastMoveLineID
+	now := time.Now().UTC()
+	line.CreatedAt = now
+	line.UpdatedAt = now
+	if line.Date.IsZero() {
+		line.Date = now
+	}
+	clone := *line
+	r.moveLines[line.ID] = &clone
+	return nil
+}
+
+func (r *MemoryRepo) GetMoveLineByID(ctx context.Context, id int64) (*stock.StockMoveLine, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	line, ok := r.moveLines[id]
+	if !ok {
+		return nil, platformerrors.NotFound(fmt.Sprintf("stock move line #%d not found", id))
+	}
+	clone := *line
+	return &clone, nil
+}
+
+func (r *MemoryRepo) ListMoveLinesByMoveID(ctx context.Context, moveID int64) ([]stock.StockMoveLine, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	var lines []stock.StockMoveLine
+	for _, line := range r.moveLines {
+		if line.MoveID == moveID {
+			lines = append(lines, *line)
+		}
+	}
+	sort.Slice(lines, func(i, j int) bool { return lines[i].ID < lines[j].ID })
+	return lines, nil
+}
+
+func (r *MemoryRepo) UpdateMoveLine(ctx context.Context, line *stock.StockMoveLine) error {
+	if err := line.Validate(); err != nil {
+		return err
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if _, ok := r.moveLines[line.ID]; !ok {
+		return platformerrors.NotFound(fmt.Sprintf("stock move line #%d not found", line.ID))
+	}
+	line.UpdatedAt = time.Now().UTC()
+	clone := *line
+	r.moveLines[line.ID] = &clone
+	return nil
+}
+
+func (r *MemoryRepo) DeleteMoveLine(ctx context.Context, id int64) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if _, ok := r.moveLines[id]; !ok {
+		return platformerrors.NotFound(fmt.Sprintf("stock move line #%d not found", id))
+	}
+	delete(r.moveLines, id)
+	return nil
+}
+
+func (r *MemoryRepo) CreateLot(ctx context.Context, lot *stock.StockLot) error {
+	if err := lot.Validate(); err != nil {
+		return err
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, existing := range r.lots {
+		if existing.ProductID == lot.ProductID && existing.Name == lot.Name {
+			return platformerrors.Conflict("lot name already exists for product", nil)
+		}
+	}
+	r.lastLotID++
+	lot.ID = r.lastLotID
+	now := time.Now().UTC()
+	lot.CreatedAt = now
+	lot.UpdatedAt = now
+	lot.Active = true
+	clone := *lot
+	r.lots[lot.ID] = &clone
+	return nil
+}
+
+func (r *MemoryRepo) GetLotByID(ctx context.Context, id int64) (*stock.StockLot, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	lot, ok := r.lots[id]
+	if !ok {
+		return nil, platformerrors.NotFound(fmt.Sprintf("stock lot #%d not found", id))
+	}
+	clone := *lot
+	return &clone, nil
+}
+
+func (r *MemoryRepo) ListLotsByProduct(ctx context.Context, productID int64) ([]stock.StockLot, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	var lots []stock.StockLot
+	for _, lot := range r.lots {
+		if lot.ProductID == productID && lot.Active {
+			lots = append(lots, *lot)
+		}
+	}
+	sort.Slice(lots, func(i, j int) bool { return lots[i].ID < lots[j].ID })
+	return lots, nil
+}
+
+func (r *MemoryRepo) UpdateLot(ctx context.Context, lot *stock.StockLot) error {
+	if err := lot.Validate(); err != nil {
+		return err
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if _, ok := r.lots[lot.ID]; !ok {
+		return platformerrors.NotFound(fmt.Sprintf("stock lot #%d not found", lot.ID))
+	}
+	lot.UpdatedAt = time.Now().UTC()
+	clone := *lot
+	r.lots[lot.ID] = &clone
 	return nil
 }
 
@@ -785,6 +992,31 @@ func (r *MemoryRepo) GetQuant(ctx context.Context, productID, locationID int64) 
 	}
 	clone := *q
 	return &clone, nil
+}
+
+func (r *MemoryRepo) ReserveQuantity(ctx context.Context, productID, locationID int64, quantity float64) (float64, error) {
+	if quantity <= 0 {
+		return 0, platformerrors.Validation("reservation quantity must be positive", nil)
+	}
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	q, ok := r.quants[quantKey(productID, locationID)]
+	if !ok {
+		return 0, nil
+	}
+	available := q.Quantity - q.ReservedQuantity
+	if available <= 0 {
+		return 0, nil
+	}
+	reserved := quantity
+	if reserved > available {
+		reserved = available
+	}
+	q.ReservedQuantity += reserved
+	q.UpdatedAt = time.Now().UTC()
+	return reserved, nil
 }
 
 func (r *MemoryRepo) UpdateQuantQuantity(ctx context.Context, productID, locationID int64, deltaQty float64) error {
@@ -952,23 +1184,26 @@ func (r *MemoryRepo) GetOnHandStock(ctx context.Context, productID *int64, locat
 	return items, nil
 }
 
-// ValidatePickingTx performs atomic picking validation and double-entry quant movement in memory.
-func (r *MemoryRepo) ValidatePickingTx(ctx context.Context, picking *stock.StockPicking) error {
+// ValidateMovesTx performs atomic move validation and double-entry quant movement in memory.
+func (r *MemoryRepo) ValidateMovesTx(ctx context.Context, moves []stock.StockMove) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
 	now := time.Now().UTC()
-	picking.State = stock.PickingStateDone
-	picking.DateDone = &now
-	picking.UpdatedAt = now
-
-	// Update moves & double-entry quant movement
-	for i := range picking.Moves {
-		m := &picking.Moves[i]
+	for i := range moves {
+		m := &moves[i]
 		qty := m.QuantityDone
 		if qty <= 0 {
 			qty = m.ProductQty
 		}
+		if qty <= 0 || qty > m.ProductQty {
+			return platformerrors.Validation("move quantity is outside the requested quantity", nil)
+		}
+		reservedToConsume := m.ReservedQuantity
+		if reservedToConsume > qty {
+			reservedToConsume = qty
+		}
+		m.ReservedQuantity -= reservedToConsume
 		m.QuantityDone = qty
 		m.State = stock.MoveStateDone
 		m.UpdatedAt = now
@@ -980,6 +1215,10 @@ func (r *MemoryRepo) ValidatePickingTx(ctx context.Context, picking *stock.Stock
 		srcKey := quantKey(m.ProductID, m.LocationID)
 		if q, ok := r.quants[srcKey]; ok {
 			q.Quantity -= qty
+			q.ReservedQuantity -= reservedToConsume
+			if q.ReservedQuantity < 0 {
+				q.ReservedQuantity = 0
+			}
 			q.UpdatedAt = now
 		} else {
 			r.lastQuantID++
@@ -991,6 +1230,21 @@ func (r *MemoryRepo) ValidatePickingTx(ctx context.Context, picking *stock.Stock
 				CreatedAt:  now,
 				UpdatedAt:  now,
 			}
+		}
+
+		remainingDone := qty
+		for _, line := range r.moveLines {
+			if line.MoveID != m.ID || remainingDone <= 0 {
+				continue
+			}
+			lineDone := line.ReservedQuantity
+			if lineDone > remainingDone {
+				lineDone = remainingDone
+			}
+			line.ReservedQuantity -= lineDone
+			line.QuantityDone += lineDone
+			line.UpdatedAt = now
+			remainingDone -= lineDone
 		}
 
 		// Increase Destination Location Quant
@@ -1010,6 +1264,21 @@ func (r *MemoryRepo) ValidatePickingTx(ctx context.Context, picking *stock.Stock
 			}
 		}
 	}
+	return nil
+}
+
+// ValidatePickingTx performs atomic picking validation and double-entry quant movement in memory.
+func (r *MemoryRepo) ValidatePickingTx(ctx context.Context, picking *stock.StockPicking) error {
+	if err := r.ValidateMovesTx(ctx, picking.Moves); err != nil {
+		return err
+	}
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	now := time.Now().UTC()
+	picking.State = stock.PickingStateDone
+	picking.DateDone = &now
+	picking.UpdatedAt = now
 
 	clone := *picking
 	r.pickings[picking.ID] = &clone
