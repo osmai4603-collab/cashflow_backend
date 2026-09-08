@@ -59,8 +59,11 @@ func TestPurchaseOrder_Validation(t *testing.T) {
 			UnitPrice:  10,
 		},
 	}
-	if err := po.Validate(); err == nil {
-		t.Fatalf("expected error on zero product quantity")
+	if err := po.Validate(); err != nil {
+		t.Fatalf("RFQ draft should allow zero product quantity: %v", err)
+	}
+	if err := po.ActionConfirm(""); err == nil {
+		t.Fatalf("expected confirmation to reject zero product quantity")
 	}
 }
 

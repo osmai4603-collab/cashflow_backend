@@ -11,7 +11,12 @@ import (
 	companyhttp "cashflow_backend/internal/adapters/http/company"
 	crmhttp "cashflow_backend/internal/adapters/http/crm"
 	currencyhttp "cashflow_backend/internal/adapters/http/currency"
+	deliveryhttp "cashflow_backend/internal/adapters/http/delivery"
+	expensehttp "cashflow_backend/internal/adapters/http/expense"
+	fleethttp "cashflow_backend/internal/adapters/http/fleet"
 	hrhttp "cashflow_backend/internal/adapters/http/hr"
+	loyaltyhttp "cashflow_backend/internal/adapters/http/loyalty"
+	maintenancehttp "cashflow_backend/internal/adapters/http/maintenance"
 	mrphttp "cashflow_backend/internal/adapters/http/mrp"
 	partnerhttp "cashflow_backend/internal/adapters/http/partner"
 	paymenthttp "cashflow_backend/internal/adapters/http/payment"
@@ -37,6 +42,7 @@ type CashflowHandlers struct {
 	Purchase      *purchasehttp.Handler
 	Stock         *stockhttp.Handler
 	CRM           *crmhttp.Handler
+	Expense       *expensehttp.Handler
 	Payment       *paymenthttp.Handler
 	HR            *hrhttp.Handler
 	Company       *companyhttp.Handler
@@ -48,6 +54,10 @@ type CashflowHandlers struct {
 	Project       *projecthttp.Handler
 	BankStatement *bankstatementhttp.Handler
 	MRP           *mrphttp.Handler
+	Loyalty       *loyaltyhttp.Handler
+	Maintenance   *maintenancehttp.Handler
+	Fleet         *fleethttp.Handler
+	Delivery      *deliveryhttp.Handler
 }
 
 // NewHandlers creates an empty handler container for the composition root.
@@ -72,6 +82,7 @@ func NewHandlers(
 		Purchase:      purchasehttp.NewHandler(useCases.Purchase, logger, useCases.Requisition),
 		Stock:         stockhttp.NewHandler(useCases.Stock, logger),
 		CRM:           crmhttp.NewHandler(useCases.CRM, logger),
+		Expense:       expensehttp.NewHandler(useCases.Expense),
 		Payment:       paymenthttp.NewHandler(useCases.Payment, logger),
 		HR:            hrhttp.NewHandler(useCases.HR, useCases.Attendance, logger),
 		Company:       companyhttp.NewHandler(useCases.Company, logger),
@@ -83,5 +94,9 @@ func NewHandlers(
 		Project:       projecthttp.NewHandler(useCases.Project),
 		BankStatement: bankstatementhttp.NewHandler(useCases.BankStatement, logger),
 		MRP:           mrphttp.NewHandler(useCases.MRP, logger),
+		Loyalty:       loyaltyhttp.NewHandler(useCases.Loyalty, logger),
+		Maintenance:   maintenancehttp.NewHandler(useCases.Maintenance, logger),
+		Fleet:         fleethttp.NewHandler(useCases.Fleet, logger),
+		Delivery:      deliveryhttp.NewHandler(useCases.Delivery),
 	}
 }

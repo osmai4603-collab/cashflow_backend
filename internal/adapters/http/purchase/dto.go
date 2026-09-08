@@ -259,22 +259,27 @@ func (r CreatePurchaseRequisitionRequest) ToInput() purchaseusecase.CreatePurcha
 }
 
 type PurchaseRequisitionLineResponse struct {
-	ID            int64      `json:"id"`
-	RequisitionID int64      `json:"requisition_id"`
-	ProductID     int64      `json:"product_id"`
-	ProductQty    float64    `json:"product_qty"`
-	ProductUOMID  *int64     `json:"product_uom_id,omitempty"`
-	PriceUnit     float64    `json:"price_unit"`
-	ScheduleDate  *time.Time `json:"schedule_date,omitempty"`
-	SupplierID    *int64     `json:"supplier_id,omitempty"`
-	Description   string     `json:"description,omitempty"`
-	CreatedAt     time.Time  `json:"created_at"`
-	UpdatedAt     time.Time  `json:"updated_at"`
+	ID                         int64      `json:"id"`
+	RequisitionID              int64      `json:"requisition_id"`
+	ProductID                  int64      `json:"product_id"`
+	ProductQty                 float64    `json:"product_qty"`
+	ProductUOMID               *int64     `json:"product_uom_id,omitempty"`
+	PriceUnit                  float64    `json:"price_unit"`
+	QtyOrdered                 float64    `json:"qty_ordered"`
+	ScheduleDate               *time.Time `json:"schedule_date,omitempty"`
+	SupplierID                 *int64     `json:"supplier_id,omitempty"`
+	SupplierInfoID             *int64     `json:"supplier_info_id,omitempty"`
+	ProductDescriptionVariants string     `json:"product_description_variants,omitempty"`
+	Description                string     `json:"description,omitempty"`
+	CreatedAt                  time.Time  `json:"created_at"`
+	UpdatedAt                  time.Time  `json:"updated_at"`
 }
 
 type PurchaseRequisitionResponse struct {
 	ID               int64                             `json:"id"`
 	Name             string                            `json:"name"`
+	Active           bool                              `json:"active"`
+	Reference        string                            `json:"reference,omitempty"`
 	Type             purchase.RequisitionType          `json:"type"`
 	VendorID         *int64                            `json:"vendor_id,omitempty"`
 	UserID           int64                             `json:"user_id"`
@@ -284,6 +289,7 @@ type PurchaseRequisitionResponse struct {
 	CurrencyID       int64                             `json:"currency_id"`
 	CompanyID        int64                             `json:"company_id"`
 	Description      string                            `json:"description,omitempty"`
+	OrderCount       int                               `json:"order_count"`
 	PurchaseOrderIDs []int64                           `json:"purchase_order_ids,omitempty"`
 	Lines            []PurchaseRequisitionLineResponse `json:"lines"`
 	CreatedAt        time.Time                         `json:"created_at"`
@@ -292,17 +298,20 @@ type PurchaseRequisitionResponse struct {
 
 func ToPurchaseRequisitionLineResponse(l purchase.PurchaseRequisitionLine) PurchaseRequisitionLineResponse {
 	return PurchaseRequisitionLineResponse{
-		ID:            l.ID,
-		RequisitionID: l.RequisitionID,
-		ProductID:     l.ProductID,
-		ProductQty:    l.ProductQty,
-		ProductUOMID:  l.ProductUOMID,
-		PriceUnit:     l.PriceUnit,
-		ScheduleDate:  l.ScheduleDate,
-		SupplierID:    l.SupplierID,
-		Description:   l.Description,
-		CreatedAt:     l.CreatedAt,
-		UpdatedAt:     l.UpdatedAt,
+		ID:                         l.ID,
+		RequisitionID:              l.RequisitionID,
+		ProductID:                  l.ProductID,
+		ProductQty:                 l.ProductQty,
+		ProductUOMID:               l.ProductUOMID,
+		PriceUnit:                  l.PriceUnit,
+		QtyOrdered:                 l.QtyOrdered,
+		ScheduleDate:               l.ScheduleDate,
+		SupplierID:                 l.SupplierID,
+		SupplierInfoID:             l.SupplierInfoID,
+		ProductDescriptionVariants: l.ProductDescriptionVariants,
+		Description:                l.Description,
+		CreatedAt:                  l.CreatedAt,
+		UpdatedAt:                  l.UpdatedAt,
 	}
 }
 
@@ -314,6 +323,8 @@ func ToPurchaseRequisitionResponse(r *purchase.PurchaseRequisition) PurchaseRequ
 	return PurchaseRequisitionResponse{
 		ID:               r.ID,
 		Name:             r.Name,
+		Active:           r.Active,
+		Reference:        r.Reference,
 		Type:             r.Type,
 		VendorID:         r.VendorID,
 		UserID:           r.UserID,
@@ -323,6 +334,7 @@ func ToPurchaseRequisitionResponse(r *purchase.PurchaseRequisition) PurchaseRequ
 		CurrencyID:       r.CurrencyID,
 		CompanyID:        r.CompanyID,
 		Description:      r.Description,
+		OrderCount:       r.OrderCount,
 		PurchaseOrderIDs: r.PurchaseOrderIDs,
 		Lines:            lines,
 		CreatedAt:        r.CreatedAt,

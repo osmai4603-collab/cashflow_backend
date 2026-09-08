@@ -45,15 +45,26 @@ type RequisitionRepository interface {
 	DeleteRequisition(ctx context.Context, id int64) error
 }
 
+type SupplierInfoRepository interface {
+	CreateForRequisition(ctx context.Context, requisition *purchase.PurchaseRequisition) error
+	DeleteForRequisition(ctx context.Context, requisitionID int64) error
+	UpdatePricesForRequisition(ctx context.Context, requisition *purchase.PurchaseRequisition) error
+}
+
 // RequisitionUseCase models the purchase requisition workflow.
 type RequisitionUseCase struct {
-	reqRepo RequisitionRepository
-	poRepo  purchase.Repository
+	reqRepo          RequisitionRepository
+	poRepo           purchase.Repository
+	supplierInfoRepo SupplierInfoRepository
 }
 
 // NewRequisitionUseCase builds a requisition use case.
-func NewRequisitionUseCase(reqRepo RequisitionRepository, poRepo purchase.Repository) *RequisitionUseCase {
-	return &RequisitionUseCase{reqRepo: reqRepo, poRepo: poRepo}
+func NewRequisitionUseCase(reqRepo RequisitionRepository, poRepo purchase.Repository, supplierInfoRepo ...SupplierInfoRepository) *RequisitionUseCase {
+	uc := &RequisitionUseCase{reqRepo: reqRepo, poRepo: poRepo}
+	if len(supplierInfoRepo) > 0 {
+		uc.supplierInfoRepo = supplierInfoRepo[0]
+	}
+	return uc
 }
 
 // CreateRequisition creates a new purchase requisition with validation.
@@ -70,6 +81,7 @@ func (uc *RequisitionUseCase) CreateRequisition(ctx context.Context, in CreatePu
 
 	req := &purchase.PurchaseRequisition{
 		Name:        in.Name,
+		Active:      true,
 		Type:        in.Type,
 		VendorID:    in.VendorID,
 		UserID:      in.UserID,
@@ -83,13 +95,14 @@ func (uc *RequisitionUseCase) CreateRequisition(ctx context.Context, in CreatePu
 
 	for _, line := range in.Lines {
 		req.Lines = append(req.Lines, purchase.PurchaseRequisitionLine{
-			ProductID:    line.ProductID,
-			ProductQty:   line.ProductQty,
-			ProductUOMID: line.ProductUOMID,
-			PriceUnit:    line.PriceUnit,
-			ScheduleDate: line.ScheduleDate,
-			SupplierID:   line.SupplierID,
-			Description:  line.Description,
+			ProductID:                  line.ProductID,
+			ProductQty:                 line.ProductQty,
+			ProductUOMID:               line.ProductUOMID,
+			PriceUnit:                  line.PriceUnit,
+			ScheduleDate:               line.ScheduleDate,
+			SupplierID:                 line.SupplierID,
+			ProductDescriptionVariants: line.Description,
+			Description:                line.Description,
 		})
 	}
 
@@ -146,7 +159,8 @@ func (uc *RequisitionUseCase) UpdateRequisition(ctx context.Context, id int64, i
 		req.Lines[i] = purchase.PurchaseRequisitionLine{
 			ProductID: line.ProductID, ProductQty: line.ProductQty, ProductUOMID: line.ProductUOMID,
 			PriceUnit: line.PriceUnit, ScheduleDate: line.ScheduleDate, SupplierID: line.SupplierID,
-			Description: line.Description,
+			ProductDescriptionVariants: line.Description,
+			Description:                line.Description,
 		}
 	}
 	if err := req.Validate(); err != nil {
@@ -209,6 +223,11 @@ func (uc *RequisitionUseCase) ConfirmRequisition(ctx context.Context, id int64) 
 	if err := uc.reqRepo.UpdateRequisition(ctx, req); err != nil {
 		return nil, err
 	}
+	if uc.supplierInfoRepo != nil && req.Type == purchase.RequisitionBlanketOrder {
+		if err := uc.supplierInfoRepo.CreateForRequisition(ctx, req); err != nil {
+			return nil, err
+		}
+	}
 	return req, nil
 }
 
@@ -216,9 +235,6 @@ func (uc *RequisitionUseCase) ConfirmRequisition(ctx context.Context, id int64) 
 func (uc *RequisitionUseCase) CloseRequisition(ctx context.Context, id int64) (*purchase.PurchaseRequisition, error) {
 	req, err := uc.reqRepo.GetRequisitionByID(ctx, id)
 	if err != nil {
-		return nil, err
-	}
-	if err := req.Close(); err != nil {
 		return nil, err
 	}
 	orders, err := uc.poRepo.ListOrders(ctx, filter.NewFilter().Add("requisition_id", filter.OpEqual, id), pagination.PageRequest{Page: 1, Limit: 100})
@@ -230,8 +246,16 @@ func (uc *RequisitionUseCase) CloseRequisition(ctx context.Context, id int64) (*
 			return nil, platformerrors.Conflict("cannot close requisition while purchase orders are open")
 		}
 	}
+	if err := req.Close(); err != nil {
+		return nil, err
+	}
 	if err := uc.reqRepo.UpdateRequisition(ctx, req); err != nil {
 		return nil, err
+	}
+	if uc.supplierInfoRepo != nil && req.Type == purchase.RequisitionBlanketOrder {
+		if err := uc.supplierInfoRepo.DeleteForRequisition(ctx, req.ID); err != nil {
+			return nil, err
+		}
 	}
 	return req, nil
 }
@@ -244,6 +268,24 @@ func (uc *RequisitionUseCase) CancelRequisition(ctx context.Context, id int64) (
 	}
 	if err := req.Cancel(); err != nil {
 		return nil, err
+	}
+	orders, err := uc.poRepo.ListOrders(ctx, filter.NewFilter().Add("requisition_id", filter.OpEqual, id), pagination.PageRequest{Page: 1, Limit: 100})
+	if err != nil {
+		return nil, err
+	}
+	for i := range orders.Items {
+		if orders.Items[i].State != purchase.OrderStateDraft {
+			continue
+		}
+		orders.Items[i].State = purchase.OrderStateCancel
+		if err := uc.poRepo.UpdateOrder(ctx, &orders.Items[i]); err != nil {
+			return nil, err
+		}
+	}
+	if uc.supplierInfoRepo != nil && req.Type == purchase.RequisitionBlanketOrder {
+		if err := uc.supplierInfoRepo.DeleteForRequisition(ctx, req.ID); err != nil {
+			return nil, err
+		}
 	}
 	if err := uc.reqRepo.UpdateRequisition(ctx, req); err != nil {
 		return nil, err
@@ -259,6 +301,9 @@ func (uc *RequisitionUseCase) CreatePurchaseOrderFromRequisition(ctx context.Con
 	}
 	if req.State == "" {
 		req.State = purchase.RequisitionDraft
+	}
+	if req.State != purchase.RequisitionConfirmed {
+		return nil, platformerrors.Conflict("purchase order can only be created from a confirmed requisition")
 	}
 	if req.VendorID == nil || *req.VendorID <= 0 {
 		return nil, platformerrors.Validation("requisition vendor is required", map[string]string{
@@ -277,7 +322,7 @@ func (uc *RequisitionUseCase) CreatePurchaseOrderFromRequisition(ctx context.Con
 		DateOrder:     time.Now().UTC(),
 		State:         purchase.OrderStateDraft,
 		InvoiceStatus: purchase.InvoiceStatusNo,
-		Currency:      "USD",
+		Currency:      fmt.Sprintf("%d", req.CurrencyID),
 		Note:          req.Description,
 		Active:        true,
 	}
@@ -285,15 +330,23 @@ func (uc *RequisitionUseCase) CreatePurchaseOrderFromRequisition(ctx context.Con
 	po.RequisitionType = func() *string { s := string(req.Type); return &s }()
 
 	for i, line := range req.Lines {
-		desc := line.Description
+		desc := line.ProductDescriptionVariants
+		if desc == "" {
+			desc = line.Description
+		}
 		if desc == "" {
 			desc = fmt.Sprintf("Requisition line %d", i+1)
 		}
 		po.Lines = append(po.Lines, purchase.PurchaseOrderLine{
-			Sequence:   i + 1,
-			ProductID:  line.ProductID,
-			Name:       desc,
-			ProductQty: line.ProductQty,
+			Sequence:  i + 1,
+			ProductID: line.ProductID,
+			Name:      desc,
+			ProductQty: func() float64 {
+				if req.Type == purchase.RequisitionBlanketOrder {
+					return 0
+				}
+				return line.ProductQty
+			}(),
 			ProductUom: line.ProductUOMID,
 			UnitPrice:  line.PriceUnit,
 		})

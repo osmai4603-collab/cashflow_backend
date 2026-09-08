@@ -1,132 +1,138 @@
-package activityhttp
+package activityhttp_test
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
-	"strings"
-	"sync"
 	"testing"
 	"time"
 
+	activityhttp "cashflow_backend/internal/adapters/http/activity"
 	activitystorage "cashflow_backend/internal/adapters/storage/activity"
+	userstorage "cashflow_backend/internal/adapters/storage/user"
 	"cashflow_backend/internal/domain/activity"
 	"cashflow_backend/internal/platform/auth"
-	"cashflow_backend/internal/platform/notificationbus"
 	activityusecase "cashflow_backend/internal/usecase/activity"
 
 	"github.com/go-chi/chi/v5"
 )
 
-type flushResponseWriter struct {
-	header  http.Header
-	mu      sync.Mutex
-	body    strings.Builder
-	flushed chan struct{}
+type mockBus struct{}
+
+func (b *mockBus) NotifyUser(ctx context.Context, userID int64, channel string, payload any) error {
+	return nil
 }
 
-func newFlushResponseWriter() *flushResponseWriter {
-	return &flushResponseWriter{header: make(http.Header), flushed: make(chan struct{}, 4)}
-}
-
-func (w *flushResponseWriter) Header() http.Header { return w.header }
-
-func (w *flushResponseWriter) WriteHeader(statusCode int) {}
-
-func (w *flushResponseWriter) Write(data []byte) (int, error) {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	return w.body.Write(data)
-}
-
-func (w *flushResponseWriter) Flush() {
-	select {
-	case w.flushed <- struct{}{}:
-	default:
-	}
-}
-
-func (w *flushResponseWriter) String() string {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	return w.body.String()
-}
-
-func TestStreamNotificationsRequiresAuthentication(t *testing.T) {
-	handler := newActivityTestHandler(notificationbus.New())
-	router := chi.NewRouter()
-	router.Use(auth.Middleware("test-secret"))
-	RegisterRoutes(router, handler)
-
-	recording := httptest.NewRecorder()
-	router.ServeHTTP(recording, httptest.NewRequest(http.MethodGet, "/notifications/stream", nil))
-	if recording.Code != http.StatusUnauthorized {
-		t.Fatalf("expected unauthenticated stream to return 401, got %d", recording.Code)
-	}
-}
-
-func TestStreamNotificationsDeliversUserEvent(t *testing.T) {
-	bus := notificationbus.New()
-	handler := newActivityTestHandler(bus)
-	router := chi.NewRouter()
-	router.Use(auth.Middleware("test-secret"))
-	RegisterRoutes(router, handler)
-
-	request := httptest.NewRequest(http.MethodGet, "/notifications/stream", nil)
-	token, err := auth.GenerateToken(7, 9, []string{"user"}, "test-secret", time.Hour)
-	if err != nil {
-		t.Fatalf("generate token: %v", err)
-	}
-	request.Header.Set("Authorization", "Bearer "+token)
-	ctx, cancel := context.WithCancel(request.Context())
-	request = request.WithContext(ctx)
-
-	writer := newFlushResponseWriter()
-	done := make(chan struct{})
-	go func() {
-		router.ServeHTTP(writer, request)
-		close(done)
-	}()
-
-	select {
-	case <-writer.flushed:
-	case <-time.After(time.Second):
-		cancel()
-		t.Fatal("stream did not send initial connection event")
-	}
-	if !strings.Contains(writer.String(), ": connected") {
-		cancel()
-		t.Fatalf("expected initial SSE connection event, got %q", writer.String())
-	}
-
-	if err := bus.NotifyUser(context.Background(), 7, "mail.notification", activity.Notification{ID: 11}); err != nil {
-		cancel()
-		t.Fatalf("notify user: %v", err)
-	}
-	select {
-	case <-writer.flushed:
-	case <-time.After(time.Second):
-		cancel()
-		t.Fatal("stream did not flush notification event")
-	}
-	cancel()
-
-	select {
-	case <-done:
-	case <-time.After(time.Second):
-		t.Fatal("stream did not close after request cancellation")
-	}
-	body := writer.String()
-	if !strings.Contains(body, "event: mail.notification") || !strings.Contains(body, `"id":11`) {
-		t.Fatalf("expected notification event in SSE body, got %q", body)
-	}
-}
-
-func newActivityTestHandler(bus *notificationbus.Bus) *Handler {
+func setupTestServer() (*chi.Mux, *activitystorage.MemoryRepo) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	repo := activitystorage.NewMemoryRepo()
-	useCase := activityusecase.NewUseCase(repo, repo, repo, repo, repo, bus, nil)
-	return NewHandler(useCase, logger, bus)
+	userRepo := userstorage.NewMemoryRepo()
+	bus := &mockBus{}
+
+	uc := activityusecase.NewUseCase(repo, repo, repo, repo, repo, bus, userRepo)
+	h := activityhttp.NewHandler(uc, logger)
+
+	r := chi.NewRouter()
+	activityhttp.RegisterRoutes(r, h)
+	return r, repo
+}
+
+func withAuth(req *http.Request, userID, companyID int64) *http.Request {
+	claims := &auth.UserClaims{
+		UserID:    userID,
+		CompanyID: companyID,
+	}
+	ctx := auth.WithClaims(req.Context(), claims)
+	return req.WithContext(ctx)
+}
+
+func TestActivityHandler_EndToEnd(t *testing.T) {
+	r, repo := setupTestServer()
+	ctx := context.Background()
+
+	// 1. Create Activity Type
+	at := &activity.ActivityType{
+		Name:    "Call",
+		Summary: "Follow up call",
+		Active:  true,
+	}
+	repo.CreateType(ctx, at)
+	atID := at.ID
+
+	// 2. Create Activity via HTTP
+	createReq := activityhttp.CreateActivityRequest{
+		ActivityTypeID: atID,
+		Summary:        "Initial Sales Call",
+		DateDeadline:   time.Now().Add(24 * time.Hour).UTC(),
+		AssignedUserID: 100,
+		ResModel:       "res.partner",
+		ResID:          func() *int64 { id := int64(1); return &id }(),
+	}
+	body, _ := json.Marshal(createReq)
+	req := httptest.NewRequest(http.MethodPost, "/activities", bytes.NewReader(body))
+	req = withAuth(req, 1, 1)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusCreated {
+		t.Fatalf("expected status 201, got %d. Body: %s", w.Code, w.Body.String())
+	}
+
+	var createResp struct {
+		Data activityhttp.ActivityDTO `json:"data"`
+	}
+	json.NewDecoder(w.Body).Decode(&createResp)
+	actID := createResp.Data.ID
+
+	// 3. Get Activity
+	req = httptest.NewRequest(http.MethodGet, fmt.Sprintf("/activities/%d", actID), nil)
+	req = withAuth(req, 1, 1)
+	w = httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", w.Code)
+	}
+
+	// 4. Complete Activity
+	completeReq := activityhttp.CompleteActivityRequest{
+		Feedback: "Customer was busy, scheduled for next week.",
+	}
+	body, _ = json.Marshal(completeReq)
+	req = httptest.NewRequest(http.MethodPost, fmt.Sprintf("/activities/%d/done", actID), bytes.NewReader(body))
+	req = withAuth(req, 1, 1)
+	req.Header.Set("Content-Type", "application/json")
+	w = httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status 200 on complete, got %d", w.Code)
+	}
+
+	var completeResp struct {
+		Data activityhttp.ActivityDTO `json:"data"`
+	}
+	json.NewDecoder(w.Body).Decode(&completeResp)
+	if completeResp.Data.Active {
+		t.Error("expected activity to be inactive after completion")
+	}
+	if completeResp.Data.Feedback != "Customer was busy, scheduled for next week." {
+		t.Errorf("unexpected feedback: %s", completeResp.Data.Feedback)
+	}
+
+	// 5. List My Activities (should be empty if active=true is the default filter)
+	req = httptest.NewRequest(http.MethodGet, "/activities/my", nil)
+	req = withAuth(req, 100, 1) // Using assigned user
+	w = httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status 200 on list, got %d", w.Code)
+	}
 }

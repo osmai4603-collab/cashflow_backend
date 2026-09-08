@@ -27,30 +27,30 @@ const (
 
 // Employee represents a company employee (hr.employee in Odoo).
 type Employee struct {
-	ID               int64        `json:"id"`
-	Name             string       `json:"name"`
-	PartnerID        *int64       `json:"partner_id,omitempty"` // linked partner in res_partners
-	DepartmentID     *int64       `json:"department_id,omitempty"`
-	JobID            *int64       `json:"job_id,omitempty"`
-	JobTitle         string       `json:"job_title,omitempty"`
-	ManagerID        *int64       `json:"manager_id,omitempty"` // direct supervisor
-	WorkEmail        string       `json:"work_email,omitempty"`
-	WorkPhone        string       `json:"work_phone,omitempty"`
-	WorkLocation     string       `json:"work_location,omitempty"`
-	HireDate         *time.Time   `json:"hire_date,omitempty"`
-	Gender           string       `json:"gender,omitempty"`
-	MaritalStatus    string       `json:"marital_status,omitempty"`
-	IdentificationID string       `json:"identification_id,omitempty"`
-	BankAccountNo    string       `json:"bank_account_no,omitempty"`
-	ExpenseManagerID *int64       `json:"expense_manager_id,omitempty"`
-	CompanyID        *int64       `json:"company_id,omitempty"`
-	Active           bool         `json:"active"`
-	OvertimeEmployeeThreshold int `json:"overtime_employee_threshold"`
-	Audit            audit.Fields `json:"audit"`
-	CreatedAt        time.Time    `json:"created_at"`
-	UpdatedAt        time.Time    `json:"updated_at"`
-	CreatedBy        *int64       `json:"created_by,omitempty"`
-	UpdatedBy        *int64       `json:"updated_by,omitempty"`
+	ID                        int64        `json:"id"`
+	Name                      string       `json:"name"`
+	PartnerID                 *int64       `json:"partner_id,omitempty"` // linked partner in res_partners
+	DepartmentID              *int64       `json:"department_id,omitempty"`
+	JobID                     *int64       `json:"job_id,omitempty"`
+	JobTitle                  string       `json:"job_title,omitempty"`
+	ManagerID                 *int64       `json:"manager_id,omitempty"` // direct supervisor
+	WorkEmail                 string       `json:"work_email,omitempty"`
+	WorkPhone                 string       `json:"work_phone,omitempty"`
+	WorkLocation              string       `json:"work_location,omitempty"`
+	HireDate                  *time.Time   `json:"hire_date,omitempty"`
+	Gender                    string       `json:"gender,omitempty"`
+	MaritalStatus             string       `json:"marital_status,omitempty"`
+	IdentificationID          string       `json:"identification_id,omitempty"`
+	BankAccountNo             string       `json:"bank_account_no,omitempty"`
+	ExpenseManagerID          *int64       `json:"expense_manager_id,omitempty"`
+	CompanyID                 *int64       `json:"company_id,omitempty"`
+	Active                    bool         `json:"active"`
+	OvertimeEmployeeThreshold int          `json:"overtime_employee_threshold"`
+	Audit                     audit.Fields `json:"audit"`
+	CreatedAt                 time.Time    `json:"created_at"`
+	UpdatedAt                 time.Time    `json:"updated_at"`
+	CreatedBy                 *int64       `json:"created_by,omitempty"`
+	UpdatedBy                 *int64       `json:"updated_by,omitempty"`
 }
 
 // Validate checks business invariants for the Employee entity.
@@ -65,6 +65,12 @@ func (e *Employee) Validate() error {
 	if e.ManagerID != nil && e.ID > 0 && *e.ManagerID == e.ID {
 		return platformerrors.Validation("invalid employee manager", map[string]string{
 			"manager_id": "an employee cannot be their own manager",
+		})
+	}
+
+	if e.ExpenseManagerID != nil && e.ID > 0 && *e.ExpenseManagerID == e.ID {
+		return platformerrors.Validation("invalid expense manager", map[string]string{
+			"expense_manager_id": "an employee cannot manage their own expenses",
 		})
 	}
 

@@ -18,7 +18,12 @@ import (
 	companyusecase "cashflow_backend/internal/usecase/company"
 	crmusecase "cashflow_backend/internal/usecase/crm"
 	currencyusecase "cashflow_backend/internal/usecase/currency"
+	deliveryusecase "cashflow_backend/internal/usecase/delivery"
+	expenseusecase "cashflow_backend/internal/usecase/expense"
+	fleetusecase "cashflow_backend/internal/usecase/fleet"
 	hrusecase "cashflow_backend/internal/usecase/hr"
+	loyaltyusecase "cashflow_backend/internal/usecase/loyalty"
+	maintenanceusecase "cashflow_backend/internal/usecase/maintenance"
 	mrpusecase "cashflow_backend/internal/usecase/mrp"
 	partnerusecase "cashflow_backend/internal/usecase/partner"
 	paymentusecase "cashflow_backend/internal/usecase/payment"
@@ -41,6 +46,7 @@ type CashflowUseCases struct {
 	Requisition   *purchaseusecase.RequisitionUseCase
 	Stock         *stockusecase.UseCase
 	CRM           *crmusecase.UseCase
+	Expense       *expenseusecase.UseCase
 	Payment       *paymentusecase.UseCase
 	BankStatement *bankstatementusecase.UseCase
 	Attendance    *hrusecase.AttendanceUseCase
@@ -53,6 +59,10 @@ type CashflowUseCases struct {
 	Activity      *activityusecase.UseCase
 	Project       *projectusecase.Service
 	MRP           *mrpusecase.Usecase
+	Loyalty       *loyaltyusecase.UseCase
+	Maintenance   *maintenanceusecase.Service
+	Fleet         *fleetusecase.Service
+	Delivery      *deliveryusecase.UseCase
 }
 
 func New(
@@ -75,11 +85,16 @@ func New(
 	useCases.Accounting.RegisterEDIProcessor(accounting.EDIFormatZatcaPhase1, accountingusecase.NewZatcaProcessor())
 	useCases.Accounting.RegisterEDIProcessor(accounting.EDIFormatZatcaPhase2, accountingusecase.NewZatcaProcessor())
 	useCases.Analytic = analyticusecase.New(repositories.Analytic, logger)
-	useCases.Sale = saleusecase.New(repositories.Sale, repositories.Partner, repositories.Product, repositories.Accounting, useCases.Accounting, logger)
+	useCases.Loyalty = loyaltyusecase.New(repositories.Loyalty, repositories.Product, repositories.Sale, logger)
+	useCases.Sale = saleusecase.New(repositories.Sale, repositories.Partner, repositories.Product, repositories.Accounting, useCases.Accounting, logger, useCases.Loyalty)
 	useCases.Purchase = purchaseusecase.New(repositories.Purchase, repositories.Partner, repositories.Product, repositories.Accounting, useCases.Accounting, logger)
-	useCases.Requisition = purchaseusecase.NewRequisitionUseCase(repositories.Requisition, repositories.Purchase)
+	useCases.Requisition = purchaseusecase.NewRequisitionUseCase(repositories.Requisition, repositories.Purchase, repositories.SupplierInfo)
 	useCases.Stock = stockusecase.New(repositories.Stock, repositories.Partner, repositories.Product, repositories.Sale, repositories.Purchase, useCases.Accounting, repositories.Company, logger)
 	useCases.CRM = crmusecase.New(repositories.CRM, useCases.Partner, useCases.Sale, logger)
+	useCases.Activity = activityusecase.NewUseCase(repositories.Activity, repositories.ActivityType, repositories.ActivityMsg, repositories.ActivityNotif, repositories.EmailQueue, activityBus, repositories.User)
+	expenseAccounting := expenseusecase.NewAccountingIntegration(useCases.Accounting, repositories.HR)
+	useCases.Expense = expenseusecase.New(repositories.Expense, repositories.HR, logger, expenseAccounting)
+	useCases.Expense.ConfigureActivityScheduler(useCases.Activity, 4) // seeded To-Do activity type
 	useCases.Payment = paymentusecase.New(repositories.Payment, useCases.Accounting, repositories.Partner, logger)
 	useCases.BankStatement = bankstatementusecase.New(repositories.BankStatement, useCases.Accounting, statementNameProvider, logger)
 	useCases.Attendance = hrusecase.NewAttendanceUseCase(repositories.HR, repositories.Company, logger)
@@ -90,8 +105,10 @@ func New(
 	useCases.Currency = currencyusecase.New(repositories.Currency, repositories.CurrencyRates, currencyConverter, logger)
 	useCases.Sequence = sequenceusecase.New(repositories.Sequence, logger)
 	useCases.Attachment = attachmentusecase.New(repositories.Attachment, logger)
-	useCases.Activity = activityusecase.NewUseCase(repositories.Activity, repositories.ActivityType, repositories.ActivityMsg, repositories.ActivityNotif, repositories.EmailQueue, activityBus, repositories.User)
 	useCases.Project = projectusecase.New(repositories.Project)
 	useCases.MRP = mrpusecase.NewUsecase(repositories.MRP, useCases.Sequence, repositories.Stock, useCases.Accounting, repositories.Product)
+	useCases.Maintenance = maintenanceusecase.New(repositories.Maintenance, useCases.Activity, logger)
+	useCases.Fleet = fleetusecase.New(repositories.Fleet, useCases.Activity, logger)
+	useCases.Delivery = deliveryusecase.NewUseCase(repositories.Delivery, repositories.Sale, repositories.Product, logger)
 	return useCases
 }

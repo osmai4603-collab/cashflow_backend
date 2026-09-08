@@ -127,6 +127,15 @@ func TestEmployee_Validate(t *testing.T) {
 			},
 			wantErr: true,
 		},
+		{
+			name: "self expense manager",
+			emp: hr.Employee{
+				ID:               10,
+				Name:             "CEO",
+				ExpenseManagerID: func() *int64 { id := int64(10); return &id }(),
+			},
+			wantErr: true,
+		},
 	}
 
 	for _, tt := range tests {

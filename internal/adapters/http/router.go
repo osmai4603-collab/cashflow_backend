@@ -16,7 +16,11 @@ import (
 	companyhttp "cashflow_backend/internal/adapters/http/company"
 	crmhttp "cashflow_backend/internal/adapters/http/crm"
 	currencyhttp "cashflow_backend/internal/adapters/http/currency"
+	deliveryhttp "cashflow_backend/internal/adapters/http/delivery"
+	expensehttp "cashflow_backend/internal/adapters/http/expense"
+	fleethttp "cashflow_backend/internal/adapters/http/fleet"
 	hrhttp "cashflow_backend/internal/adapters/http/hr"
+	maintenancehttp "cashflow_backend/internal/adapters/http/maintenance"
 	partnerhttp "cashflow_backend/internal/adapters/http/partner"
 	paymenthttp "cashflow_backend/internal/adapters/http/payment"
 	producthttp "cashflow_backend/internal/adapters/http/product"
@@ -164,6 +168,9 @@ func NewRouterWithHandlers(
 		if handlers.CRM != nil {
 			crmhttp.RegisterRoutes(v1, handlers.CRM, authorizer)
 		}
+		if handlers.Expense != nil {
+			expensehttp.RegisterRoutes(v1, handlers.Expense, authorizer)
+		}
 		if handlers.Payment != nil {
 			paymenthttp.RegisterRoutes(v1, handlers.Payment, authorizer)
 		}
@@ -172,6 +179,18 @@ func NewRouterWithHandlers(
 		}
 		if handlers.MRP != nil {
 			v1.Mount("/mrp", handlers.MRP.Routes())
+		}
+		if handlers.Loyalty != nil {
+			v1.Mount("/loyalty", handlers.Loyalty.Routes())
+		}
+		if handlers.Maintenance != nil {
+			maintenancehttp.RegisterRoutes(v1, handlers.Maintenance, authorizer)
+		}
+		if handlers.Fleet != nil {
+			fleethttp.RegisterRoutes(v1, handlers.Fleet, authorizer)
+		}
+		if handlers.Delivery != nil {
+			deliveryhttp.RegisterRoutes(v1, handlers.Delivery, authorizer)
 		}
 	})
 

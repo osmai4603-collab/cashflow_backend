@@ -1,5 +1,11 @@
 # خطة تنفيذ المرحلة 20: طلبات الشراء المجمعة (Purchase Requisitions)
 
+> **حالة التنفيذ:** المرحلة 20 قيد التنفيذ المرحلي. لا يتم الانتقال إلى المرحلة التالية قبل اجتياز بوابة المرحلة الحالية.
+>
+> **المرحلة الحالية:** مكتملة.
+>
+> **الحالة:** المرحلة 20 مكتملة ضمن نطاقها المنفذ، مع إخفاقات تكاملية خارجية موثقة أدناه.
+
 ## 1. السياق والهدف
 
 تُعنى هذه المرحلة ببناء نموذج طلبات الشراء المجمعة داخل المشروع الحالي، بما يتوافق مع السلوك الحقيقي في Odoo 19.0.
@@ -47,6 +53,76 @@
 
 المرحلة 20 يجب أن تُبنى على نموذج purchase.requisition وليس على مفهوم agreement منفصل، مع توحيد المصطلحات والربط الداخلي مع Purchase Order.
 
+## 2.1 العقد السلوكي المعتمد للمرحلة 20
+
+يُعد هذا العقد المرجع الذي ستُبنى عليه اختبارات المراحل اللاحقة، ولا يجوز تغيير السلوك لمجرد توافق أسماء الحقول.
+
+| مفهوم Odoo | عقد Cashflow | القاعدة الإلزامية |
+|---|---|---|
+| `purchase.requisition` | `PurchaseRequisition` | مستند Purchase Agreement المركزي، وليس كيان Agreement مستقلًا |
+| `requisition_type` | `type` | القيم الوحيدة: `blanket_order` و`purchase_template` |
+| `draft` | `draft` | الحالة الوحيدة القابلة للتعديل الكامل |
+| `confirmed` | `confirmed` | اتفاقية نشطة قابلة لإنشاء RFQ |
+| `done` | `done` | مغلقة؛ لا تُغلق مع RFQ مفتوح |
+| `cancel` | `cancel` | ملغاة؛ يمكن حذفها وفق قاعدة الحذف المعتمدة |
+| `product.product` | `ProductID` | يجب أن يشير إلى منتج قابل للشراء، لا إلى قالب منتج غير محدد |
+| `fields.Date` | `DateStart/DateEnd` | تاريخ تقويمي؛ إذا استُخدم `time.Time` في Go فالتخزين والتحويل يجب أن يكونا ثابتين ومعلنين |
+
+### مصفوفة النوعين
+
+| السلوك | `blanket_order` | `purchase_template` |
+|---|---|---|
+| المورد عند التأكيد | مطلوب | اختياري وفق سلوك Odoo |
+| السعر عند التأكيد | أكبر من صفر لكل سطر | يُحسب من supplier info أو `standard_price` عند توفر المورد/المنتج |
+| كمية سطر الاتفاقية | أكبر من صفر | تُستخدم ككمية القالب |
+| Supplier Info | يُنشأ ويرتبط بسطر الاتفاقية | لا يُنشأ من الاتفاقية نفسها |
+| كمية RFQ المنشأ | صفر، مع نسخ السعر | تُنسخ من كمية السطر |
+| إغلاق الاتفاقية | يحذف Supplier Info بعد اجتياز فحص RFQs | لا يوجد Supplier Info اتفاقية للحذف |
+
+### مصفوفة انتقالات الحالة
+
+| من | إلى | الشرط |
+|---|---|---|
+| `draft` | `confirmed` | توجد أسطر؛ وتُطبق قواعد النوع؛ وتنجح كل عمليات Supplier Info اللازمة |
+| `confirmed` | `done` | لا يوجد PO/RFQ في `draft` أو `sent` أو `to approve` |
+| `draft` أو `confirmed` | `cancel` | صلاحية الإلغاء متوفرة؛ وتُلغى RFQs القابلة للإلغاء ويُنظف Supplier Info |
+| `done` | أي حالة | ممنوع |
+| `cancel` | `draft` | لا يُسمح به إلا إذا قرر عقد API ذلك صراحة؛ ليس افتراضًا افتراضيًا |
+
+### صلاحيات العقد
+
+- Purchase User: إنشاء وقراءة وتعديل وحذف وفق حالة السجل، وتنفيذ انتقالات التشغيل المسموحة.
+- Purchase Manager: قراءة وإدارة أوسع وفق نموذج الصلاحيات المحلي.
+- Manage Purchase Alternatives: إدارة مجموعات Alternative POs فقط.
+- كل عملية قراءة أو تعديل أو حذف يجب أن تحترم `company_id` في طبقة use case وrepository، وليس في HTTP فقط.
+
+### بوابة إغلاق المرحلة 1
+
+- تم تثبيت mapping الأسماء والحالات والأنواع في هذه الوثيقة.
+- تم تثبيت الفرق السلوكي بين Blanket Order وPurchase Template.
+- تم تثبيت انتقالات الحالات وقواعد الصلاحيات وتعدد الشركات.
+- تمت مطابقة العقد مع ملفات Odoo: `purchase_requisition.py`, `purchase.py`, `product.py`، و`test_purchase_requisition.py`.
+- **نتيجة البوابة:** المرحلة 1 مكتملة توثيقيًا، ولا يبدأ تنفيذ المرحلة 2 إلا بعد إضافة اختبارات العقد أو اعتماد الاختبارات الموجودة التي تثبت هذه القواعد.
+
+
+## حالة المرحلتين 1 و2
+
+- **المرحلة 1 - العقد السلوكي والمطابقة:** مكتملة. تم تثبيت mapping الأنواع والحالات وقواعد Blanket Order وPurchase Template والصلاحيات وتعدد الشركات، مع بوابة قبول موثقة.
+- **المرحلة 2 - Domain والقيود:** مكتملة. تم تنفيذ والتحقق من القيم المسموحة، قواعد تأكيد Blanket Order، انتقال الإلغاء، منع تعديل تعريف الاتفاقية بعد التأكيد، والحقول الأساسية `active`, `reference`, `order_count`, `qty_ordered` وبيانات وصف/ربط السطر. نجحت اختبارات `go test ./internal/domain/purchase ./internal/usecase/purchase ./internal/adapters/http/purchase`.
+- **المرحلة 3 - قاعدة البيانات والهجرات:** مكتملة. أضيفت migration `000044_align_purchase_requisition_odoo19` بحقول الاتفاقية وقيود النوع/الحالة/التاريخ/الكميات، والفهارس وتسلسلا Blanket/Template. نجحت اختبارات migrations، والتطبيق الحي، وrollback ثم replay على PostgreSQL.
+- **المرحلة 4 - Repository والمعاملات:** مكتملة. تم حفظ الحقول الجديدة، وتطبيق company scope على PostgreSQL وMemory، وإضافة اختبار عزل الشركات. نجحت اختبارات `go test -mod=mod ./internal/adapters/storage/purchase ./internal/usecase/purchase ./internal/adapters/http/purchase`، مع إبقاء تغيير `go.mod` خارج نطاق المرحلة.
+- **المرحلة 5 - دورة الأعمال وSupplier Info:** مكتملة. تم تصحيح الإغلاق قبل تغيير الحالة، إلغاء RFQs draft، وإضافة Supplier Info لـ Blanket Order في PostgreSQL وMemory مع migration `000045` واختبارات lifecycle وrollback/replay.
+- **المرحلة 6 - إنشاء RFQ وPO:** مكتملة. فُرضت requisition المؤكدة، وطُبق الفرق بين كمية Blanket الصفرية وكمية Template المنسوخة، وأصبح تأكيد PO يرفض الصفر. نجحت اختبارات Domain وUse Case وRepository وHTTP للمسار.
+- **المرحلة 7 - البدائل وتكامل Purchase Orders:** مكتملة. أضيفت مجموعات بدائل مستقلة عبر migration `000046`، وعمليات الإنشاء/العرض/الفك في PostgreSQL وMemory، وإلغاء RFQs البديلة عند تأكيد PO، مع اختبارات lifecycle وrollback/replay.
+- **المرحلة 8 - HTTP وACL:** مكتملة. أضيفت endpoints إنشاء/عرض/فك البدائل، واختبارات HTTP الحالية تمر، وطُبقت migration `000047` بصلاحيات `purchase.order.alternative`.
+- **المرحلة 9 - اختبارات المطابقة والإغلاق:** مكتملة. نجحت الاختبارات المركزة `go test -mod=mod ./internal/domain/purchase ./internal/usecase/purchase ./internal/adapters/storage/purchase ./internal/adapters/http/purchase ./migrations`، ونجحت migrations 000044-000047 في PostgreSQL مع rollback/replay حيث اختُبرت. فشل `go test ./...` محصور في موديول `delivery` ومشكلة import في اختبار `loyalty` خارج نطاق المرحلة 20.
+
+### نتيجة الإغلاق
+
+- **السلوك المنفذ:** Purchase Requisition، Blanket Order، Purchase Template، Supplier Info، دورة الحالات، إنشاء RFQ/PO، الكميات الصفرية للـ Blanket RFQ، `qty_ordered`، company scope، Alternative PO Groups، HTTP، ACL، واختبارات المطابقة الأساسية.
+- **Migrations المنفذة:** `000044_align_purchase_requisition_odoo19`, `000045_create_purchase_supplier_info`, `000046_create_purchase_order_groups`, `000047_seed_purchase_requisition_alternative_acl`.
+- **الفشل الخارجي:** `delivery` يحتوي imports وواجهات غير متوافقة (`regexp`, `strings`, وواجهات Repository ناقصة، و`sql.ErrNoNotFound`)؛ واختبار `loyalty` لديه import build failure. لم تُعدّل هذه الملفات لأنها خارج المرحلة 20.
+- **قرار المرحلة 25:** لم تُحدّث إلى مكتملة؛ تحديثها مشروط بتنفيذ جميع المراحل والتحقق منها فعليًا.
 
 ## 3. النطاق المقترح للتنفيذ
 

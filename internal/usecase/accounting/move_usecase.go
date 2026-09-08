@@ -18,18 +18,19 @@ import (
 // ─────────────────────────────────────────────────────────────────────────────
 
 type JournalEntryLineInput struct {
-	AccountID          int64   `json:"account_id"`
-	PartnerID          *int64  `json:"partner_id"`
-	ProductID          *int64  `json:"product_id"`
-	Name               string  `json:"name"`
-	Debit              float64 `json:"debit"`
-	Credit             float64 `json:"credit"`
-	StatementLineID    *int64  `json:"statement_line_id,omitempty"`
-	IsLandedCostsLine  bool    `json:"is_landed_costs_line,omitempty"`
+	AccountID         int64   `json:"account_id"`
+	PartnerID         *int64  `json:"partner_id"`
+	ProductID         *int64  `json:"product_id"`
+	Name              string  `json:"name"`
+	Debit             float64 `json:"debit"`
+	Credit            float64 `json:"credit"`
+	StatementLineID   *int64  `json:"statement_line_id,omitempty"`
+	IsLandedCostsLine bool    `json:"is_landed_costs_line,omitempty"`
 }
 
 type CreateJournalEntryInput struct {
 	JournalID int64                   `json:"journal_id"`
+	MoveType  accounting.MoveType     `json:"move_type,omitempty"`
 	Date      time.Time               `json:"date"`
 	Ref       string                  `json:"ref"`
 	Lines     []JournalEntryLineInput `json:"lines"`
@@ -47,9 +48,9 @@ type InvoiceLineItemInput struct {
 	// When > 0 an additional pair of display_type='cogs' lines is generated:
 	//   debit  → COGS account (12 / 500000 by default)
 	//   credit → Stock/Inventory account (5 / 140000 by default)
-	CogsAmount      float64 `json:"cogs_amount,omitempty"`
-	CogsAccountID   *int64  `json:"cogs_account_id,omitempty"`
-	StockAccountID  *int64  `json:"stock_account_id,omitempty"`
+	CogsAmount     float64 `json:"cogs_amount,omitempty"`
+	CogsAccountID  *int64  `json:"cogs_account_id,omitempty"`
+	StockAccountID *int64  `json:"stock_account_id,omitempty"`
 }
 
 type CreateInvoiceInput struct {
@@ -88,7 +89,7 @@ func (uc *UseCase) CreateJournalEntry(ctx context.Context, in CreateJournalEntry
 
 	move := &accounting.AccountMove{
 		Name:         "/",
-		MoveType:     accounting.MoveTypeEntry,
+		MoveType:     in.MoveType,
 		JournalID:    in.JournalID,
 		Date:         in.Date,
 		State:        accounting.MoveStateDraft,
@@ -97,18 +98,21 @@ func (uc *UseCase) CreateJournalEntry(ctx context.Context, in CreateJournalEntry
 		Ref:          in.Ref,
 		Lines:        make([]accounting.AccountMoveLine, len(in.Lines)),
 	}
+	if move.MoveType == "" {
+		move.MoveType = accounting.MoveTypeEntry
+	}
 
 	for i, l := range in.Lines {
 		move.Lines[i] = accounting.AccountMoveLine{
-			AccountID:          l.AccountID,
-			PartnerID:          l.PartnerID,
-			ProductID:          l.ProductID,
-			Name:               strings.TrimSpace(l.Name),
-			Debit:              roundTo4(l.Debit),
-			Credit:             roundTo4(l.Credit),
-			Balance:            roundTo4(l.Debit - l.Credit),
-			StatementLineID:    l.StatementLineID,
-			IsLandedCostsLine:  l.IsLandedCostsLine,
+			AccountID:         l.AccountID,
+			PartnerID:         l.PartnerID,
+			ProductID:         l.ProductID,
+			Name:              strings.TrimSpace(l.Name),
+			Debit:             roundTo4(l.Debit),
+			Credit:            roundTo4(l.Credit),
+			Balance:           roundTo4(l.Debit - l.Credit),
+			StatementLineID:   l.StatementLineID,
+			IsLandedCostsLine: l.IsLandedCostsLine,
 		}
 	}
 
@@ -315,8 +319,8 @@ func (uc *UseCase) CreateInvoice(ctx context.Context, in CreateInvoiceInput) (*a
 
 	// Anglo-Saxon: book COGS counterpart lines for items that delivered inventory.
 	type cogsPair struct {
-		itemIdx  int // index in in.Items (line index = itemIdx + 1 in moveLines)
-		pairIdx  int // index of the first line of the generated pair
+		itemIdx int // index in in.Items (line index = itemIdx + 1 in moveLines)
+		pairIdx int // index of the first line of the generated pair
 	}
 	var cogsPairs []cogsPair
 	cogsAccount := int64(12) // 500000 Cost of Goods Sold

@@ -49,11 +49,13 @@ func (r *PostgresRepo) CreateOrder(ctx context.Context, order *sale.SaleOrder) e
 			INSERT INTO sale_orders (
 				name, partner_id, date_order, validity_date, state, invoice_status,
 				pricelist_id, payment_term_id, user_id, company_id, currency, note,
-				amount_untaxed, amount_tax, amount_total, delivery_status, procurement_group_id, active, created_at, updated_at
+				amount_untaxed, amount_tax, amount_total, delivery_status, procurement_group_id,
+				applied_coupon_ids, code_enabled_rule_ids, carrier_id, shipping_weight,
+				delivery_message, recompute_delivery_price, active, created_at, updated_at
 			) VALUES (
 				$1, $2, $3, $4, $5, $6,
 				$7, $8, $9, $10, $11, $12,
-				$13, $14, $15, $16, $17, true, NOW(), NOW()
+				$13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, true, NOW(), NOW()
 			) RETURNING id, created_at, updated_at
 		`
 		now := time.Now().UTC()
@@ -77,6 +79,8 @@ func (r *PostgresRepo) CreateOrder(ctx context.Context, order *sale.SaleOrder) e
 			order.Name, order.PartnerID, order.DateOrder, order.ValidityDate, string(order.State), string(order.InvoiceStatus),
 			order.PricelistID, order.PaymentTermID, order.UserID, order.CompanyID, order.Currency, order.Note,
 			order.AmountUntaxed, order.AmountTax, order.AmountTotal, order.DeliveryStatus, order.ProcurementGroupID,
+			order.AppliedCouponIDs, order.CodeEnabledRuleIDs, order.CarrierID, order.ShippingWeight,
+			order.DeliveryMessage, order.RecomputeDeliveryPrice,
 		).Scan(&order.ID, &order.Audit.CreatedAt, &order.Audit.UpdatedAt)
 
 		if err != nil {
@@ -90,11 +94,12 @@ func (r *PostgresRepo) CreateOrder(ctx context.Context, order *sale.SaleOrder) e
 			INSERT INTO sale_order_lines (
 				order_id, sequence, product_id, name, product_uom_qty, product_uom,
 				price_unit, discount, tax_ids, price_subtotal, price_tax, price_total,
-				qty_delivered, qty_invoiced, route_id, created_at, updated_at
+				qty_delivered, qty_invoiced, is_delivery, route_id, reward_id, coupon_id,
+				reward_identifier_code, points_cost, is_reward_line, created_at, updated_at
 			) VALUES (
 				$1, $2, $3, $4, $5, $6,
 				$7, $8, $9, $10, $11, $12,
-				$13, $14, $15, NOW(), NOW()
+				$13, $14, $15, $16, $17, $18, $19, $20, $21, $22, NOW(), NOW()
 			) RETURNING id, created_at, updated_at
 		`
 
@@ -108,7 +113,9 @@ func (r *PostgresRepo) CreateOrder(ctx context.Context, order *sale.SaleOrder) e
 				order.Lines[i].ProductUomQty, order.Lines[i].ProductUom, order.Lines[i].UnitPrice,
 				order.Lines[i].Discount, order.Lines[i].TaxIDs, order.Lines[i].PriceSubtotal,
 				order.Lines[i].PriceTax, order.Lines[i].PriceTotal, order.Lines[i].QtyDelivered,
-				order.Lines[i].QtyInvoiced, order.Lines[i].RouteID,
+				order.Lines[i].QtyInvoiced, order.Lines[i].IsDelivery, order.Lines[i].RouteID,
+				order.Lines[i].RewardID, order.Lines[i].CouponID, order.Lines[i].RewardIdentifierCode,
+				order.Lines[i].PointsCost, order.Lines[i].IsRewardLine,
 			).Scan(&order.Lines[i].ID, &order.Lines[i].CreatedAt, &order.Lines[i].UpdatedAt)
 			if err != nil {
 				return platformerrors.Internal("failed to insert sale order line", err)
@@ -124,7 +131,10 @@ func (r *PostgresRepo) GetOrderByID(ctx context.Context, id int64) (*sale.SaleOr
 	query := `
 		SELECT id, name, partner_id, date_order, validity_date, state, invoice_status,
 		       pricelist_id, payment_term_id, user_id, company_id, currency, COALESCE(note, ''),
-		       amount_untaxed, amount_tax, amount_total, delivery_status, procurement_group_id, active, created_at, updated_at
+		       amount_untaxed, amount_tax, amount_total, delivery_status, procurement_group_id,
+		       carrier_id, shipping_weight, COALESCE(delivery_message, ''), recompute_delivery_price,
+		       COALESCE(applied_coupon_ids, '{}'), COALESCE(code_enabled_rule_ids, '{}'),
+		       active, created_at, updated_at
 		FROM sale_orders
 		WHERE id = $1 AND active = true
 	`
@@ -138,7 +148,10 @@ func (r *PostgresRepo) GetOrderByID(ctx context.Context, id int64) (*sale.SaleOr
 	err := r.pool.QueryRow(ctx, query, args...).Scan(
 		&o.ID, &o.Name, &o.PartnerID, &o.DateOrder, &o.ValidityDate, &stateStr, &invStatusStr,
 		&o.PricelistID, &o.PaymentTermID, &o.UserID, &o.CompanyID, &o.Currency, &o.Note,
-		&o.AmountUntaxed, &o.AmountTax, &o.AmountTotal, &o.DeliveryStatus, &o.ProcurementGroupID, &o.Active, &o.Audit.CreatedAt, &o.Audit.UpdatedAt,
+		&o.AmountUntaxed, &o.AmountTax, &o.AmountTotal, &o.DeliveryStatus, &o.ProcurementGroupID,
+		&o.CarrierID, &o.ShippingWeight, &o.DeliveryMessage, &o.RecomputeDeliveryPrice,
+		&o.AppliedCouponIDs, &o.CodeEnabledRuleIDs,
+		&o.Active, &o.Audit.CreatedAt, &o.Audit.UpdatedAt,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -171,7 +184,10 @@ func (r *PostgresRepo) GetOrderByName(ctx context.Context, name string) (*sale.S
 	query := `
 		SELECT id, name, partner_id, date_order, validity_date, state, invoice_status,
 		       pricelist_id, payment_term_id, user_id, company_id, currency, COALESCE(note, ''),
-		       amount_untaxed, amount_tax, amount_total, delivery_status, procurement_group_id, active, created_at, updated_at
+		       amount_untaxed, amount_tax, amount_total, delivery_status, procurement_group_id,
+		       carrier_id, shipping_weight, COALESCE(delivery_message, ''), recompute_delivery_price,
+		       COALESCE(applied_coupon_ids, '{}'), COALESCE(code_enabled_rule_ids, '{}'),
+		       active, created_at, updated_at
 		FROM sale_orders
 		WHERE name = $1 AND active = true
 	`
@@ -185,7 +201,10 @@ func (r *PostgresRepo) GetOrderByName(ctx context.Context, name string) (*sale.S
 	err := r.pool.QueryRow(ctx, query, args...).Scan(
 		&o.ID, &o.Name, &o.PartnerID, &o.DateOrder, &o.ValidityDate, &stateStr, &invStatusStr,
 		&o.PricelistID, &o.PaymentTermID, &o.UserID, &o.CompanyID, &o.Currency, &o.Note,
-		&o.AmountUntaxed, &o.AmountTax, &o.AmountTotal, &o.DeliveryStatus, &o.ProcurementGroupID, &o.Active, &o.Audit.CreatedAt, &o.Audit.UpdatedAt,
+		&o.AmountUntaxed, &o.AmountTax, &o.AmountTotal, &o.DeliveryStatus, &o.ProcurementGroupID,
+		&o.CarrierID, &o.ShippingWeight, &o.DeliveryMessage, &o.RecomputeDeliveryPrice,
+		&o.AppliedCouponIDs, &o.CodeEnabledRuleIDs,
+		&o.Active, &o.Audit.CreatedAt, &o.Audit.UpdatedAt,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -221,8 +240,10 @@ func (r *PostgresRepo) UpdateOrder(ctx context.Context, order *sale.SaleOrder) e
 			    user_id = $9, company_id = $10, currency = $11, note = $12,
 			    amount_untaxed = $13, amount_tax = $14, amount_total = $15,
 			    delivery_status = $16, procurement_group_id = $17,
-			    updated_at = NOW()
-			WHERE id = $18 AND active = true
+			    applied_coupon_ids = $18, code_enabled_rule_ids = $19,
+			    carrier_id = $20, shipping_weight = $21, delivery_message = $22,
+			    recompute_delivery_price = $23, updated_at = NOW()
+			WHERE id = $24 AND active = true
 			RETURNING updated_at
 		`
 		args := []any{
@@ -230,10 +251,11 @@ func (r *PostgresRepo) UpdateOrder(ctx context.Context, order *sale.SaleOrder) e
 			string(order.State), string(order.InvoiceStatus), order.PricelistID, order.PaymentTermID,
 			order.UserID, order.CompanyID, order.Currency, order.Note,
 			order.AmountUntaxed, order.AmountTax, order.AmountTotal,
-			order.DeliveryStatus, order.ProcurementGroupID, order.ID,
+			order.DeliveryStatus, order.ProcurementGroupID, order.AppliedCouponIDs, order.CodeEnabledRuleIDs,
+			order.CarrierID, order.ShippingWeight, order.DeliveryMessage, order.RecomputeDeliveryPrice, order.ID,
 		}
 		if companyID := audit.CompanyIDFromContext(ctx); companyID != nil {
-			query = strings.Replace(query, "WHERE id = $18 AND active = true", "WHERE id = $18 AND active = true AND company_id = $19", 1)
+			query = strings.Replace(query, "WHERE id = $20 AND active = true", "WHERE id = $20 AND active = true AND company_id = $21", 1)
 			args = append(args, *companyID)
 		}
 		err := tx.QueryRow(ctx, query, args...).Scan(&order.Audit.UpdatedAt)
@@ -254,11 +276,12 @@ func (r *PostgresRepo) UpdateOrder(ctx context.Context, order *sale.SaleOrder) e
 			INSERT INTO sale_order_lines (
 				order_id, sequence, product_id, name, product_uom_qty, product_uom,
 				price_unit, discount, tax_ids, price_subtotal, price_tax, price_total,
-				qty_delivered, qty_invoiced, route_id, created_at, updated_at
+				qty_delivered, qty_invoiced, is_delivery, route_id, reward_id, coupon_id,
+				reward_identifier_code, points_cost, is_reward_line, created_at, updated_at
 			) VALUES (
 				$1, $2, $3, $4, $5, $6,
 				$7, $8, $9, $10, $11, $12,
-				$13, $14, $15, NOW(), NOW()
+				$13, $14, $15, $16, $17, $18, $19, $20, $21, $22, NOW(), NOW()
 			) RETURNING id, created_at, updated_at
 		`
 		for i := range order.Lines {
@@ -271,7 +294,9 @@ func (r *PostgresRepo) UpdateOrder(ctx context.Context, order *sale.SaleOrder) e
 				order.Lines[i].ProductUomQty, order.Lines[i].ProductUom, order.Lines[i].UnitPrice,
 				order.Lines[i].Discount, order.Lines[i].TaxIDs, order.Lines[i].PriceSubtotal,
 				order.Lines[i].PriceTax, order.Lines[i].PriceTotal, order.Lines[i].QtyDelivered,
-				order.Lines[i].QtyInvoiced, order.Lines[i].RouteID,
+				order.Lines[i].QtyInvoiced, order.Lines[i].IsDelivery, order.Lines[i].RouteID,
+				order.Lines[i].RewardID, order.Lines[i].CouponID, order.Lines[i].RewardIdentifierCode,
+				order.Lines[i].PointsCost, order.Lines[i].IsRewardLine,
 			).Scan(&order.Lines[i].ID, &order.Lines[i].CreatedAt, &order.Lines[i].UpdatedAt)
 			if err != nil {
 				return platformerrors.Internal("failed to insert updated order line", err)
@@ -346,7 +371,10 @@ func (r *PostgresRepo) ListOrders(ctx context.Context, f *filter.Filter, page pa
 	dataQuery := fmt.Sprintf(`
 		SELECT id, name, partner_id, date_order, validity_date, state, invoice_status,
 		       pricelist_id, payment_term_id, user_id, company_id, currency, COALESCE(note, ''),
-		       amount_untaxed, amount_tax, amount_total, delivery_status, procurement_group_id, active, created_at, updated_at
+		       amount_untaxed, amount_tax, amount_total, delivery_status, procurement_group_id,
+		       carrier_id, shipping_weight, COALESCE(delivery_message, ''), recompute_delivery_price,
+		       COALESCE(applied_coupon_ids, '{}'), COALESCE(code_enabled_rule_ids, '{}'),
+		       active, created_at, updated_at
 		FROM sale_orders
 		%s
 		ORDER BY id DESC
@@ -367,7 +395,10 @@ func (r *PostgresRepo) ListOrders(ctx context.Context, f *filter.Filter, page pa
 		err := rows.Scan(
 			&o.ID, &o.Name, &o.PartnerID, &o.DateOrder, &o.ValidityDate, &stateStr, &invStatusStr,
 			&o.PricelistID, &o.PaymentTermID, &o.UserID, &o.CompanyID, &o.Currency, &o.Note,
-			&o.AmountUntaxed, &o.AmountTax, &o.AmountTotal, &o.DeliveryStatus, &o.ProcurementGroupID, &o.Active, &o.Audit.CreatedAt, &o.Audit.UpdatedAt,
+			&o.AmountUntaxed, &o.AmountTax, &o.AmountTotal, &o.DeliveryStatus, &o.ProcurementGroupID,
+			&o.CarrierID, &o.ShippingWeight, &o.DeliveryMessage, &o.RecomputeDeliveryPrice,
+			&o.AppliedCouponIDs, &o.CodeEnabledRuleIDs,
+			&o.Active, &o.Audit.CreatedAt, &o.Audit.UpdatedAt,
 		)
 		if err != nil {
 			return pagination.PageResult[sale.SaleOrder]{}, platformerrors.Internal("failed to scan sale order", err)
@@ -449,7 +480,8 @@ func (r *PostgresRepo) fetchLinesByOrderID(ctx context.Context, orderID int64) (
 	query := `
 		SELECT id, order_id, sequence, product_id, name, product_uom_qty, product_uom,
 		       price_unit, discount, tax_ids, price_subtotal, price_tax, price_total,
-		       qty_delivered, qty_invoiced, route_id, created_at, updated_at
+		       qty_delivered, qty_invoiced, is_delivery, route_id, reward_id, coupon_id,
+		       reward_identifier_code, points_cost, is_reward_line, created_at, updated_at
 		FROM sale_order_lines
 		WHERE order_id = $1
 		ORDER BY sequence ASC, id ASC
@@ -467,7 +499,9 @@ func (r *PostgresRepo) fetchLinesByOrderID(ctx context.Context, orderID int64) (
 			&l.ID, &l.OrderID, &l.Sequence, &l.ProductID, &l.Name,
 			&l.ProductUomQty, &l.ProductUom, &l.UnitPrice, &l.Discount,
 			&l.TaxIDs, &l.PriceSubtotal, &l.PriceTax, &l.PriceTotal,
-			&l.QtyDelivered, &l.QtyInvoiced, &l.RouteID, &l.CreatedAt, &l.UpdatedAt,
+			&l.QtyDelivered, &l.QtyInvoiced, &l.IsDelivery, &l.RouteID,
+			&l.RewardID, &l.CouponID, &l.RewardIdentifierCode, &l.PointsCost, &l.IsRewardLine,
+			&l.CreatedAt, &l.UpdatedAt,
 		)
 		if err != nil {
 			return nil, platformerrors.Internal("failed to scan sale order line", err)

@@ -189,6 +189,37 @@ func TestPurchaseUseCase_EndToEndFlow(t *testing.T) {
 	}
 }
 
+func TestPurchaseUseCaseConfirmCancelsAlternativeRFQs(t *testing.T) {
+	ctx := context.Background()
+	uc, repo, _, vendorID, productID := setupTestEnvironment(t)
+	create := func() *purchase.PurchaseOrder {
+		order, err := uc.CreateOrder(ctx, purchaseusecase.CreatePurchaseOrderInput{
+			PartnerID: vendorID,
+			DateOrder: time.Now(),
+			Lines:     []purchaseusecase.CreatePurchaseOrderLineInput{{ProductID: productID, ProductQty: 1}},
+		})
+		if err != nil {
+			t.Fatalf("CreateOrder() error = %v", err)
+		}
+		return order
+	}
+	selected := create()
+	alternative := create()
+	if err := repo.CreateAlternativeGroup(ctx, selected.ID, []int64{alternative.ID}); err != nil {
+		t.Fatalf("CreateAlternativeGroup() error = %v", err)
+	}
+	if _, err := uc.ConfirmOrder(ctx, selected.ID); err != nil {
+		t.Fatalf("ConfirmOrder() error = %v", err)
+	}
+	loadedAlternative, err := repo.GetOrderByID(ctx, alternative.ID)
+	if err != nil {
+		t.Fatalf("GetOrderByID() error = %v", err)
+	}
+	if loadedAlternative.State != purchase.OrderStateCancel {
+		t.Fatalf("expected alternative RFQ to be cancelled, got %s", loadedAlternative.State)
+	}
+}
+
 func TestPurchaseUseCase_PriceDifference(t *testing.T) {
 	ctx := context.Background()
 	uc, purchaseRepo, accountingUC, vendorID, productID := setupTestEnvironment(t)

@@ -28,6 +28,12 @@ type AccountingService interface {
 	GetMove(ctx context.Context, id int64) (*accounting.AccountMove, error)
 }
 
+type AlternativeOrderRepository interface {
+	CreateAlternativeGroup(ctx context.Context, orderID int64, alternativeOrderIDs []int64) error
+	ListAlternativeOrderIDs(ctx context.Context, orderID int64) ([]int64, error)
+	ClearAlternativeGroup(ctx context.Context, orderID int64) error
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Input DTOs
 // ─────────────────────────────────────────────────────────────────────────────
@@ -195,6 +201,30 @@ func (uc *UseCase) CreateOrder(ctx context.Context, in CreatePurchaseOrderInput)
 	return order, nil
 }
 
+func (uc *UseCase) CreateAlternativeGroup(ctx context.Context, orderID int64, alternativeOrderIDs []int64) error {
+	repo, ok := uc.repo.(AlternativeOrderRepository)
+	if !ok {
+		return platformerrors.Internal("alternative purchase order repository is not configured")
+	}
+	return repo.CreateAlternativeGroup(ctx, orderID, alternativeOrderIDs)
+}
+
+func (uc *UseCase) ListAlternativeOrderIDs(ctx context.Context, orderID int64) ([]int64, error) {
+	repo, ok := uc.repo.(AlternativeOrderRepository)
+	if !ok {
+		return nil, platformerrors.Internal("alternative purchase order repository is not configured")
+	}
+	return repo.ListAlternativeOrderIDs(ctx, orderID)
+}
+
+func (uc *UseCase) ClearAlternativeGroup(ctx context.Context, orderID int64) error {
+	repo, ok := uc.repo.(AlternativeOrderRepository)
+	if !ok {
+		return platformerrors.Internal("alternative purchase order repository is not configured")
+	}
+	return repo.ClearAlternativeGroup(ctx, orderID)
+}
+
 // GetOrderByID retrieves an order by its ID.
 func (uc *UseCase) GetOrderByID(ctx context.Context, id int64) (*purchase.PurchaseOrder, error) {
 	return uc.repo.GetOrderByID(ctx, id)
@@ -317,6 +347,27 @@ func (uc *UseCase) ConfirmOrder(ctx context.Context, id int64) (*purchase.Purcha
 	order, err := uc.repo.GetOrderByID(ctx, id)
 	if err != nil {
 		return nil, err
+	}
+	if alternativeRepo, ok := uc.repo.(AlternativeOrderRepository); ok {
+		alternativeIDs, err := alternativeRepo.ListAlternativeOrderIDs(ctx, id)
+		if err != nil {
+			return nil, err
+		}
+		for _, alternativeID := range alternativeIDs {
+			alternative, err := uc.repo.GetOrderByID(ctx, alternativeID)
+			if err != nil {
+				return nil, err
+			}
+			if alternative.State != purchase.OrderStateDraft && alternative.State != purchase.OrderStateSent {
+				continue
+			}
+			if err := alternative.ActionCancel(); err != nil {
+				return nil, err
+			}
+			if err := uc.repo.UpdateOrder(ctx, alternative); err != nil {
+				return nil, err
+			}
+		}
 	}
 
 	var seq string

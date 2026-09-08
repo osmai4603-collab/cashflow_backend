@@ -77,6 +77,53 @@ func (h *Handler) GetOrder(w http.ResponseWriter, r *http.Request) {
 	response.JSON(w, http.StatusOK, ToPurchaseOrderResponse(order))
 }
 
+func (h *Handler) CreateAlternativeGroup(w http.ResponseWriter, r *http.Request) {
+	id, err := parseID(chi.URLParam(r, "id"))
+	if err != nil {
+		response.Error(w, platformerrors.BadRequest("invalid purchase order ID in path", err))
+		return
+	}
+	var input struct {
+		OrderIDs []int64 `json:"order_ids"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+		response.Error(w, platformerrors.BadRequest("invalid JSON request body", err))
+		return
+	}
+	if err := h.useCase.CreateAlternativeGroup(r.Context(), id, input.OrderIDs); err != nil {
+		response.Error(w, err)
+		return
+	}
+	response.JSON(w, http.StatusCreated, map[string]any{"order_id": id, "alternative_order_ids": input.OrderIDs})
+}
+
+func (h *Handler) ListAlternativeOrders(w http.ResponseWriter, r *http.Request) {
+	id, err := parseID(chi.URLParam(r, "id"))
+	if err != nil {
+		response.Error(w, platformerrors.BadRequest("invalid purchase order ID in path", err))
+		return
+	}
+	ids, err := h.useCase.ListAlternativeOrderIDs(r.Context(), id)
+	if err != nil {
+		response.Error(w, err)
+		return
+	}
+	response.JSON(w, http.StatusOK, map[string]any{"order_id": id, "alternative_order_ids": ids})
+}
+
+func (h *Handler) ClearAlternativeGroup(w http.ResponseWriter, r *http.Request) {
+	id, err := parseID(chi.URLParam(r, "id"))
+	if err != nil {
+		response.Error(w, platformerrors.BadRequest("invalid purchase order ID in path", err))
+		return
+	}
+	if err := h.useCase.ClearAlternativeGroup(r.Context(), id); err != nil {
+		response.Error(w, err)
+		return
+	}
+	response.JSON(w, http.StatusNoContent, nil)
+}
+
 // ListOrders handles GET /api/v1/purchase-orders
 func (h *Handler) ListOrders(w http.ResponseWriter, r *http.Request) {
 	pageReq := pagination.Parse(r)

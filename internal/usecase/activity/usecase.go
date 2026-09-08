@@ -80,6 +80,9 @@ var allowedModels = map[string]bool{
 	"hr.employee":      true,
 	"project.project":  true,
 	"project.task":     true,
+	"hr.expense":       true,
+	"maintenance.request":        true,
+	"fleet.vehicle.log.contract": true,
 }
 
 func (u *UseCase) Schedule(ctx context.Context, a *activity.Activity) error {

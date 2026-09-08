@@ -75,14 +75,16 @@ func (uc *SaleStockUseCase) CreateDeliveriesFromOrder(ctx context.Context, order
 	}
 
 	pickingInput := stockusecase.CreatePickingInput{
-		PickingType:   stock.PickingTypeOutgoing,
-		PartnerID:     &order.PartnerID,
-		ScheduledDate: order.DateOrder,
-		Origin:        order.Name,
-		SourceOrderID: &order.ID,
-		CompanyID:     order.CompanyID,
-		Note:          order.Note,
-		Moves:         movesInput,
+		PickingType:    stock.PickingTypeOutgoing,
+		PartnerID:      &order.PartnerID,
+		ScheduledDate:  order.DateOrder,
+		Origin:         order.Name,
+		SourceOrderID:  &order.ID,
+		CarrierID:      order.CarrierID,
+		ShippingWeight: order.ShippingWeight,
+		CompanyID:      order.CompanyID,
+		Note:           order.Note,
+		Moves:          movesInput,
 	}
 
 	picking, err := uc.stockUC.CreatePicking(ctx, pickingInput)

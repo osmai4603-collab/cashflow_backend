@@ -1,6 +1,7 @@
 package expense
 
 import (
+	"math"
 	"strings"
 	"time"
 
@@ -16,6 +17,7 @@ const (
 	StateSubmitted ExpenseState = "submitted"
 	StateApproved  ExpenseState = "approved"
 	StatePosted    ExpenseState = "posted"
+	StateInPayment ExpenseState = "in_payment"
 	StatePaid      ExpenseState = "paid"
 	StateRefused   ExpenseState = "refused"
 )
@@ -30,34 +32,36 @@ const (
 
 // Expense represents an employee expense (hr.expense in Odoo).
 type Expense struct {
-	ID                int64        `json:"id"`
-	Name              string       `json:"name"` // Description
-	Date              time.Time    `json:"date"`
-	EmployeeID        int64        `json:"employee_id"`
-	ManagerID         *int64       `json:"manager_id,omitempty"`
-	DepartmentID      *int64       `json:"department_id,omitempty"`
-	ProductID         *int64       `json:"product_id,omitempty"` // Expense Category
-	UnitAmount        float64      `json:"unit_amount"`
-	Quantity          float64      `json:"quantity"`
-	TotalAmount       float64      `json:"total_amount"`
-	UntaxedAmount     float64      `json:"untaxed_amount"`
-	TaxAmount         float64      `json:"tax_amount"`
-	CurrencyID        int64        `json:"currency_id"`
-	PaymentMode       PaymentMode  `json:"payment_mode"`
-	AccountID         *int64       `json:"account_id,omitempty"`
-	AnalyticAccountID *int64       `json:"analytic_account_id,omitempty"`
-	AccountMoveID     *int64       `json:"account_move_id,omitempty"` // Linked journal entry
-	VendorID          *int64       `json:"vendor_id,omitempty"`
-	Description       string       `json:"description,omitempty"` // Internal notes
-	State             ExpenseState `json:"state"`
-	ApprovalDate      *time.Time   `json:"approval_date,omitempty"`
-	RefuseReason      string       `json:"refuse_reason,omitempty"`
-	AttachmentIDs     []int64      `json:"attachment_ids,omitempty"`
-	SplitOriginID     *int64       `json:"split_origin_id,omitempty"` // If this expense was split from another
-	CompanyID         int64        `json:"company_id"`
-	Audit             audit.Fields `json:"audit"`
-	CreatedAt         time.Time    `json:"created_at"`
-	UpdatedAt         time.Time    `json:"updated_at"`
+	ID                  int64        `json:"id"`
+	Name                string       `json:"name"` // Description
+	Date                time.Time    `json:"date"`
+	EmployeeID          int64        `json:"employee_id"`
+	ManagerID           *int64       `json:"manager_id,omitempty"`
+	DepartmentID        *int64       `json:"department_id,omitempty"`
+	ProductID           *int64       `json:"product_id,omitempty"` // Expense Category
+	UnitAmount          float64      `json:"unit_amount"`
+	Quantity            float64      `json:"quantity"`
+	TotalAmount         float64      `json:"total_amount"`
+	UntaxedAmount       float64      `json:"untaxed_amount"`
+	TaxAmount           float64      `json:"tax_amount"`
+	CurrencyID          int64        `json:"currency_id"`
+	PaymentMode         PaymentMode  `json:"payment_mode"`
+	AccountID           *int64       `json:"account_id,omitempty"`
+	AnalyticAccountID   *int64       `json:"analytic_account_id,omitempty"`
+	AccountMoveID       *int64       `json:"account_move_id,omitempty"` // Linked journal entry
+	VendorID            *int64       `json:"vendor_id,omitempty"`
+	Description         string       `json:"description,omitempty"` // Internal notes
+	State               ExpenseState `json:"state"`
+	ApprovalDate        *time.Time   `json:"approval_date,omitempty"`
+	RefuseReason        string       `json:"refuse_reason,omitempty"`
+	AttachmentIDs       []int64      `json:"attachment_ids,omitempty"`
+	AttachmentChecksums []string     `json:"attachment_checksums,omitempty"`
+	TaxIDs              []int64      `json:"tax_ids,omitempty"`
+	SplitOriginID       *int64       `json:"split_origin_id,omitempty"` // If this expense was split from another
+	CompanyID           int64        `json:"company_id"`
+	Audit               audit.Fields `json:"audit"`
+	CreatedAt           time.Time    `json:"created_at"`
+	UpdatedAt           time.Time    `json:"updated_at"`
 }
 
 // Validate checks business invariants for the Expense entity.
@@ -79,7 +83,7 @@ func (e *Expense) Validate() error {
 		e.Quantity = 1.0
 	}
 
-	if e.TotalAmount < 0 {
+	if math.IsNaN(e.TotalAmount) || math.IsInf(e.TotalAmount, 0) || e.TotalAmount < 0 {
 		return platformerrors.Validation("total amount cannot be negative", map[string]string{
 			"total_amount": "must be greater than or equal to 0",
 		})
@@ -88,18 +92,42 @@ func (e *Expense) Validate() error {
 	if e.PaymentMode == "" {
 		e.PaymentMode = PaymentOwnAccount
 	}
+	if e.PaymentMode != PaymentOwnAccount && e.PaymentMode != PaymentCompanyAccount {
+		return platformerrors.Validation("invalid expense payment mode", map[string]string{
+			"payment_mode": "must be own_account or company_account",
+		})
+	}
 
 	if e.State == "" {
 		e.State = StateDraft
+	}
+	if !isValidState(e.State) {
+		return platformerrors.Validation("invalid expense state", map[string]string{
+			"state": "must be a valid expense state",
+		})
+	}
+	if e.State != StateDraft && math.Abs(e.TotalAmount) < 0.00005 {
+		return platformerrors.Validation("only draft expenses can have a total of zero", map[string]string{
+			"total_amount": "must be greater than zero after submission",
+		})
 	}
 
 	return nil
 }
 
+func isValidState(state ExpenseState) bool {
+	switch state {
+	case StateDraft, StateSubmitted, StateApproved, StatePosted, StateInPayment, StatePaid, StateRefused:
+		return true
+	default:
+		return false
+	}
+}
+
 // ExpenseSplitRequest holds the data needed to split an expense.
 type ExpenseSplitRequest struct {
-	ExpenseID int64                `json:"expense_id"`
-	Splits    []ExpenseSplitLine   `json:"splits"`
+	ExpenseID int64              `json:"expense_id"`
+	Splits    []ExpenseSplitLine `json:"splits"`
 }
 
 type ExpenseSplitLine struct {
@@ -108,4 +136,5 @@ type ExpenseSplitLine struct {
 	TotalAmount       float64 `json:"total_amount"`
 	AccountID         *int64  `json:"account_id,omitempty"`
 	AnalyticAccountID *int64  `json:"analytic_account_id,omitempty"`
+	TaxIDs            []int64 `json:"tax_ids,omitempty"`
 }

@@ -446,9 +446,11 @@ func (r *PostgresRepo) CreatePicking(ctx context.Context, picking *stock.StockPi
 		query := `
 			INSERT INTO stock_pickings (
 				name, picking_type, state, partner_id, location_id, location_dest_id,
-				scheduled_date, date_done, origin, source_order_id, procurement_group_id, company_id, note, active, created_at, updated_at
+				scheduled_date, date_done, origin, source_order_id, carrier_id,
+				carrier_tracking_ref, weight, shipping_weight, number_of_packages,
+				procurement_group_id, company_id, note, active, created_at, updated_at
 			) VALUES (
-				$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, true, NOW(), NOW()
+				$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, true, NOW(), NOW()
 			) RETURNING id, created_at, updated_at
 		`
 		if picking.ScheduledDate.IsZero() {
@@ -461,7 +463,9 @@ func (r *PostgresRepo) CreatePicking(ctx context.Context, picking *stock.StockPi
 		err := tx.QueryRow(ctx, query,
 			picking.Name, string(picking.PickingType), string(picking.State), picking.PartnerID,
 			picking.LocationID, picking.LocationDestID, picking.ScheduledDate, picking.DateDone,
-			picking.Origin, picking.SourceOrderID, picking.ProcurementGroupID, picking.CompanyID, picking.Note,
+			picking.Origin, picking.SourceOrderID, picking.CarrierID, picking.CarrierTrackingRef,
+			picking.Weight, picking.ShippingWeight, picking.NumberOfPackages,
+			picking.ProcurementGroupID, picking.CompanyID, picking.Note,
 		).Scan(&picking.ID, &picking.CreatedAt, &picking.UpdatedAt)
 
 		if err != nil {
@@ -511,7 +515,8 @@ func (r *PostgresRepo) CreatePicking(ctx context.Context, picking *stock.StockPi
 func (r *PostgresRepo) GetPickingByID(ctx context.Context, id int64) (*stock.StockPicking, error) {
 	query := `
 		SELECT id, name, picking_type, state, partner_id, location_id, location_dest_id,
-		       scheduled_date, date_done, origin, source_order_id, procurement_group_id, company_id, note, active, created_at, updated_at
+		       scheduled_date, date_done, origin, source_order_id, carrier_id, carrier_tracking_ref,
+		       weight, shipping_weight, number_of_packages, procurement_group_id, company_id, note, active, created_at, updated_at
 		FROM stock_pickings
 		WHERE id = $1 AND active = true
 	`
@@ -519,7 +524,8 @@ func (r *PostgresRepo) GetPickingByID(ctx context.Context, id int64) (*stock.Sto
 	var ptStr, stateStr string
 	err := r.pool.QueryRow(ctx, query, id).Scan(
 		&p.ID, &p.Name, &ptStr, &stateStr, &p.PartnerID, &p.LocationID, &p.LocationDestID,
-		&p.ScheduledDate, &p.DateDone, &p.Origin, &p.SourceOrderID, &p.ProcurementGroupID, &p.CompanyID, &p.Note, &p.Active,
+		&p.ScheduledDate, &p.DateDone, &p.Origin, &p.SourceOrderID, &p.CarrierID, &p.CarrierTrackingRef,
+		&p.Weight, &p.ShippingWeight, &p.NumberOfPackages, &p.ProcurementGroupID, &p.CompanyID, &p.Note, &p.Active,
 		&p.CreatedAt, &p.UpdatedAt,
 	)
 	if err != nil {
@@ -542,7 +548,8 @@ func (r *PostgresRepo) GetPickingByID(ctx context.Context, id int64) (*stock.Sto
 func (r *PostgresRepo) GetPickingByName(ctx context.Context, name string) (*stock.StockPicking, error) {
 	query := `
 		SELECT id, name, picking_type, state, partner_id, location_id, location_dest_id,
-		       scheduled_date, date_done, origin, source_order_id, procurement_group_id, company_id, note, active, created_at, updated_at
+		       scheduled_date, date_done, origin, source_order_id, carrier_id, carrier_tracking_ref,
+		       weight, shipping_weight, number_of_packages, procurement_group_id, company_id, note, active, created_at, updated_at
 		FROM stock_pickings
 		WHERE name = $1 AND active = true
 		LIMIT 1
@@ -551,7 +558,8 @@ func (r *PostgresRepo) GetPickingByName(ctx context.Context, name string) (*stoc
 	var ptStr, stateStr string
 	err := r.pool.QueryRow(ctx, query, name).Scan(
 		&p.ID, &p.Name, &ptStr, &stateStr, &p.PartnerID, &p.LocationID, &p.LocationDestID,
-		&p.ScheduledDate, &p.DateDone, &p.Origin, &p.SourceOrderID, &p.ProcurementGroupID, &p.CompanyID, &p.Note, &p.Active,
+		&p.ScheduledDate, &p.DateDone, &p.Origin, &p.SourceOrderID, &p.CarrierID, &p.CarrierTrackingRef,
+		&p.Weight, &p.ShippingWeight, &p.NumberOfPackages, &p.ProcurementGroupID, &p.CompanyID, &p.Note, &p.Active,
 		&p.CreatedAt, &p.UpdatedAt,
 	)
 	if err != nil {
@@ -577,14 +585,16 @@ func (r *PostgresRepo) UpdatePicking(ctx context.Context, picking *stock.StockPi
 			UPDATE stock_pickings
 			SET name = $1, state = $2, partner_id = $3, location_id = $4, location_dest_id = $5,
 			    scheduled_date = $6, date_done = $7, origin = $8, source_order_id = $9,
-			    procurement_group_id = $10, company_id = $11, note = $12, updated_at = NOW()
-			WHERE id = $13 AND active = true
+			    carrier_id = $10, carrier_tracking_ref = $11, weight = $12, shipping_weight = $13,
+			    number_of_packages = $14, procurement_group_id = $15, company_id = $16, note = $17, updated_at = NOW()
+			WHERE id = $18 AND active = true
 			RETURNING updated_at
 		`
 		err := tx.QueryRow(ctx, query,
 			picking.Name, string(picking.State), picking.PartnerID, picking.LocationID, picking.LocationDestID,
 			picking.ScheduledDate, picking.DateDone, picking.Origin, picking.SourceOrderID,
-			picking.ProcurementGroupID, picking.CompanyID, picking.Note, picking.ID,
+			picking.CarrierID, picking.CarrierTrackingRef, picking.Weight, picking.ShippingWeight,
+			picking.NumberOfPackages, picking.ProcurementGroupID, picking.CompanyID, picking.Note, picking.ID,
 		).Scan(&picking.UpdatedAt)
 
 		if err != nil {

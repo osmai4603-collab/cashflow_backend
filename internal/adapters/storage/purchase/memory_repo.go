@@ -17,23 +17,75 @@ import (
 
 // MemoryRepo is a thread-safe, high-fidelity in-memory implementation of purchase.Repository.
 type MemoryRepo struct {
-	mu          sync.RWMutex
-	orders      map[int64]*purchase.PurchaseOrder
-	orderLines  map[int64]*purchase.PurchaseOrderLine
-	orderBills  map[int64][]int64
-	seqCounter  map[int]int64
-	lastOrderID int64
-	lastLineID  int64
+	mu                sync.RWMutex
+	orders            map[int64]*purchase.PurchaseOrder
+	orderLines        map[int64]*purchase.PurchaseOrderLine
+	orderBills        map[int64][]int64
+	alternativeGroups map[int64]map[int64]struct{}
+	seqCounter        map[int]int64
+	lastOrderID       int64
+	lastLineID        int64
 }
 
 // NewMemoryRepo initializes an empty MemoryRepo.
 func NewMemoryRepo() *MemoryRepo {
 	return &MemoryRepo{
-		orders:     make(map[int64]*purchase.PurchaseOrder),
-		orderLines: make(map[int64]*purchase.PurchaseOrderLine),
-		orderBills: make(map[int64][]int64),
-		seqCounter: make(map[int]int64),
+		orders:            make(map[int64]*purchase.PurchaseOrder),
+		orderLines:        make(map[int64]*purchase.PurchaseOrderLine),
+		orderBills:        make(map[int64][]int64),
+		alternativeGroups: make(map[int64]map[int64]struct{}),
+		seqCounter:        make(map[int]int64),
 	}
+}
+
+func (r *MemoryRepo) CreateAlternativeGroup(_ context.Context, orderID int64, alternativeOrderIDs []int64) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if _, ok := r.orders[orderID]; !ok {
+		return platformerrors.NotFound(fmt.Sprintf("purchase order with id %d not found", orderID))
+	}
+	group := make(map[int64]struct{}, len(alternativeOrderIDs)+1)
+	group[orderID] = struct{}{}
+	for _, alternativeID := range alternativeOrderIDs {
+		if _, ok := r.orders[alternativeID]; !ok {
+			return platformerrors.NotFound(fmt.Sprintf("purchase order with id %d not found", alternativeID))
+		}
+		group[alternativeID] = struct{}{}
+	}
+	for id := range group {
+		r.alternativeGroups[id] = group
+	}
+	return nil
+}
+
+func (r *MemoryRepo) ListAlternativeOrderIDs(_ context.Context, orderID int64) ([]int64, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	group, ok := r.alternativeGroups[orderID]
+	if !ok {
+		return []int64{}, nil
+	}
+	result := make([]int64, 0, len(group))
+	for id := range group {
+		if id != orderID {
+			result = append(result, id)
+		}
+	}
+	sort.Slice(result, func(i, j int) bool { return result[i] < result[j] })
+	return result, nil
+}
+
+func (r *MemoryRepo) ClearAlternativeGroup(_ context.Context, orderID int64) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	group, ok := r.alternativeGroups[orderID]
+	if !ok {
+		return nil
+	}
+	for id := range group {
+		delete(r.alternativeGroups, id)
+	}
+	return nil
 }
 
 // CreateOrder persists a new purchase order and its lines atomically.

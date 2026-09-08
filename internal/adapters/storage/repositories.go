@@ -9,8 +9,12 @@ import (
 	companystorage "cashflow_backend/internal/adapters/storage/company"
 	crmstorage "cashflow_backend/internal/adapters/storage/crm"
 	currencystorage "cashflow_backend/internal/adapters/storage/currency"
+	expensestorage "cashflow_backend/internal/adapters/storage/expense"
+	fleetstorage "cashflow_backend/internal/adapters/storage/fleet"
 	groupstorage "cashflow_backend/internal/adapters/storage/group"
 	hrstorage "cashflow_backend/internal/adapters/storage/hr"
+	loyaltystorage "cashflow_backend/internal/adapters/storage/loyalty"
+	maintenancestorage "cashflow_backend/internal/adapters/storage/maintenance"
 	mrpstorage "cashflow_backend/internal/adapters/storage/mrp"
 	partnerstorage "cashflow_backend/internal/adapters/storage/partner"
 	paymentstorage "cashflow_backend/internal/adapters/storage/payment"
@@ -21,6 +25,7 @@ import (
 	sequencestorage "cashflow_backend/internal/adapters/storage/sequence"
 	stockstorage "cashflow_backend/internal/adapters/storage/stock"
 	userstorage "cashflow_backend/internal/adapters/storage/user"
+	deliverystorage "cashflow_backend/internal/adapters/storage/delivery"
 	"cashflow_backend/internal/domain/accounting"
 	"cashflow_backend/internal/domain/activity"
 	"cashflow_backend/internal/domain/analytic"
@@ -29,8 +34,13 @@ import (
 	"cashflow_backend/internal/domain/company"
 	"cashflow_backend/internal/domain/crm"
 	"cashflow_backend/internal/domain/currency"
+	"cashflow_backend/internal/domain/expense"
+	"cashflow_backend/internal/domain/delivery"
+	"cashflow_backend/internal/domain/fleet"
 	"cashflow_backend/internal/domain/group"
 	"cashflow_backend/internal/domain/hr"
+	"cashflow_backend/internal/domain/loyalty"
+	"cashflow_backend/internal/domain/maintenance"
 	"cashflow_backend/internal/domain/mrp"
 	"cashflow_backend/internal/domain/partner"
 	"cashflow_backend/internal/domain/payment"
@@ -55,6 +65,7 @@ type CashflowRepositories struct {
 	Purchase      purchase.Repository
 	Stock         stock.Repository
 	CRM           crm.Repository
+	Expense       expense.Repository
 	Payment       payment.Repository
 	HR            hr.Repository
 	Company       company.Repository
@@ -68,6 +79,11 @@ type CashflowRepositories struct {
 	Permission    group.PermissionRepository
 	MRP           mrp.Repository
 	Requisition   purchaseusecase.RequisitionRepository
+	SupplierInfo  purchaseusecase.SupplierInfoRepository
+	Maintenance   maintenance.Repository
+	Fleet         fleet.Repository
+	Loyalty       loyalty.Repository
+	Delivery      delivery.Repository
 	Activity      activity.ActivityRepository
 	ActivityType  activity.ActivityTypeRepository
 	ActivityMsg   activity.MessageRepository
@@ -77,6 +93,7 @@ type CashflowRepositories struct {
 
 func NewFromPostgres(pool *pgxpool.Pool) *CashflowRepositories {
 	activityRepo := activitystorage.NewPostgresRepo(pool)
+	requisitionRepo := purchasestorage.NewRequisitionPostgresRepo(pool)
 	return &CashflowRepositories{
 		Partner:       partnerstorage.NewPostgresRepo(pool),
 		Product:       productstorage.NewPostgresRepo(pool),
@@ -86,6 +103,7 @@ func NewFromPostgres(pool *pgxpool.Pool) *CashflowRepositories {
 		Purchase:      purchasestorage.NewPostgresRepo(pool),
 		Stock:         stockstorage.NewPostgresRepo(pool),
 		CRM:           crmstorage.NewPostgresRepo(pool),
+		Expense:       expensestorage.NewPostgresRepo(pool),
 		Payment:       paymentstorage.NewPostgresRepo(pool),
 		HR:            hrstorage.NewPostgresRepo(pool),
 		Company:       companystorage.NewPostgresRepo(pool),
@@ -98,7 +116,12 @@ func NewFromPostgres(pool *pgxpool.Pool) *CashflowRepositories {
 		Project:       projectstorage.NewPostgresRepo(pool),
 		Permission:    groupstorage.NewPostgresRepo(pool),
 		MRP:           mrpstorage.NewPostgresRepo(pool),
-		Requisition:   purchasestorage.NewRequisitionPostgresRepo(pool),
+		Requisition:   requisitionRepo,
+		SupplierInfo:  requisitionRepo,
+		Maintenance:   maintenancestorage.NewPostgresRepo(pool),
+		Fleet:         fleetstorage.NewPostgresRepo(pool),
+		Loyalty:       loyaltystorage.NewPostgresRepo(pool),
+		Delivery:      deliverystorage.NewPostgresRepository(pool),
 		Activity:      activityRepo,
 		ActivityType:  activityRepo,
 		ActivityMsg:   activityRepo,
@@ -109,6 +132,7 @@ func NewFromPostgres(pool *pgxpool.Pool) *CashflowRepositories {
 
 func NewFromMemory() *CashflowRepositories {
 	activityRepo := activitystorage.NewMemoryRepo()
+	requisitionRepo := purchasestorage.NewMemoryRequisitionRepo()
 	return &CashflowRepositories{
 		Partner:       partnerstorage.NewMemoryRepo(),
 		Product:       productstorage.NewMemoryRepo(),
@@ -118,6 +142,7 @@ func NewFromMemory() *CashflowRepositories {
 		Purchase:      purchasestorage.NewMemoryRepo(),
 		Stock:         stockstorage.NewMemoryRepo(),
 		CRM:           crmstorage.NewMemoryRepo(),
+		Expense:       expensestorage.NewMemoryRepo(),
 		Payment:       paymentstorage.NewMemoryRepo(),
 		HR:            hrstorage.NewMemoryRepo(),
 		Company:       companystorage.NewMemoryRepo(),
@@ -130,7 +155,12 @@ func NewFromMemory() *CashflowRepositories {
 		Project:       projectstorage.NewMemoryRepo(),
 		Permission:    groupstorage.NewMemoryRepo(),
 		MRP:           mrpstorage.NewMemoryRepo(),
-		Requisition:   purchasestorage.NewMemoryRequisitionRepo(),
+		Requisition:   requisitionRepo,
+		SupplierInfo:  requisitionRepo,
+		Maintenance:   maintenancestorage.NewMemoryRepo(),
+		Fleet:         fleetstorage.NewMemoryRepo(),
+		Loyalty:       loyaltystorage.NewMemoryRepo(),
+		Delivery:      deliverystorage.NewMemoryRepository(),
 		Activity:      activityRepo,
 		ActivityType:  activityRepo,
 		ActivityMsg:   activityRepo,

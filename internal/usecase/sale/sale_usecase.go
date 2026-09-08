@@ -26,6 +26,15 @@ type AccountingService interface {
 	GetMove(ctx context.Context, id int64) (*accounting.AccountMove, error)
 }
 
+// LoyaltyService abstracts the loyalty & rewards integration needed by sales.
+// It is defined here (not importing the loyalty usecase) to keep the dependency
+// direction acyclic: sale → (interface) loyalty → sale.
+type LoyaltyService interface {
+	SettleOrder(ctx context.Context, order *sale.SaleOrder) error
+	ReverseOrder(ctx context.Context, order *sale.SaleOrder) error
+	ReleaseOrder(ctx context.Context, order *sale.SaleOrder) error
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Input DTOs
 // ─────────────────────────────────────────────────────────────────────────────
@@ -89,6 +98,7 @@ type UseCase struct {
 	accountingUC   AccountingService
 	stockRepo      stock.Repository
 	stockUC        *stockusecase.UseCase
+	loyaltyUC      LoyaltyService
 	logger         *slog.Logger
 }
 
@@ -104,12 +114,15 @@ func New(
 ) *UseCase {
 	var stockRepo stock.Repository
 	var stockUC *stockusecase.UseCase
+	var loyaltyUC LoyaltyService
 	for _, opt := range optional {
 		switch v := opt.(type) {
 		case stock.Repository:
 			stockRepo = v
 		case *stockusecase.UseCase:
 			stockUC = v
+		case LoyaltyService:
+			loyaltyUC = v
 		}
 	}
 
@@ -121,6 +134,7 @@ func New(
 		accountingUC:   accountingUC,
 		stockRepo:      stockRepo,
 		stockUC:        stockUC,
+		loyaltyUC:      loyaltyUC,
 		logger:         logger,
 	}
 }
@@ -337,6 +351,14 @@ func (uc *UseCase) ConfirmOrder(ctx context.Context, id int64) (*sale.SaleOrder,
 		}
 	}
 
+	// Phase 23: Loyalty & Rewards — settle coupons and add earned points.
+	if uc.loyaltyUC != nil {
+		if err := uc.loyaltyUC.SettleOrder(ctx, order); err != nil {
+			uc.logger.ErrorContext(ctx, "failed to settle loyalty for sale order", "order_id", order.ID, "error", err)
+			return nil, fmt.Errorf("order confirmed but loyalty settlement failed: %w", err)
+		}
+	}
+
 	uc.logger.InfoContext(ctx, "sale order confirmed", "id", order.ID, "name", order.Name)
 	return order, nil
 }
@@ -348,12 +370,27 @@ func (uc *UseCase) CancelOrder(ctx context.Context, id int64) (*sale.SaleOrder, 
 		return nil, err
 	}
 
+	preState := order.State
 	if err := order.ActionCancel(); err != nil {
 		return nil, err
 	}
 
 	if err := uc.repo.UpdateOrder(ctx, order); err != nil {
 		return nil, err
+	}
+
+	// Phase 23: Loyalty & Rewards — settle confirmed orders, reverse confirmed ones.
+	if uc.loyaltyUC != nil {
+		var err error
+		if preState == sale.OrderStateSale || preState == sale.OrderStateDone {
+			err = uc.loyaltyUC.ReverseOrder(ctx, order)
+		} else {
+			err = uc.loyaltyUC.ReleaseOrder(ctx, order)
+		}
+		if err != nil {
+			uc.logger.ErrorContext(ctx, "failed to reverse loyalty for sale order", "order_id", order.ID, "error", err)
+			return nil, fmt.Errorf("order cancelled but loyalty reversal failed: %w", err)
+		}
 	}
 
 	uc.logger.InfoContext(ctx, "sale order cancelled", "id", order.ID, "name", order.Name)

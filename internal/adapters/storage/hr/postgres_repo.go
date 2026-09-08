@@ -385,7 +385,7 @@ func (r *PostgresRepo) CreateEmployee(ctx context.Context, emp *hr.Employee) err
 		INSERT INTO hr_employees (
 			name, partner_id, department_id, job_id, job_title, manager_id,
 			work_email, work_phone, work_location, hire_date, gender, marital_status,
-			identification_id, bank_account_no, company_id, active,
+			expense_manager_id, identification_id, bank_account_no, company_id, active,
 			overtime_employee_threshold, created_at, updated_at
 		) VALUES (
 			$1, $2, $3, $4, $5, $6,
@@ -397,6 +397,7 @@ func (r *PostgresRepo) CreateEmployee(ctx context.Context, emp *hr.Employee) err
 	return r.pool.QueryRow(ctx, query,
 		emp.Name, emp.PartnerID, emp.DepartmentID, emp.JobID, emp.JobTitle, emp.ManagerID,
 		emp.WorkEmail, emp.WorkPhone, emp.WorkLocation, emp.HireDate, emp.Gender, emp.MaritalStatus,
+		emp.ExpenseManagerID,
 		emp.IdentificationID, emp.BankAccountNo, emp.CompanyID, emp.Active,
 		emp.OvertimeEmployeeThreshold,
 	).Scan(&emp.ID, &emp.CreatedAt, &emp.UpdatedAt)
@@ -407,7 +408,7 @@ func (r *PostgresRepo) GetEmployeeByID(ctx context.Context, id int64) (*hr.Emplo
 		SELECT
 			id, name, partner_id, department_id, job_id, job_title, manager_id,
 			work_email, work_phone, work_location, hire_date, gender, marital_status,
-			identification_id, bank_account_no, company_id, active,
+			expense_manager_id, identification_id, bank_account_no, company_id, active,
 			overtime_employee_threshold,
 			created_at, updated_at, created_by, updated_by
 		FROM hr_employees
@@ -417,7 +418,7 @@ func (r *PostgresRepo) GetEmployeeByID(ctx context.Context, id int64) (*hr.Emplo
 	err := r.pool.QueryRow(ctx, query, id).Scan(
 		&e.ID, &e.Name, &e.PartnerID, &e.DepartmentID, &e.JobID, &e.JobTitle, &e.ManagerID,
 		&e.WorkEmail, &e.WorkPhone, &e.WorkLocation, &e.HireDate, &e.Gender, &e.MaritalStatus,
-		&e.IdentificationID, &e.BankAccountNo, &e.CompanyID, &e.Active,
+		&e.ExpenseManagerID, &e.IdentificationID, &e.BankAccountNo, &e.CompanyID, &e.Active,
 		&e.OvertimeEmployeeThreshold,
 		&e.CreatedAt, &e.UpdatedAt, &e.CreatedBy, &e.UpdatedBy,
 	)
@@ -435,7 +436,7 @@ func (r *PostgresRepo) GetEmployeeByPartnerID(ctx context.Context, partnerID int
 		SELECT
 			id, name, partner_id, department_id, job_id, job_title, manager_id,
 			work_email, work_phone, work_location, hire_date, gender, marital_status,
-			identification_id, bank_account_no, company_id, active,
+			expense_manager_id, identification_id, bank_account_no, company_id, active,
 			overtime_employee_threshold,
 			created_at, updated_at, created_by, updated_by
 		FROM hr_employees
@@ -446,7 +447,7 @@ func (r *PostgresRepo) GetEmployeeByPartnerID(ctx context.Context, partnerID int
 	err := r.pool.QueryRow(ctx, query, partnerID).Scan(
 		&e.ID, &e.Name, &e.PartnerID, &e.DepartmentID, &e.JobID, &e.JobTitle, &e.ManagerID,
 		&e.WorkEmail, &e.WorkPhone, &e.WorkLocation, &e.HireDate, &e.Gender, &e.MaritalStatus,
-		&e.IdentificationID, &e.BankAccountNo, &e.CompanyID, &e.Active,
+		&e.ExpenseManagerID, &e.IdentificationID, &e.BankAccountNo, &e.CompanyID, &e.Active,
 		&e.OvertimeEmployeeThreshold,
 		&e.CreatedAt, &e.UpdatedAt, &e.CreatedBy, &e.UpdatedBy,
 	)
@@ -464,16 +465,16 @@ func (r *PostgresRepo) UpdateEmployee(ctx context.Context, emp *hr.Employee) err
 		UPDATE hr_employees
 		SET name = $1, partner_id = $2, department_id = $3, job_id = $4, job_title = $5,
 		    manager_id = $6, work_email = $7, work_phone = $8, work_location = $9,
-		    hire_date = $10, gender = $11, marital_status = $12, identification_id = $13,
-		    bank_account_no = $14, company_id = $15, active = $16,
-		    overtime_employee_threshold = $17, updated_at = NOW()
+		    hire_date = $10, gender = $11, marital_status = $12, expense_manager_id = $13,
+		    identification_id = $14, bank_account_no = $15, company_id = $16, active = $17,
+		    overtime_employee_threshold = $18, updated_at = NOW()
 		WHERE id = $18
 		RETURNING updated_at
 	`
 	err := r.pool.QueryRow(ctx, query,
 		emp.Name, emp.PartnerID, emp.DepartmentID, emp.JobID, emp.JobTitle,
 		emp.ManagerID, emp.WorkEmail, emp.WorkPhone, emp.WorkLocation,
-		emp.HireDate, emp.Gender, emp.MaritalStatus, emp.IdentificationID,
+		emp.HireDate, emp.Gender, emp.MaritalStatus, emp.ExpenseManagerID, emp.IdentificationID,
 		emp.BankAccountNo, emp.CompanyID, emp.Active, emp.OvertimeEmployeeThreshold, emp.ID,
 	).Scan(&emp.UpdatedAt)
 	if err != nil {
@@ -523,7 +524,7 @@ func (r *PostgresRepo) ListEmployees(ctx context.Context, f *filter.Filter, page
 		SELECT
 			id, name, partner_id, department_id, job_id, job_title, manager_id,
 			work_email, work_phone, work_location, hire_date, gender, marital_status,
-			identification_id, bank_account_no, company_id, active,
+			expense_manager_id, identification_id, bank_account_no, company_id, active,
 			overtime_employee_threshold,
 			created_at, updated_at, created_by, updated_by
 		FROM hr_employees
@@ -545,7 +546,7 @@ func (r *PostgresRepo) ListEmployees(ctx context.Context, f *filter.Filter, page
 		if err := rows.Scan(
 			&e.ID, &e.Name, &e.PartnerID, &e.DepartmentID, &e.JobID, &e.JobTitle, &e.ManagerID,
 			&e.WorkEmail, &e.WorkPhone, &e.WorkLocation, &e.HireDate, &e.Gender, &e.MaritalStatus,
-			&e.IdentificationID, &e.BankAccountNo, &e.CompanyID, &e.Active,
+			&e.ExpenseManagerID, &e.IdentificationID, &e.BankAccountNo, &e.CompanyID, &e.Active,
 			&e.OvertimeEmployeeThreshold,
 			&e.CreatedAt, &e.UpdatedAt, &e.CreatedBy, &e.UpdatedBy,
 		); err != nil {

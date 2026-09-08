@@ -1,0 +1,1 @@
+DELETE FROM res_group_permissions WHERE model = 'hr.expense';

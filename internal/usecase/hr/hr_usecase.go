@@ -348,6 +348,7 @@ type CreateEmployeeInput struct {
 	JobID             *int64     `json:"job_id"`
 	JobTitle          string     `json:"job_title"`
 	ManagerID         *int64     `json:"manager_id"`
+	ExpenseManagerID  *int64     `json:"expense_manager_id"`
 	WorkEmail         string     `json:"work_email"`
 	WorkPhone         string     `json:"work_phone"`
 	WorkLocation      string     `json:"work_location"`
@@ -367,6 +368,7 @@ type UpdateEmployeeInput struct {
 	JobID            *int64     `json:"job_id"`
 	JobTitle         *string    `json:"job_title"`
 	ManagerID        *int64     `json:"manager_id"`
+	ExpenseManagerID *int64     `json:"expense_manager_id"`
 	WorkEmail        *string    `json:"work_email"`
 	WorkPhone        *string    `json:"work_phone"`
 	WorkLocation     *string    `json:"work_location"`
@@ -387,6 +389,7 @@ func (u *UseCase) CreateEmployee(ctx context.Context, in CreateEmployeeInput) (*
 		JobID:            in.JobID,
 		JobTitle:         strings.TrimSpace(in.JobTitle),
 		ManagerID:        in.ManagerID,
+		ExpenseManagerID: in.ExpenseManagerID,
 		WorkEmail:        strings.TrimSpace(in.WorkEmail),
 		WorkPhone:        strings.TrimSpace(in.WorkPhone),
 		WorkLocation:     strings.TrimSpace(in.WorkLocation),
@@ -457,6 +460,13 @@ func (u *UseCase) CreateEmployee(ctx context.Context, in CreateEmployeeInput) (*
 			})
 		}
 	}
+	if emp.ExpenseManagerID != nil && *emp.ExpenseManagerID > 0 {
+		if _, err := u.repo.GetEmployeeByID(ctx, *emp.ExpenseManagerID); err != nil {
+			return nil, platformerrors.Validation("expense manager not found", map[string]string{
+				"expense_manager_id": fmt.Sprintf("employee %d does not exist", *emp.ExpenseManagerID),
+			})
+		}
+	}
 
 	if err := u.repo.CreateEmployee(ctx, emp); err != nil {
 		u.logger.Error("failed to create employee", "error", err, "name", emp.Name)
@@ -500,6 +510,14 @@ func (u *UseCase) UpdateEmployee(ctx context.Context, id int64, in UpdateEmploye
 		}
 		emp.ManagerID = in.ManagerID
 	}
+	if in.ExpenseManagerID != nil {
+		if *in.ExpenseManagerID == id {
+			return nil, platformerrors.Validation("an employee cannot manage their own expenses", map[string]string{
+				"expense_manager_id": "invalid expense manager reference",
+			})
+		}
+		emp.ExpenseManagerID = in.ExpenseManagerID
+	}
 	if in.WorkEmail != nil {
 		emp.WorkEmail = strings.TrimSpace(*in.WorkEmail)
 	}
@@ -540,6 +558,13 @@ func (u *UseCase) UpdateEmployee(ctx context.Context, id int64, in UpdateEmploye
 		if _, err := u.repo.GetEmployeeByID(ctx, *emp.ManagerID); err != nil {
 			return nil, platformerrors.Validation("manager not found", map[string]string{
 				"manager_id": fmt.Sprintf("employee %d does not exist", *emp.ManagerID),
+			})
+		}
+	}
+	if emp.ExpenseManagerID != nil && *emp.ExpenseManagerID > 0 {
+		if _, err := u.repo.GetEmployeeByID(ctx, *emp.ExpenseManagerID); err != nil {
+			return nil, platformerrors.Validation("expense manager not found", map[string]string{
+				"expense_manager_id": fmt.Sprintf("employee %d does not exist", *emp.ExpenseManagerID),
 			})
 		}
 	}

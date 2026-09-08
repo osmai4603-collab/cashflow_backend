@@ -118,3 +118,37 @@ func TestMemoryRepo_CRUD(t *testing.T) {
 		t.Fatalf("expected error fetching deleted order")
 	}
 }
+
+func TestMemoryRepoAlternativeGroupLifecycle(t *testing.T) {
+	ctx := context.Background()
+	repo := purchasestorage.NewMemoryRepo()
+	orders := make([]*purchase.PurchaseOrder, 3)
+	for i := range orders {
+		orders[i] = &purchase.PurchaseOrder{
+			Name:          "PO/ALT/" + string(rune('1'+i)),
+			PartnerID:     12,
+			DateOrder:     time.Now().UTC(),
+			State:         purchase.OrderStateDraft,
+			Currency:      "USD",
+			InvoiceStatus: purchase.InvoiceStatusNo,
+			Lines:         []purchase.PurchaseOrderLine{{ProductID: int64(i + 1), Name: "Product", ProductQty: 1, UnitPrice: 10}},
+		}
+		if err := repo.CreateOrder(ctx, orders[i]); err != nil {
+			t.Fatalf("CreateOrder() error = %v", err)
+		}
+	}
+	if err := repo.CreateAlternativeGroup(ctx, orders[0].ID, []int64{orders[1].ID, orders[2].ID}); err != nil {
+		t.Fatalf("CreateAlternativeGroup() error = %v", err)
+	}
+	ids, err := repo.ListAlternativeOrderIDs(ctx, orders[0].ID)
+	if err != nil || len(ids) != 2 || ids[0] != orders[1].ID || ids[1] != orders[2].ID {
+		t.Fatalf("unexpected alternative IDs: %v, %v", ids, err)
+	}
+	if err := repo.ClearAlternativeGroup(ctx, orders[0].ID); err != nil {
+		t.Fatalf("ClearAlternativeGroup() error = %v", err)
+	}
+	ids, err = repo.ListAlternativeOrderIDs(ctx, orders[1].ID)
+	if err != nil || len(ids) != 0 {
+		t.Fatalf("expected alternatives to be cleared, got %v, %v", ids, err)
+	}
+}

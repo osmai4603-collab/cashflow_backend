@@ -176,6 +176,7 @@ type CreateEmployeeRequest struct {
 	JobID             *int64     `json:"job_id"`
 	JobTitle          string     `json:"job_title"`
 	ManagerID         *int64     `json:"manager_id"`
+	ExpenseManagerID  *int64     `json:"expense_manager_id"`
 	WorkEmail         string     `json:"work_email"`
 	WorkPhone         string     `json:"work_phone"`
 	WorkLocation      string     `json:"work_location"`
@@ -196,6 +197,7 @@ func (r CreateEmployeeRequest) ToInput() hrusecase.CreateEmployeeInput {
 		JobID:             r.JobID,
 		JobTitle:          r.JobTitle,
 		ManagerID:         r.ManagerID,
+		ExpenseManagerID:  r.ExpenseManagerID,
 		WorkEmail:         r.WorkEmail,
 		WorkPhone:         r.WorkPhone,
 		WorkLocation:      r.WorkLocation,
@@ -226,6 +228,7 @@ type UpdateEmployeeRequest struct {
 	BankAccountNo    *string    `json:"bank_account_no"`
 	CompanyID        *int64     `json:"company_id"`
 	Active           *bool      `json:"active"`
+	ExpenseManagerID *int64     `json:"expense_manager_id"`
 }
 
 func (r UpdateEmployeeRequest) ToInput() hrusecase.UpdateEmployeeInput {
@@ -236,6 +239,7 @@ func (r UpdateEmployeeRequest) ToInput() hrusecase.UpdateEmployeeInput {
 		JobID:            r.JobID,
 		JobTitle:         r.JobTitle,
 		ManagerID:        r.ManagerID,
+		ExpenseManagerID: r.ExpenseManagerID,
 		WorkEmail:        r.WorkEmail,
 		WorkPhone:        r.WorkPhone,
 		WorkLocation:     r.WorkLocation,
@@ -269,6 +273,7 @@ type EmployeeResponse struct {
 	Active           bool       `json:"active"`
 	CreatedAt        time.Time  `json:"created_at"`
 	UpdatedAt        time.Time  `json:"updated_at"`
+	ExpenseManagerID *int64     `json:"expense_manager_id,omitempty"`
 }
 
 func ToEmployeeResponse(e *hr.Employee) EmployeeResponse {
@@ -280,6 +285,7 @@ func ToEmployeeResponse(e *hr.Employee) EmployeeResponse {
 		JobID:            e.JobID,
 		JobTitle:         e.JobTitle,
 		ManagerID:        e.ManagerID,
+		ExpenseManagerID: e.ExpenseManagerID,
 		WorkEmail:        e.WorkEmail,
 		WorkPhone:        e.WorkPhone,
 		WorkLocation:     e.WorkLocation,
@@ -356,13 +362,13 @@ func ToAllocationResponse(a *hr.LeaveAllocation) AllocationResponse {
 // ─────────────────────────────────────────────────────────────────────────────
 
 type CreateLeaveRequestRequest struct {
-	EmployeeID  int64      `json:"employee_id"`
-	LeaveType   string     `json:"leave_type"`
-	DateFrom    time.Time  `json:"date_from"`
-	DateTo      time.Time  `json:"date_to"`
-	Days        *float64   `json:"days"`
-	Description string     `json:"description"`
-	AutoConfirm bool       `json:"auto_confirm"`
+	EmployeeID  int64     `json:"employee_id"`
+	LeaveType   string    `json:"leave_type"`
+	DateFrom    time.Time `json:"date_from"`
+	DateTo      time.Time `json:"date_to"`
+	Days        *float64  `json:"days"`
+	Description string    `json:"description"`
+	AutoConfirm bool      `json:"auto_confirm"`
 }
 
 func (r CreateLeaveRequestRequest) ToInput() hrusecase.CreateLeaveRequestInput {
@@ -401,7 +407,7 @@ type ApproveLeaveRequestRequest struct {
 
 type RefuseLeaveRequestRequest struct {
 	ApproverID int64  `json:"approver_id"`
-	Reason      string `json:"reason"`
+	Reason     string `json:"reason"`
 }
 
 type LeaveRequestResponse struct {

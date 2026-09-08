@@ -42,6 +42,11 @@ type StockPicking struct {
 	DateDone           *time.Time   `json:"date_done,omitempty"`
 	Origin             string       `json:"origin,omitempty"` // e.g. "SO/2026/00001", "PO/2026/00001"
 	SourceOrderID      *int64       `json:"source_order_id,omitempty"`
+	CarrierID          *int64       `json:"carrier_id,omitempty"`
+	CarrierTrackingRef string       `json:"carrier_tracking_ref,omitempty"`
+	Weight             float64      `json:"weight"`
+	ShippingWeight     float64      `json:"shipping_weight"`
+	NumberOfPackages   int          `json:"number_of_packages"`
 	ProcurementGroupID *int64       `json:"procurement_group_id,omitempty"`
 	CompanyID          *int64       `json:"company_id,omitempty"`
 	Note               string       `json:"note,omitempty"`

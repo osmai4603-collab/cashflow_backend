@@ -237,6 +237,12 @@ func main() {
 		wm.Start("reorder-checker", worker.NewReorderWorker(ucs.Stock, cfg.Stock.ReorderInterval, logger).Run())
 	}
 
+	// Phase 24 — Preventive maintenance: recurring request reminders for technicians
+	wm.Start("preventive-maintenance", worker.NewPreventiveMaintenanceWorker(ucs.Maintenance, 24*time.Hour, logger))
+
+	// Phase 24 — Fleet contracts: auto-expire + expiry reminders
+	wm.Start("fleet-contract-worker", worker.NewContractWorker(ucs.Fleet, 24*time.Hour, logger))
+
 	// 2d. Create server with strict timeouts and register closer resource for Phase 7
 	srv := server.NewServer(cfg, router, healthChecker, wm, logger, closer)
 

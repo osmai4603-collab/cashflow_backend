@@ -82,31 +82,32 @@ func (l *PurchaseOrderLine) ComputeAmounts(taxRates []float64) {
 
 // PurchaseOrder represents a purchase quotation or confirmed purchase order (purchase.order in Odoo).
 type PurchaseOrder struct {
-	ID            int64               `json:"id"`
-	Name          string              `json:"name"` // Sequence number e.g. "PO/2026/00001" or "/"
-	PartnerID     int64               `json:"partner_id"`
-	DateOrder     time.Time           `json:"date_order"`
-	DatePlanned   *time.Time          `json:"date_planned,omitempty"`
-	State         PurchaseOrderState  `json:"state"`
-	InvoiceStatus InvoiceStatus       `json:"invoice_status"`
-	PaymentTermID *int64              `json:"payment_term_id,omitempty"`
-	UserID        *int64              `json:"user_id,omitempty"`
-	CompanyID     *int64              `json:"company_id,omitempty"`
-	Currency      string              `json:"currency"`
-	Note          string              `json:"note,omitempty"`
-	AmountUntaxed float64             `json:"amount_untaxed"`
-	AmountTax     float64             `json:"amount_tax"`
-	AmountTotal   float64             `json:"amount_total"`
-	Lines         []PurchaseOrderLine `json:"lines,omitempty"`
-	BillIDs       []int64             `json:"bill_ids,omitempty"`
-	PickingIDs    []int64             `json:"picking_ids,omitempty"`    // Linked stock pickings (receipts)
-	ReceiptStatus string              `json:"receipt_status"`           // nothing, partial, full
-	ProcurementGroupID *int64          `json:"procurement_group_id,omitempty"`
-	RequisitionID *int64               `json:"requisition_id,omitempty"`
-	RequisitionType *string            `json:"requisition_type,omitempty"`
-	AlternativePOIDs []int64           `json:"alternative_po_ids,omitempty"`
-	Active        bool                `json:"active"`
-	Audit         audit.Fields        `json:"audit"`
+	ID                 int64               `json:"id"`
+	Name               string              `json:"name"` // Sequence number e.g. "PO/2026/00001" or "/"
+	PartnerID          int64               `json:"partner_id"`
+	DateOrder          time.Time           `json:"date_order"`
+	DatePlanned        *time.Time          `json:"date_planned,omitempty"`
+	State              PurchaseOrderState  `json:"state"`
+	InvoiceStatus      InvoiceStatus       `json:"invoice_status"`
+	PaymentTermID      *int64              `json:"payment_term_id,omitempty"`
+	UserID             *int64              `json:"user_id,omitempty"`
+	CompanyID          *int64              `json:"company_id,omitempty"`
+	Currency           string              `json:"currency"`
+	Note               string              `json:"note,omitempty"`
+	AmountUntaxed      float64             `json:"amount_untaxed"`
+	AmountTax          float64             `json:"amount_tax"`
+	AmountTotal        float64             `json:"amount_total"`
+	Lines              []PurchaseOrderLine `json:"lines,omitempty"`
+	BillIDs            []int64             `json:"bill_ids,omitempty"`
+	PickingIDs         []int64             `json:"picking_ids,omitempty"` // Linked stock pickings (receipts)
+	ReceiptStatus      string              `json:"receipt_status"`        // nothing, partial, full
+	ProcurementGroupID *int64              `json:"procurement_group_id,omitempty"`
+	RequisitionID      *int64              `json:"requisition_id,omitempty"`
+	RequisitionType    *string             `json:"requisition_type,omitempty"`
+	AlternativeGroupID *int64              `json:"alternative_group_id,omitempty"`
+	AlternativePOIDs   []int64             `json:"alternative_po_ids,omitempty"`
+	Active             bool                `json:"active"`
+	Audit              audit.Fields        `json:"audit"`
 }
 
 // RecomputeTotals aggregates amounts from all order lines.
@@ -163,9 +164,9 @@ func (o *PurchaseOrder) Validate() error {
 				fmt.Sprintf("lines[%d].name", i): "cannot be empty",
 			})
 		}
-		if l.ProductQty <= 0 {
-			return platformerrors.Validation("quantity must be strictly positive", map[string]string{
-				fmt.Sprintf("lines[%d].product_qty", i): "must be greater than 0",
+		if l.ProductQty < 0 || ((o.State == OrderStatePurchase || o.State == OrderStateDone) && l.ProductQty == 0) {
+			return platformerrors.Validation("quantity cannot be negative or zero on a confirmed order", map[string]string{
+				fmt.Sprintf("lines[%d].product_qty", i): "must be non-negative for an RFQ and greater than 0 when confirmed",
 			})
 		}
 		if l.UnitPrice < 0 {
@@ -202,6 +203,13 @@ func (o *PurchaseOrder) ActionConfirm(sequence string) error {
 		return platformerrors.Validation("cannot confirm empty purchase order", map[string]string{
 			"lines": "purchase order must have at least one line item to be confirmed",
 		})
+	}
+	for i, line := range o.Lines {
+		if line.ProductQty <= 0 {
+			return platformerrors.Validation("cannot confirm order with zero quantity", map[string]string{
+				fmt.Sprintf("lines[%d].product_qty", i): "must be greater than 0 when confirmed",
+			})
+		}
 	}
 
 	o.State = OrderStatePurchase

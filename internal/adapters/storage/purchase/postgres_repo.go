@@ -453,6 +453,62 @@ func (r *PostgresRepo) GetLinkedBillIDs(ctx context.Context, orderID int64) ([]i
 	return ids, nil
 }
 
+func (r *PostgresRepo) CreateAlternativeGroup(ctx context.Context, orderID int64, alternativeOrderIDs []int64) error {
+	return database.WithTx(ctx, r.pool, func(tx pgx.Tx) error {
+		companyID := audit.CompanyIDFromContext(ctx)
+		var groupID int64
+		if err := tx.QueryRow(ctx, `INSERT INTO purchase_order_groups (company_id) VALUES ($1) RETURNING id`, companyIDValue(companyID)).Scan(&groupID); err != nil {
+			return platformerrors.Internal("failed to create purchase order alternative group", err)
+		}
+		ids := append([]int64{orderID}, alternativeOrderIDs...)
+		for _, id := range ids {
+			if _, err := tx.Exec(ctx, `INSERT INTO purchase_order_group_members (group_id, order_id) VALUES ($1, $2)`, groupID, id); err != nil {
+				return platformerrors.Internal("failed to link purchase order alternative", err)
+			}
+		}
+		return nil
+	})
+}
+
+func (r *PostgresRepo) ListAlternativeOrderIDs(ctx context.Context, orderID int64) ([]int64, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT member.order_id
+		FROM purchase_order_group_members origin
+		JOIN purchase_order_group_members member ON member.group_id = origin.group_id
+		WHERE origin.order_id = $1 AND member.order_id <> $1
+		ORDER BY member.order_id`, orderID)
+	if err != nil {
+		return nil, platformerrors.Internal("failed to list purchase order alternatives", err)
+	}
+	defer rows.Close()
+	var ids []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, platformerrors.Internal("failed to scan purchase order alternative", err)
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}
+
+func (r *PostgresRepo) ClearAlternativeGroup(ctx context.Context, orderID int64) error {
+	return database.WithTx(ctx, r.pool, func(tx pgx.Tx) error {
+		_, err := tx.Exec(ctx, `DELETE FROM purchase_order_groups WHERE id IN (SELECT group_id FROM purchase_order_group_members WHERE order_id = $1)`, orderID)
+		if err != nil {
+			return platformerrors.Internal("failed to clear purchase order alternatives", err)
+		}
+		return nil
+	})
+}
+
+func companyIDValue(companyID *int64) any {
+	if companyID == nil {
+		return nil
+	}
+	return *companyID
+}
+
 func (r *PostgresRepo) fetchLinesByOrderID(ctx context.Context, orderID int64) ([]purchase.PurchaseOrderLine, error) {
 	query := `
 		SELECT id, order_id, sequence, product_id, name, product_qty, product_uom,

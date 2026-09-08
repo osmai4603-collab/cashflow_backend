@@ -121,6 +121,9 @@ func TestCreatePurchaseOrderFromRequisition_LinksRequisitionID(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateRequisition() error = %v", err)
 	}
+	if _, err := uc.ConfirmRequisition(ctx, req.ID); err != nil {
+		t.Fatalf("ConfirmRequisition() error = %v", err)
+	}
 
 	po, err := uc.CreatePurchaseOrderFromRequisition(ctx, req.ID)
 	if err != nil {
@@ -129,12 +132,40 @@ func TestCreatePurchaseOrderFromRequisition_LinksRequisitionID(t *testing.T) {
 	if po.RequisitionID == nil || *po.RequisitionID != req.ID {
 		t.Fatalf("expected requisition_id %d to be linked, got %#v", req.ID, po.RequisitionID)
 	}
+	if po.Lines[0].ProductQty != 7 {
+		t.Fatalf("purchase template should copy line quantity, got %v", po.Lines[0].ProductQty)
+	}
 	loaded, err := uc.GetRequisitionByID(ctx, req.ID)
 	if err != nil {
 		t.Fatalf("GetRequisitionByID() error = %v", err)
 	}
 	if len(loaded.PurchaseOrderIDs) != 1 || loaded.PurchaseOrderIDs[0] != po.ID {
 		t.Fatalf("expected linked purchase order IDs [%d], got %v", po.ID, loaded.PurchaseOrderIDs)
+	}
+}
+
+func TestCreatePurchaseOrderFromBlanketOrderStartsAtZeroQuantity(t *testing.T) {
+	ctx := context.Background()
+	reqRepo := purchasestorage.NewMemoryRequisitionRepo()
+	poRepo := purchasestorage.NewMemoryRepo()
+	uc := purchaseusecase.NewRequisitionUseCase(reqRepo, poRepo)
+	vendorID := int64(100)
+	req, err := uc.CreateRequisition(ctx, purchaseusecase.CreatePurchaseRequisitionInput{
+		Type: purchase.RequisitionBlanketOrder, VendorID: &vendorID, UserID: 1,
+		Lines: []purchaseusecase.CreateRequisitionLineInput{{ProductID: 1, ProductQty: 8, PriceUnit: 4}},
+	})
+	if err != nil {
+		t.Fatalf("CreateRequisition() error = %v", err)
+	}
+	if _, err := uc.ConfirmRequisition(ctx, req.ID); err != nil {
+		t.Fatalf("ConfirmRequisition() error = %v", err)
+	}
+	po, err := uc.CreatePurchaseOrderFromRequisition(ctx, req.ID)
+	if err != nil {
+		t.Fatalf("CreatePurchaseOrderFromRequisition() error = %v", err)
+	}
+	if po.Lines[0].ProductQty != 0 {
+		t.Fatalf("blanket order RFQ should start at zero quantity, got %v", po.Lines[0].ProductQty)
 	}
 }
 
@@ -146,16 +177,58 @@ func TestCloseRequisition_RejectsOpenPurchaseOrders(t *testing.T) {
 	vendorID := int64(600)
 	req, err := uc.CreateRequisition(ctx, purchaseusecase.CreatePurchaseRequisitionInput{
 		Name: "RQ/2026/0005", Type: purchase.RequisitionBlanketOrder, VendorID: &vendorID,
-		UserID: 1, Lines: []purchaseusecase.CreateRequisitionLineInput{{ProductID: 1, ProductQty: 1}},
+		UserID: 1, Lines: []purchaseusecase.CreateRequisitionLineInput{{ProductID: 1, ProductQty: 1, PriceUnit: 5}},
 	})
 	if err != nil {
 		t.Fatalf("CreateRequisition() error = %v", err)
+	}
+	if _, err := uc.ConfirmRequisition(ctx, req.ID); err != nil {
+		t.Fatalf("ConfirmRequisition() error = %v", err)
 	}
 	if _, err := uc.CreatePurchaseOrderFromRequisition(ctx, req.ID); err != nil {
 		t.Fatalf("CreatePurchaseOrderFromRequisition() error = %v", err)
 	}
 	if _, err := uc.CloseRequisition(ctx, req.ID); err == nil {
 		t.Fatal("expected close to reject open purchase order")
+	}
+	loaded, err := uc.GetRequisitionByID(ctx, req.ID)
+	if err != nil {
+		t.Fatalf("GetRequisitionByID() error = %v", err)
+	}
+	if loaded.State != purchase.RequisitionConfirmed {
+		t.Fatalf("failed close must preserve confirmed state, got %s", loaded.State)
+	}
+}
+
+func TestCancelRequisitionCancelsDraftPurchaseOrders(t *testing.T) {
+	ctx := context.Background()
+	reqRepo := purchasestorage.NewMemoryRequisitionRepo()
+	poRepo := purchasestorage.NewMemoryRepo()
+	uc := purchaseusecase.NewRequisitionUseCase(reqRepo, poRepo)
+	vendorID := int64(601)
+	req, err := uc.CreateRequisition(ctx, purchaseusecase.CreatePurchaseRequisitionInput{
+		Name: "RQ/2026/0007", Type: purchase.RequisitionTemplate, VendorID: &vendorID,
+		UserID: 1, Lines: []purchaseusecase.CreateRequisitionLineInput{{ProductID: 2, ProductQty: 1}},
+	})
+	if err != nil {
+		t.Fatalf("CreateRequisition() error = %v", err)
+	}
+	if _, err := uc.ConfirmRequisition(ctx, req.ID); err != nil {
+		t.Fatalf("ConfirmRequisition() error = %v", err)
+	}
+	po, err := uc.CreatePurchaseOrderFromRequisition(ctx, req.ID)
+	if err != nil {
+		t.Fatalf("CreatePurchaseOrderFromRequisition() error = %v", err)
+	}
+	if _, err := uc.CancelRequisition(ctx, req.ID); err != nil {
+		t.Fatalf("CancelRequisition() error = %v", err)
+	}
+	loadedPO, err := poRepo.GetOrderByID(ctx, po.ID)
+	if err != nil {
+		t.Fatalf("GetOrderByID() error = %v", err)
+	}
+	if loadedPO.State != purchase.OrderStateCancel {
+		t.Fatalf("expected draft RFQ to be cancelled, got %s", loadedPO.State)
 	}
 }
 

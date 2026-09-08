@@ -78,6 +78,8 @@ type CreatePickingInput struct {
 	ScheduledDate  time.Time         `json:"scheduled_date"`
 	Origin         string            `json:"origin"`
 	SourceOrderID  *int64            `json:"source_order_id"`
+	CarrierID      *int64            `json:"carrier_id"`
+	ShippingWeight float64           `json:"shipping_weight"`
 	CompanyID      *int64            `json:"company_id"`
 	Note           string            `json:"note"`
 	Moves          []CreateMoveInput `json:"moves"`
@@ -476,6 +478,8 @@ func (uc *UseCase) CreatePicking(ctx context.Context, in CreatePickingInput) (*s
 		ScheduledDate:  in.ScheduledDate,
 		Origin:         in.Origin,
 		SourceOrderID:  in.SourceOrderID,
+		CarrierID:      in.CarrierID,
+		ShippingWeight: in.ShippingWeight,
 		CompanyID:      in.CompanyID,
 		Note:           in.Note,
 		Active:         true,

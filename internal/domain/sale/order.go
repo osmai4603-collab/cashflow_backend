@@ -47,7 +47,13 @@ type SaleOrderLine struct {
 	PriceTotal    float64   `json:"price_total"`    // Subtotal + Tax
 	QtyDelivered  float64   `json:"qty_delivered"`
 	QtyInvoiced   float64   `json:"qty_invoiced"`
+	IsDelivery    bool      `json:"is_delivery"`
 	RouteID       *int64    `json:"route_id,omitempty"` // ID of the stock route
+	RewardID      *int64    `json:"reward_id,omitempty"`  // Loyalty reward this discounted line came from
+	CouponID      *int64    `json:"coupon_id,omitempty"`  // Loyalty card (coupon) used for this line
+	RewardIdentifierCode string `json:"reward_identifier_code,omitempty"`
+	PointsCost    float64   `json:"points_cost,omitempty"`
+	IsRewardLine  bool      `json:"is_reward_line,omitempty"` // Discount / free product reward line
 	CreatedAt     time.Time `json:"created_at"`
 	UpdatedAt     time.Time `json:"updated_at"`
 }
@@ -58,7 +64,7 @@ func (l *SaleOrderLine) ComputeAmounts(taxRates []float64) {
 	if l.ProductUomQty < 0 {
 		l.ProductUomQty = 0
 	}
-	if l.UnitPrice < 0 {
+	if l.UnitPrice < 0 && !l.IsRewardLine {
 		l.UnitPrice = 0
 	}
 	if l.Discount < 0 {
@@ -101,9 +107,15 @@ type SaleOrder struct {
 	AmountTotal   float64         `json:"amount_total"`
 	Lines         []SaleOrderLine `json:"lines,omitempty"`
 	InvoiceIDs    []int64         `json:"invoice_ids,omitempty"`
+	CarrierID     *int64          `json:"carrier_id,omitempty"`
+	ShippingWeight float64        `json:"shipping_weight"`
+	DeliveryMessage string        `json:"delivery_message,omitempty"`
+	RecomputeDeliveryPrice bool   `json:"recompute_delivery_price"`
 	PickingIDs    []int64         `json:"picking_ids,omitempty"`      // Linked stock pickings (deliveries)
 	DeliveryStatus string         `json:"delivery_status"`             // nothing, partial, full
 	ProcurementGroupID *int64      `json:"procurement_group_id,omitempty"`
+	AppliedCouponIDs    []int64     `json:"applied_coupon_ids,omitempty"`
+	CodeEnabledRuleIDs  []int64     `json:"code_enabled_rule_ids,omitempty"`
 	Active        bool            `json:"active"`
 	Audit         audit.Fields    `json:"audit"`
 }
@@ -167,7 +179,7 @@ func (o *SaleOrder) Validate() error {
 				fmt.Sprintf("lines[%d].product_uom_qty", i): "must be greater than 0",
 			})
 		}
-		if l.UnitPrice < 0 {
+		if l.UnitPrice < 0 && !l.IsRewardLine {
 			return platformerrors.Validation("unit price cannot be negative", map[string]string{
 				fmt.Sprintf("lines[%d].price_unit", i): "must be non-negative",
 			})
@@ -282,6 +294,42 @@ func (o *SaleOrder) UpdateInvoiceStatus() {
 	} else {
 		o.InvoiceStatus = InvoiceStatusNo
 	}
+}
+
+// AddCodeEnabledRule records that a with_code loyalty rule was enabled on this order.
+func (o *SaleOrder) AddCodeEnabledRule(ruleID int64) {
+	if o.CodeEnabledRuleIDs == nil {
+		o.CodeEnabledRuleIDs = []int64{}
+	}
+	for _, id := range o.CodeEnabledRuleIDs {
+		if id == ruleID {
+			return
+		}
+	}
+	o.CodeEnabledRuleIDs = append(o.CodeEnabledRuleIDs, ruleID)
+}
+
+// HasCodeEnabled reports whether a with_code loyalty rule is enabled on this order.
+func (o *SaleOrder) HasCodeEnabled(ruleID int64) bool {
+	for _, id := range o.CodeEnabledRuleIDs {
+		if id == ruleID {
+			return true
+		}
+	}
+	return false
+}
+
+// ApplyCoupon records a coupon card as applied to this order.
+func (o *SaleOrder) ApplyCoupon(couponID int64) {
+	if o.AppliedCouponIDs == nil {
+		o.AppliedCouponIDs = []int64{}
+	}
+	for _, id := range o.AppliedCouponIDs {
+		if id == couponID {
+			return
+		}
+	}
+	o.AppliedCouponIDs = append(o.AppliedCouponIDs, couponID)
 }
 
 func roundTo4(val float64) float64 {

@@ -30,6 +30,32 @@ const (
 	StateRetired   = "retired"
 )
 
+// Preset vehicle state names (Odoo fleet.vehicle.state records).
+const (
+	PresetStateNewRequest  = "New Request"
+	PresetStateToOrder     = "To Order"
+	PresetStateOrdered     = "Ordered"
+	PresetStateRegistered  = "Registered"
+	PresetStateDowngraded  = "Downgraded"
+	PresetStateReserve     = "Reserve"
+	PresetStateWaitingList = "Waiting List"
+)
+
+// Vehicle log service states.
+const (
+	ServiceStateNew       = "new"
+	ServiceStateRunning   = "running"
+	ServiceStateDone      = "done"
+	ServiceStateCancelled = "cancelled"
+)
+
+// Vehicle log contract states.
+const (
+	ContractStateOpen     = "open"
+	ContractStateExpired  = "expired"
+	ContractStateClosed   = "closed"
+)
+
 // VehicleBrand represents a car brand (e.g., Toyota, Ford).
 type VehicleBrand struct {
 	ID        int64        `json:"id"`
@@ -70,6 +96,8 @@ type Vehicle struct {
 	ModelID           int64        `json:"model_id"`
 	DriverID          *int64       `json:"driver_id,omitempty"`
 	FutureDriverID    *int64       `json:"future_driver_id,omitempty"`
+	StateID           *int64       `json:"state_id,omitempty"`
+	ManagerID         *int64       `json:"manager_id,omitempty"`
 	VIN               string       `json:"vin_sn,omitempty"`
 	AcquisitionDate   *time.Time   `json:"acquisition_date,omitempty"`
 	FirstContractDate *time.Time   `json:"first_contract_date,omitempty"`
@@ -84,8 +112,17 @@ type Vehicle struct {
 	Location          string       `json:"location,omitempty"`
 	State             string       `json:"state"`
 	Active            bool         `json:"active"`
+	Tags              []int64      `json:"tags,omitempty"` // tag IDs; nil leaves tags unchanged on update
 	CompanyID         int64        `json:"company_id"`
 	Audit             audit.Fields `json:"audit"`
+}
+
+// VehicleRenderName returns the display name used by Odoo: license plate or name.
+func (v *Vehicle) VehicleRenderName() string {
+	if v.LicensePlate != "" {
+		return v.LicensePlate
+	}
+	return v.Name
 }
 
 // VehicleAssignationLog tracks the history of drivers for a vehicle.
@@ -110,22 +147,28 @@ type VehicleOdometer struct {
 
 // VehicleLogService represents a maintenance service performed on a vehicle.
 type VehicleLogService struct {
-	ID          int64        `json:"id"`
-	VehicleID   int64        `json:"vehicle_id"`
-	Description string       `json:"description,omitempty"`
-	Date        time.Time    `json:"date"`
-	Amount      float64      `json:"amount"`
-	VendorID    *int64       `json:"vendor_id,omitempty"`
-	Odometer    *float64     `json:"odometer,omitempty"`
-	Notes       string       `json:"notes,omitempty"`
-	CompanyID   int64        `json:"company_id"`
-	Audit       audit.Fields `json:"audit"`
+	ID            int64        `json:"id"`
+	VehicleID     int64        `json:"vehicle_id"`
+	Description   string       `json:"description,omitempty"`
+	Date          time.Time    `json:"date"`
+	Amount        float64      `json:"amount"`
+	VendorID      *int64       `json:"vendor_id,omitempty"`
+	ServiceTypeID *int64       `json:"service_type_id,omitempty"`
+	State         string       `json:"state"` // new, running, done, cancelled
+	InvRef        string       `json:"inv_ref,omitempty"`
+	Odometer      *float64     `json:"odometer,omitempty"`
+	Notes         string       `json:"notes,omitempty"`
+	CompanyID     int64        `json:"company_id"`
+	Audit         audit.Fields `json:"audit"`
 }
 
 // VehicleLogContract represents an insurance or leasing contract for a vehicle.
 type VehicleLogContract struct {
 	ID             int64        `json:"id"`
 	VehicleID      int64        `json:"vehicle_id"`
+	Name           string       `json:"name,omitempty"`
+	UserID         *int64       `json:"user_id,omitempty"`
+	Date           *time.Time   `json:"date,omitempty"`
 	StartDate      time.Time    `json:"start_date"`
 	ExpirationDate *time.Time   `json:"expiration_date,omitempty"`
 	CostGenerated  float64      `json:"cost_generated"`
@@ -138,6 +181,89 @@ type VehicleLogContract struct {
 	Audit          audit.Fields `json:"audit"`
 }
 
+// Validate validates a service log entry.
+func (s *VehicleLogService) Validate() error {
+	s.Description = strings.TrimSpace(s.Description)
+	if s.Description == "" {
+		return platformerrors.Validation("service description is required", map[string]string{
+			"description": "cannot be empty",
+		})
+	}
+	if s.Date.IsZero() {
+		return platformerrors.Validation("service date is required", nil)
+	}
+	if s.Amount < 0 {
+		return platformerrors.Validation("service amount cannot be negative", nil)
+	}
+	if s.State == "" {
+		s.State = ServiceStateNew
+	}
+	switch s.State {
+	case ServiceStateNew, ServiceStateRunning, ServiceStateDone, ServiceStateCancelled:
+	default:
+		return platformerrors.Validation("invalid service state", map[string]string{"state": s.State})
+	}
+	return nil
+}
+
+// Validate validates a vehicle contract.
+func (c *VehicleLogContract) Validate() error {
+	if c.StartDate.IsZero() {
+		return platformerrors.Validation("contract start date is required", nil)
+	}
+	if c.ExpirationDate != nil && c.ExpirationDate.Before(c.StartDate) {
+		return platformerrors.Validation("expiration date cannot precede start date", nil)
+	}
+	if c.CostFrequency == "" {
+		c.CostFrequency = "monthly"
+	}
+	switch c.CostFrequency {
+	case "no", "daily", "weekly", "monthly", "yearly":
+	default:
+		return platformerrors.Validation("invalid cost frequency", map[string]string{"cost_frequency": c.CostFrequency})
+	}
+	if c.State == "" {
+		c.State = ContractStateOpen
+	}
+	return nil
+}
+
+// DaysLeft returns whole days between today and expiration (negative means overdue).
+// It returns nil when no expiration date is set.
+func (c *VehicleLogContract) DaysLeft(now time.Time) *int {
+	if c.ExpirationDate == nil {
+		return nil
+	}
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+	exp := time.Date(c.ExpirationDate.Year(), c.ExpirationDate.Month(), c.ExpirationDate.Day(), 0, 0, 0, 0, time.UTC)
+	days := int(exp.Sub(today).Hours() / 24)
+	return &days
+}
+
+// ExpiresToday reports whether the contract expiration falls on `now`'s calendar day.
+func (c *VehicleLogContract) ExpiresToday(now time.Time) bool {
+	if c.ExpirationDate == nil {
+		return false
+	}
+	return c.ExpirationDate.Year() == now.Year() &&
+		c.ExpirationDate.Month() == now.Month() &&
+		c.ExpirationDate.Day() == now.Day()
+}
+
+// RefreshState transitions an open contract to expired when the expiration date passed.
+func (c *VehicleLogContract) RefreshState(now time.Time) bool {
+	if c.State != ContractStateOpen || c.ExpirationDate == nil {
+		return false
+	}
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+	exp := time.Date(c.ExpirationDate.Year(), c.ExpirationDate.Month(), c.ExpirationDate.Day(), 0, 0, 0, 0, time.UTC)
+	if exp.Before(today) {
+		c.State = ContractStateExpired
+		return true
+	}
+	return false
+}
+
 func (v *Vehicle) Validate() error {
 	v.LicensePlate = strings.ToUpper(strings.TrimSpace(v.LicensePlate))
 	if v.LicensePlate == "" {
@@ -148,8 +274,18 @@ func (v *Vehicle) Validate() error {
 	if v.OdometerUnit == "" {
 		v.OdometerUnit = UnitKilometers
 	}
+	switch v.OdometerUnit {
+	case UnitKilometers, UnitMiles:
+	default:
+		return platformerrors.Validation("invalid odometer unit", map[string]string{"odometer_unit": v.OdometerUnit})
+	}
 	if v.State == "" {
 		v.State = StateActive
+	}
+	switch v.State {
+	case StateActive, StateInactive, StateRetired:
+	default:
+		return platformerrors.Validation("invalid vehicle state", map[string]string{"state": v.State})
 	}
 	return nil
 }
