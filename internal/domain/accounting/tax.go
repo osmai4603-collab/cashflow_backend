@@ -28,17 +28,20 @@ const (
 
 // Tax represents a tax rate configuration (account.tax in Odoo).
 type Tax struct {
-	ID              int64     `json:"id"`
-	Name            i18n.TranslationString    `json:"name"`
-	Type            TaxType   `json:"type"`
-	TypeTaxUse      TaxScope  `json:"type_tax_use"`
-	Amount          float64   `json:"amount"` // e.g. 15.0 for 15%
-	AccountID       int64     `json:"account_id"`
-	RefundAccountID *int64    `json:"refund_account_id,omitempty"`
-	PriceInclude    bool      `json:"price_include"` // whether price includes tax
-	Active          bool      `json:"active"`
-	CreatedAt       time.Time `json:"created_at"`
-	UpdatedAt       time.Time `json:"updated_at"`
+	ID              int64                   `json:"id"`
+	Name            i18n.TranslationString `json:"name"`
+	Type            TaxType                 `json:"type"`
+	TypeTaxUse      TaxScope                `json:"type_tax_use"`
+	Amount          float64                 `json:"amount"` // e.g. 15.0 for 15%
+	AmountType      TaxType                 `json:"amount_type,omitempty"`
+	IncludeBase     bool                    `json:"include_base,omitempty"`
+	CountryCode     string                  `json:"country_code,omitempty"`
+	AccountID       int64                   `json:"account_id"`
+	RefundAccountID *int64                  `json:"refund_account_id,omitempty"`
+	PriceInclude    bool                    `json:"price_include"` // whether price includes tax
+	Active          bool                    `json:"active"`
+	CreatedAt       time.Time               `json:"created_at"`
+	UpdatedAt       time.Time               `json:"updated_at"`
 }
 
 // Validate checks Tax constraints.

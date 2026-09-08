@@ -11,6 +11,7 @@ import (
 	"cashflow_backend/internal/domain/hr"
 	platformerrors "cashflow_backend/internal/platform/errors"
 	"cashflow_backend/internal/platform/filter"
+	"cashflow_backend/internal/platform/i18n"
 	"cashflow_backend/internal/platform/pagination"
 )
 
@@ -100,7 +101,7 @@ func (r *MemoryRepo) CreateDepartment(ctx context.Context, dept *hr.Department) 
 	// Update complete name if parent exists
 	if dept.ParentID != nil && *dept.ParentID > 0 {
 		if parent, ok := r.departments[*dept.ParentID]; ok {
-			dept.CompleteName = fmt.Sprintf("%s / %s", parent.CompleteName, dept.Name)
+			dept.CompleteName = i18n.NewTranslation(fmt.Sprintf("%s / %s", string(parent.CompleteName), string(dept.Name)))
 		}
 	}
 	if dept.CompleteName == "" {
@@ -137,7 +138,7 @@ func (r *MemoryRepo) UpdateDepartment(ctx context.Context, dept *hr.Department) 
 	dept.UpdatedAt = time.Now().UTC()
 	if dept.ParentID != nil && *dept.ParentID > 0 {
 		if parent, ok := r.departments[*dept.ParentID]; ok {
-			dept.CompleteName = fmt.Sprintf("%s / %s", parent.CompleteName, dept.Name)
+			dept.CompleteName = i18n.NewTranslation(fmt.Sprintf("%s / %s", string(parent.CompleteName), string(dept.Name)))
 		}
 	}
 	if dept.CompleteName == "" {
@@ -172,7 +173,7 @@ func (r *MemoryRepo) ListDepartments(ctx context.Context, f *filter.Filter, page
 				valStr := fmt.Sprintf("%v", crit.Value)
 				switch crit.Field {
 				case "name":
-					if !strings.Contains(strings.ToLower(d.Name), strings.ToLower(valStr)) {
+					if !strings.Contains(strings.ToLower(string(d.Name)), strings.ToLower(valStr)) {
 						matches = false
 					}
 				case "active":
@@ -314,7 +315,7 @@ func (r *MemoryRepo) ListJobs(ctx context.Context, f *filter.Filter, page pagina
 				valStr := fmt.Sprintf("%v", crit.Value)
 				switch crit.Field {
 				case "name":
-					if !strings.Contains(strings.ToLower(j.Name), strings.ToLower(valStr)) {
+					if !strings.Contains(strings.ToLower(string(j.Name)), strings.ToLower(valStr)) {
 						matches = false
 					}
 				case "department_id":
@@ -375,8 +376,12 @@ func (r *MemoryRepo) CreateEmployee(ctx context.Context, emp *hr.Employee) error
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	r.lastEmpID++
-	emp.ID = r.lastEmpID
+	if emp.ID <= 0 {
+		r.lastEmpID++
+		emp.ID = r.lastEmpID
+	} else if emp.ID > r.lastEmpID {
+		r.lastEmpID = emp.ID
+	}
 	now := time.Now().UTC()
 	emp.CreatedAt = now
 	emp.UpdatedAt = now

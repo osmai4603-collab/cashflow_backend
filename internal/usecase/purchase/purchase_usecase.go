@@ -712,7 +712,7 @@ func (uc *UseCase) prepareLines(ctx context.Context, lineInputs []CreatePurchase
 
 		desc := strings.TrimSpace(in.Name)
 		if desc == "" && pt != nil {
-			desc = pt.Name
+			desc = string(pt.Name)
 		}
 		if desc == "" {
 			desc = fmt.Sprintf("Product #%d", in.ProductID)

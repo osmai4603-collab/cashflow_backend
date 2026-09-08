@@ -1,6 +1,7 @@
 package project
 
 import (
+	"strings"
 	"time"
 
 	platformerrors "cashflow_backend/internal/platform/errors"
@@ -50,9 +51,11 @@ type Task struct {
 }
 
 func (t *Task) Validate() error {
-	if len(t.Name) == 0 {
+	name := strings.TrimSpace(string(t.Name))
+	if name == "" {
 		return platformerrors.Validation("task name is required", nil)
 	}
+	t.Name = i18n.NewTranslation(name)
 	if t.ProjectID <= 0 {
 		return platformerrors.Validation("project_id is required", nil)
 	}

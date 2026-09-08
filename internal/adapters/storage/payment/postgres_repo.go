@@ -31,6 +31,26 @@ type PostgresRepo struct {
 	pool *pgxpool.Pool
 }
 
+func (r *PostgresRepo) CreateTransaction(ctx context.Context, t *payment.PaymentTransaction) error {
+	return platformerrors.Internal("payment transaction persistence is not implemented", nil)
+}
+
+func (r *PostgresRepo) GetTransactionByID(ctx context.Context, id int64) (*payment.PaymentTransaction, error) {
+	return nil, platformerrors.NotFound(fmt.Sprintf("payment transaction %d not found", id))
+}
+
+func (r *PostgresRepo) GetTransactionByReference(ctx context.Context, ref string) (*payment.PaymentTransaction, error) {
+	return nil, platformerrors.NotFound(fmt.Sprintf("payment transaction %q not found", ref))
+}
+
+func (r *PostgresRepo) UpdateTransaction(ctx context.Context, t *payment.PaymentTransaction) error {
+	return platformerrors.Internal("payment transaction persistence is not implemented", nil)
+}
+
+func (r *PostgresRepo) GetProviderByCode(ctx context.Context, code string, companyID int64) (*payment.PaymentProvider, error) {
+	return nil, platformerrors.NotFound(fmt.Sprintf("payment provider %q not found", code))
+}
+
 // NewPostgresRepo creates a new PostgresRepo.
 func NewPostgresRepo(pool *pgxpool.Pool) *PostgresRepo {
 	return &PostgresRepo{pool: pool}

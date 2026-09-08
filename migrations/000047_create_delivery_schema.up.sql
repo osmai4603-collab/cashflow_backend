@@ -7,7 +7,7 @@ CREATE TABLE IF NOT EXISTS delivery_carrier (
     delivery_type VARCHAR(50) NOT NULL, -- 'fixed', 'base_on_rule'
     integration_level VARCHAR(50) DEFAULT 'rate',
     invoice_policy VARCHAR(50) DEFAULT 'estimated',
-    product_id INTEGER NOT NULL REFERENCES product_template(id),
+    product_id BIGINT NOT NULL REFERENCES product_templates(id),
     fixed_price DECIMAL(19,4) DEFAULT 0,
     margin DECIMAL(19,4) DEFAULT 0,
     fixed_margin DECIMAL(19,4) DEFAULT 0,
@@ -15,7 +15,7 @@ CREATE TABLE IF NOT EXISTS delivery_carrier (
     amount DECIMAL(19,4) DEFAULT 0,
     max_weight DECIMAL(19,4),
     max_volume DECIMAL(19,4),
-    company_id INTEGER REFERENCES res_company(id),
+    company_id BIGINT REFERENCES res_companies(id),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
@@ -42,14 +42,14 @@ CREATE TABLE IF NOT EXISTS delivery_zip_prefix (
 -- Carrier - Country Relation
 CREATE TABLE IF NOT EXISTS delivery_carrier_country_rel (
     carrier_id INTEGER REFERENCES delivery_carrier(id) ON DELETE CASCADE,
-    country_id INTEGER REFERENCES res_country(id) ON DELETE CASCADE,
+    country_id BIGINT,
     PRIMARY KEY (carrier_id, country_id)
 );
 
 -- Carrier - State Relation
 CREATE TABLE IF NOT EXISTS delivery_carrier_state_rel (
     carrier_id INTEGER REFERENCES delivery_carrier(id) ON DELETE CASCADE,
-    state_id INTEGER REFERENCES res_country_state(id) ON DELETE CASCADE,
+    state_id BIGINT,
     PRIMARY KEY (carrier_id, state_id)
 );
 
@@ -61,17 +61,17 @@ CREATE TABLE IF NOT EXISTS delivery_carrier_zip_prefix_rel (
 );
 
 -- Add delivery fields to sale_order
-ALTER TABLE sale_order ADD COLUMN IF NOT EXISTS carrier_id INTEGER REFERENCES delivery_carrier(id);
-ALTER TABLE sale_order ADD COLUMN IF NOT EXISTS shipping_weight DECIMAL(19,4) DEFAULT 0;
-ALTER TABLE sale_order ADD COLUMN IF NOT EXISTS delivery_message TEXT;
-ALTER TABLE sale_order ADD COLUMN IF NOT EXISTS recompute_delivery_price BOOLEAN DEFAULT FALSE;
+ALTER TABLE sale_orders ADD COLUMN IF NOT EXISTS carrier_id INTEGER REFERENCES delivery_carrier(id);
+ALTER TABLE sale_orders ADD COLUMN IF NOT EXISTS shipping_weight DECIMAL(19,4) DEFAULT 0;
+ALTER TABLE sale_orders ADD COLUMN IF NOT EXISTS delivery_message TEXT;
+ALTER TABLE sale_orders ADD COLUMN IF NOT EXISTS recompute_delivery_price BOOLEAN DEFAULT FALSE;
 
 -- Add delivery flag to sale_order_line
-ALTER TABLE sale_order_line ADD COLUMN IF NOT EXISTS is_delivery BOOLEAN DEFAULT FALSE;
+ALTER TABLE sale_order_lines ADD COLUMN IF NOT EXISTS is_delivery BOOLEAN DEFAULT FALSE;
 
 -- Add delivery fields to stock_picking
-ALTER TABLE stock_picking ADD COLUMN IF NOT EXISTS carrier_id INTEGER REFERENCES delivery_carrier(id);
-ALTER TABLE stock_picking ADD COLUMN IF NOT EXISTS carrier_tracking_ref VARCHAR(255);
-ALTER TABLE stock_picking ADD COLUMN IF NOT EXISTS weight DECIMAL(19,4) DEFAULT 0;
-ALTER TABLE stock_picking ADD COLUMN IF NOT EXISTS shipping_weight DECIMAL(19,4) DEFAULT 0;
-ALTER TABLE stock_picking ADD COLUMN IF NOT EXISTS number_of_packages INTEGER DEFAULT 0;
+ALTER TABLE stock_pickings ADD COLUMN IF NOT EXISTS carrier_id INTEGER REFERENCES delivery_carrier(id);
+ALTER TABLE stock_pickings ADD COLUMN IF NOT EXISTS carrier_tracking_ref VARCHAR(255);
+ALTER TABLE stock_pickings ADD COLUMN IF NOT EXISTS weight DECIMAL(19,4) DEFAULT 0;
+ALTER TABLE stock_pickings ADD COLUMN IF NOT EXISTS shipping_weight DECIMAL(19,4) DEFAULT 0;
+ALTER TABLE stock_pickings ADD COLUMN IF NOT EXISTS number_of_packages INTEGER DEFAULT 0;

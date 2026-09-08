@@ -9,14 +9,17 @@ import (
 	"time"
 
 	"cashflow_backend/internal/domain/accounting"
+	"cashflow_backend/internal/domain/activity"
 	"cashflow_backend/internal/domain/partner"
 	"cashflow_backend/internal/domain/product"
 	"cashflow_backend/internal/domain/sale"
 	"cashflow_backend/internal/domain/stock"
 	platformerrors "cashflow_backend/internal/platform/errors"
 	"cashflow_backend/internal/platform/filter"
+	"cashflow_backend/internal/platform/i18n"
 	"cashflow_backend/internal/platform/pagination"
 	accountingusecase "cashflow_backend/internal/usecase/accounting"
+	activityusecase "cashflow_backend/internal/usecase/activity"
 	stockusecase "cashflow_backend/internal/usecase/stock"
 )
 
@@ -552,7 +555,7 @@ func (uc *UseCase) CreateInvoiceFromOrder(ctx context.Context, orderID int64, in
 		pID := l.ProductID
 		invoiceItems = append(invoiceItems, accountingusecase.InvoiceLineItemInput{
 			ProductID: &pID,
-			Name:      l.Name,
+			Name:      string(l.Name),
 			Quantity:  qtyToInvoice,
 			PriceUnit: l.UnitPrice,
 			Discount:  l.Discount,
@@ -695,7 +698,7 @@ func (uc *UseCase) prepareLines(ctx context.Context, lineInputs []CreateSaleOrde
 
 		desc := strings.TrimSpace(in.Name)
 		if desc == "" && pt != nil {
-			desc = pt.Name
+			desc = string(pt.Name)
 		}
 		if desc == "" {
 			desc = fmt.Sprintf("Product #%d", in.ProductID)
@@ -747,7 +750,7 @@ func (uc *UseCase) prepareLines(ctx context.Context, lineInputs []CreateSaleOrde
 		line := sale.SaleOrderLine{
 			Sequence:      (i + 1) * 10,
 			ProductID:     in.ProductID,
-			Name:          desc,
+			Name:          i18n.NewTranslation(desc),
 			ProductUomQty: qty,
 			ProductUom:    uomID,
 			UnitPrice:     unitPrice,

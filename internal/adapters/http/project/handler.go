@@ -8,6 +8,7 @@ import (
 	projectdomain "cashflow_backend/internal/domain/project"
 	"cashflow_backend/internal/platform/auth"
 	platformerrors "cashflow_backend/internal/platform/errors"
+	"cashflow_backend/internal/platform/i18n"
 	"cashflow_backend/internal/platform/response"
 	projectusecase "cashflow_backend/internal/usecase/project"
 
@@ -115,7 +116,7 @@ func (h *Handler) UpdateProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	input := request.ToInput(companyID)
-	value.Name, value.Description, value.PartnerID, value.ManagerID = input.Name, input.Description, input.PartnerID, input.ManagerID
+	value.Name, value.Description, value.PartnerID, value.ManagerID = i18n.NewTranslation(input.Name), input.Description, input.PartnerID, input.ManagerID
 	value.StageID, value.DateStart, value.DateEnd = input.StageID, input.DateStart, input.DateEnd
 	value.AllowMilestones, value.AllowSubtasks, value.AllowDependencies = input.AllowMilestones, input.AllowSubtasks, input.AllowDependencies
 	value.AnalyticAccountID = input.AnalyticAccountID
@@ -223,7 +224,7 @@ func (h *Handler) UpdateTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	input := request.ToInput(companyID)
-	value.Name, value.ProjectID, value.StageID, value.AssigneeIDs, value.ParentID = input.Name, input.ProjectID, input.StageID, input.AssigneeIDs, input.ParentID
+	value.Name, value.ProjectID, value.StageID, value.AssigneeIDs, value.ParentID = i18n.NewTranslation(input.Name), input.ProjectID, input.StageID, input.AssigneeIDs, input.ParentID
 	value.Priority, value.DateDeadline, value.Description, value.MilestoneID, value.TagIDs = input.Priority, input.DateDeadline, input.Description, input.MilestoneID, input.TagIDs
 	value.Sequence, value.AllocatedHours = input.Sequence, input.AllocatedHours
 	if err := h.useCase.UpdateTask(r.Context(), value); err != nil {
@@ -287,7 +288,7 @@ func (h *Handler) CreateProjectStage(w http.ResponseWriter, r *http.Request) {
 		response.Error(w, platformerrors.Forbidden("stage belongs to another company"))
 		return
 	}
-	value := &projectdomain.ProjectStage{Name: request.Name, Sequence: request.Sequence, Fold: request.Fold, Color: request.Color, CompanyID: request.CompanyID}
+	value := &projectdomain.ProjectStage{Name: i18n.NewTranslation(request.Name), Sequence: request.Sequence, Fold: request.Fold, Color: request.Color, CompanyID: request.CompanyID}
 	if err := h.useCase.CreateProjectStage(r.Context(), value); err != nil {
 		response.Error(w, err)
 		return
@@ -330,7 +331,7 @@ func (h *Handler) UpdateProjectStage(w http.ResponseWriter, r *http.Request) {
 		response.Error(w, err)
 		return
 	}
-	value.Name, value.Sequence, value.Fold, value.Color = request.Name, request.Sequence, request.Fold, request.Color
+	value.Name, value.Sequence, value.Fold, value.Color = i18n.NewTranslation(request.Name), request.Sequence, request.Fold, request.Color
 	if err := h.useCase.UpdateProjectStage(r.Context(), value); err != nil {
 		response.Error(w, err)
 		return
@@ -366,7 +367,7 @@ func (h *Handler) CreateTaskStage(w http.ResponseWriter, r *http.Request) {
 		response.Error(w, err)
 		return
 	}
-	value := &projectdomain.TaskStage{Name: request.Name, Sequence: request.Sequence, Fold: request.Fold, Color: request.Color, CompanyID: &companyID, ProjectIDs: request.ProjectIDs}
+	value := &projectdomain.TaskStage{Name: i18n.NewTranslation(request.Name), Sequence: request.Sequence, Fold: request.Fold, Color: request.Color, CompanyID: &companyID, ProjectIDs: request.ProjectIDs}
 	if err := h.useCase.CreateTaskStage(r.Context(), value); err != nil {
 		response.Error(w, err)
 		return
@@ -418,7 +419,7 @@ func (h *Handler) UpdateTaskStage(w http.ResponseWriter, r *http.Request) {
 		response.Error(w, err)
 		return
 	}
-	value.Name, value.Sequence, value.Fold, value.Color, value.ProjectIDs = request.Name, request.Sequence, request.Fold, request.Color, request.ProjectIDs
+	value.Name, value.Sequence, value.Fold, value.Color, value.ProjectIDs = i18n.NewTranslation(request.Name), request.Sequence, request.Fold, request.Color, request.ProjectIDs
 	if err := h.useCase.UpdateTaskStage(r.Context(), value); err != nil {
 		response.Error(w, err)
 		return
@@ -459,7 +460,7 @@ func (h *Handler) CreateMilestone(w http.ResponseWriter, r *http.Request) {
 		response.Error(w, err)
 		return
 	}
-	value := &projectdomain.Milestone{Name: request.Name, ProjectID: projectID, DateDeadline: request.DateDeadline, Sequence: request.Sequence}
+	value := &projectdomain.Milestone{Name: i18n.NewTranslation(request.Name), ProjectID: projectID, DateDeadline: request.DateDeadline, Sequence: request.Sequence}
 	if err := h.useCase.CreateMilestone(r.Context(), companyID, value); err != nil {
 		response.Error(w, err)
 		return
@@ -507,7 +508,7 @@ func (h *Handler) UpdateMilestone(w http.ResponseWriter, r *http.Request) {
 		response.Error(w, err)
 		return
 	}
-	value.Name, value.DateDeadline, value.Sequence = request.Name, request.DateDeadline, request.Sequence
+	value.Name, value.DateDeadline, value.Sequence = i18n.NewTranslation(request.Name), request.DateDeadline, request.Sequence
 	if err := h.useCase.UpdateMilestone(r.Context(), value); err != nil {
 		response.Error(w, err)
 		return
@@ -542,7 +543,7 @@ func (h *Handler) CreateTaskTag(w http.ResponseWriter, r *http.Request) {
 		response.Error(w, err)
 		return
 	}
-	value := &projectdomain.TaskTag{Name: request.Name, Color: request.Color}
+	value := &projectdomain.TaskTag{Name: i18n.NewTranslation(request.Name), Color: request.Color}
 	if err := h.useCase.CreateTaskTag(r.Context(), value); err != nil {
 		response.Error(w, err)
 		return
@@ -583,7 +584,7 @@ func (h *Handler) UpdateTaskTag(w http.ResponseWriter, r *http.Request) {
 		response.Error(w, err)
 		return
 	}
-	value.Name, value.Color = request.Name, request.Color
+	value.Name, value.Color = i18n.NewTranslation(request.Name), request.Color
 	if err := h.useCase.UpdateTaskTag(r.Context(), value); err != nil {
 		response.Error(w, err)
 		return

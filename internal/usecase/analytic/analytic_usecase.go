@@ -197,7 +197,7 @@ func (uc *UseCase) UpdatePlan(ctx context.Context, id int64, in UpdatePlanInput)
 		return nil, err
 	}
 	if in.Name != nil {
-		plan.Name = strings.TrimSpace(*in.Name)
+		plan.Name = i18n.NewTranslation(strings.TrimSpace(*in.Name))
 	}
 	if in.Description != nil {
 		plan.Description = strings.TrimSpace(*in.Description)
@@ -517,7 +517,7 @@ func (uc *UseCase) CreateLinesFromMoveLine(ctx context.Context, in MoveLineAnaly
 	}
 
 	base := &analytic.AnalyticLine{
-		Name:             in.Name,
+			Name:             i18n.NewTranslation(in.Name),
 		Date:             in.Date,
 		Amount:           in.Amount,
 		UnitAmount:       in.UnitAmount,
@@ -601,7 +601,7 @@ func (uc *UseCase) UpdateLine(ctx context.Context, id int64, in UpdateLineInput)
 		return nil, err
 	}
 	if in.Name != nil {
-		line.Name = strings.TrimSpace(*in.Name)
+		line.Name = i18n.NewTranslation(strings.TrimSpace(*in.Name))
 	}
 	if in.Date != nil {
 		line.Date = *in.Date

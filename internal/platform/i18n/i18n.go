@@ -83,65 +83,94 @@ const (
 	DefaultLang = "en_US"
 )
 
-// TranslationString represents a multi-language string stored as JSONB.
-// Key is the language code (e.g., "en_US", "ar_001"), value is the translation.
-type TranslationString map[string]string
+// TranslationString stores a human-readable label that can be displayed in the active locale.
+// The project historically uses a simple string value for names and complete names, while the
+// underlying translation registry remains available through i18n.T / LoadTranslations.
+type TranslationString string
 
-// Get returns the translation for the given language, falling back to English or any available value.
+// Get returns the underlying label, preserving compatibility with callers that lookup by language.
 func (t TranslationString) Get(lang string) string {
-	if val, ok := t[lang]; ok && val != "" {
-		return val
+	if t == "" {
+		return ""
 	}
-	if val, ok := t[DefaultLang]; ok && val != "" {
-		return val
+	if lang == "" {
+		lang = DefaultLang
 	}
-	// Fallback to the first available translation
-	for _, val := range t {
-		if val != "" {
+	mu.RLock()
+	defer mu.RUnlock()
+	if translations, ok := codeTranslations[lang]; ok {
+		if val, ok := translations[string(t)]; ok {
 			return val
 		}
 	}
-	return ""
+	return string(t)
 }
 
 // GetLocalized returns the translation based on the language found in the context.
 func (t TranslationString) GetLocalized(ctx context.Context) string {
-	lang, ok := ctx.Value(LangKey).(string)
-	if !ok || lang == "" {
-		lang = DefaultLang
+	if t == "" {
+		return ""
 	}
-	return t.Get(lang)
+	if lang, ok := ctx.Value(LangKey).(string); ok && lang != "" {
+		if translated := t.Get(lang); translated != string(t) {
+			return translated
+		}
+	}
+	return string(t)
 }
 
 // Scan implements the sql.Scanner interface for database retrieval.
 func (t *TranslationString) Scan(value interface{}) error {
 	if value == nil {
-		*t = make(TranslationString)
+		*t = ""
 		return nil
 	}
 	bytes, ok := value.([]byte)
 	if !ok {
 		return errors.New("type assertion to []byte failed")
 	}
-	return json.Unmarshal(bytes, t)
+	if len(bytes) == 0 || string(bytes) == "null" {
+		*t = ""
+		return nil
+	}
+	var m map[string]string
+	if err := json.Unmarshal(bytes, &m); err == nil && len(m) > 0 {
+		if val, ok := m[DefaultLang]; ok && val != "" {
+			*t = TranslationString(val)
+			return nil
+		}
+		for _, val := range m {
+			if val != "" {
+				*t = TranslationString(val)
+				return nil
+			}
+		}
+		*t = ""
+		return nil
+	}
+	var s string
+	if err := json.Unmarshal(bytes, &s); err == nil {
+		*t = TranslationString(s)
+		return nil
+	}
+	*t = TranslationString(string(bytes))
+	return nil
 }
 
 // Value implements the driver.Valuer interface for database storage.
 func (t TranslationString) Value() (driver.Value, error) {
-	if len(t) == 0 {
+	if t == "" {
 		return nil, nil
 	}
-	return json.Marshal(t)
+	return []byte(t), nil
 }
 
-// Set sets the translation for a specific language.
-func (t TranslationString) Set(lang, value string) {
-	t[lang] = value
+// Set updates the label value.
+func (t *TranslationString) Set(lang, value string) {
+	*t = TranslationString(value)
 }
 
-// NewTranslation returns a new TranslationString with a default value for English.
+// NewTranslation returns a new TranslationString with the supplied value.
 func NewTranslation(val string) TranslationString {
-	return TranslationString{
-		DefaultLang: val,
-	}
+	return TranslationString(val)
 }

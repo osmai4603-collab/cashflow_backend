@@ -65,8 +65,8 @@ type DepartmentResponse struct {
 func ToDepartmentResponse(d *hr.Department) DepartmentResponse {
 	return DepartmentResponse{
 		ID:           d.ID,
-		Name:         d.Name,
-		CompleteName: d.CompleteName,
+		Name:         string(d.Name),
+		CompleteName: string(d.CompleteName),
 		ParentID:     d.ParentID,
 		ManagerID:    d.ManagerID,
 		CompanyID:    d.CompanyID,
@@ -153,7 +153,7 @@ type JobResponse struct {
 func ToJobResponse(j *hr.Job) JobResponse {
 	return JobResponse{
 		ID:                j.ID,
-		Name:              j.Name,
+		Name:              string(j.Name),
 		DepartmentID:      j.DepartmentID,
 		Description:       j.Description,
 		ExpectedEmployees: j.ExpectedEmployees,
@@ -344,7 +344,7 @@ type AllocationResponse struct {
 func ToAllocationResponse(a *hr.LeaveAllocation) AllocationResponse {
 	return AllocationResponse{
 		ID:            a.ID,
-		Name:          a.Name,
+		Name:          string(a.Name),
 		EmployeeID:    a.EmployeeID,
 		LeaveType:     a.LeaveType,
 		AllocatedDays: a.AllocatedDays,
@@ -430,7 +430,7 @@ type LeaveRequestResponse struct {
 func ToLeaveRequestResponse(r *hr.LeaveRequest) LeaveRequestResponse {
 	return LeaveRequestResponse{
 		ID:            r.ID,
-		Name:          r.Name,
+		Name:          string(r.Name),
 		EmployeeID:    r.EmployeeID,
 		LeaveType:     r.LeaveType,
 		DateFrom:      r.DateFrom,

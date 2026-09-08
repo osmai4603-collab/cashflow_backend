@@ -10,8 +10,8 @@ import (
 	"testing"
 
 	userhttp "cashflow_backend/internal/adapters/http/user"
+	partnerstorage "cashflow_backend/internal/adapters/storage/partner"
 	userstorage "cashflow_backend/internal/adapters/storage/user"
-	"cashflow_backend/internal/platform/response"
 	userusecase "cashflow_backend/internal/usecase/user"
 
 	"github.com/go-chi/chi/v5"
@@ -20,8 +20,9 @@ import (
 func setupTestServer() (*chi.Mux, *userstorage.MemoryRepo) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	repo := userstorage.NewMemoryRepo()
+	partnerRepo := partnerstorage.NewMemoryRepo()
 	// In a real environment, we'd mock the token generator
-	uc := userusecase.New(repo, nil, "secret", logger)
+	uc := userusecase.New(repo, partnerRepo, logger, "secret", 0)
 	h := userhttp.NewHandler(uc, logger)
 
 	r := chi.NewRouter()
@@ -47,6 +48,7 @@ func TestUserHandler_CRUD(t *testing.T) {
 		Password:  "securepassword",
 		Email:     "test@example.com",
 		CompanyID: 1,
+		PartnerName: "Test Partner",
 	}
 	body, _ := json.Marshal(createReq)
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/users", bytes.NewReader(body))
@@ -74,7 +76,7 @@ func TestUserHandler_CRUD(t *testing.T) {
 
 	// 3. Update User
 	updateReq := userhttp.UpdateUserRequest{
-		Name: "Updated User",
+		Name: func() *string { value := "Updated User"; return &value }(),
 	}
 	body, _ = json.Marshal(updateReq)
 	req = httptest.NewRequest(http.MethodPut, "/api/v1/users/"+strconvFormat(userID), bytes.NewReader(body))

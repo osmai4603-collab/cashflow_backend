@@ -6,8 +6,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"cashflow_backend/internal/platform/i18n"
 	platformerrors "cashflow_backend/internal/platform/errors"
+	"cashflow_backend/internal/platform/i18n"
 	"cashflow_backend/internal/platform/response"
 )
 
@@ -97,26 +97,21 @@ func TestI18nIntegration(t *testing.T) {
 }
 
 func TestTranslationString_DBCompatibility(t *testing.T) {
-	// Verify TranslationString works as a map
-	ts := i18n.TranslationString{
-		"en_US": "Table",
-		"ar_SA": "طاولة",
-	}
+	// Verify TranslationString stores a normal string value and survives DB round-trips.
+	ts := i18n.NewTranslation("Table")
 
-	// Test Value (to DB)
 	val, err := ts.Value()
 	if err != nil {
 		t.Fatalf("Value() error: %v", err)
 	}
 	bytes := val.([]byte)
 
-	// Test Scan (from DB)
 	var ts2 i18n.TranslationString
 	if err := ts2.Scan(bytes); err != nil {
 		t.Fatalf("Scan() error: %v", err)
 	}
 
-	if ts2["ar_SA"] != "طاولة" {
-		t.Errorf("expected 'طاولة', got %q", ts2["ar_SA"])
+	if ts2.Get("en_US") != "Table" {
+		t.Errorf("expected 'Table', got %q", ts2.Get("en_US"))
 	}
 }

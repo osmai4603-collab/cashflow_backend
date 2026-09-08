@@ -104,8 +104,8 @@ func (r *BalanceSheetReport) ComputeTotals() {
 	}
 	r.TotalAssets = roundTo4(totalAssets)
 	r.TotalLiabilities = roundTo4(totalLiabilities)
-	r.TotalEquity = roundTo4(totalEquity + r.RetainedEarnings)
-	r.TotalLiabilitiesAndEquity = roundTo4(r.TotalLiabilities + r.TotalEquity)
+	r.TotalEquity = roundTo4(totalEquity)
+	r.TotalLiabilitiesAndEquity = roundTo4(r.TotalLiabilities + r.TotalEquity + r.RetainedEarnings)
 	r.Difference = roundTo4(math.Abs(r.TotalAssets - r.TotalLiabilitiesAndEquity))
 	r.IsBalanced = r.Difference <= 0.01
 }

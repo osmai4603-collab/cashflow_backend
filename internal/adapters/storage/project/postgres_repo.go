@@ -189,7 +189,7 @@ func (r *PostgresRepo) ListKanban(ctx context.Context, companyID, projectID int6
 	buckets := make([]project.TaskStageBucket, len(stages))
 	byID := make(map[int64]int, len(stages))
 	for i, stage := range stages {
-		buckets[i].Stage = project.StageSummary{ID: stage.ID, Name: stage.Name, Sequence: stage.Sequence, Fold: stage.Fold, Color: stage.Color}
+		buckets[i].Stage = project.StageSummary{ID: stage.ID, Name: string(stage.Name), Sequence: stage.Sequence, Fold: stage.Fold, Color: stage.Color}
 		byID[stage.ID] = i
 	}
 	for _, task := range tasks {

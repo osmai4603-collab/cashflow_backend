@@ -63,6 +63,12 @@ func (r *fakeMsgRepo) GetMessageByID(ctx context.Context, id int64) (*activity.M
 func (r *fakeMsgRepo) ListMessagesByResource(ctx context.Context, resModel string, resID int64, page pagination.PageRequest) (pagination.PageResult[activity.Message], error) {
 	return pagination.PageResult[activity.Message]{}, nil
 }
+func (r *fakeMsgRepo) CreateTrackingValues(ctx context.Context, values []activity.TrackingValue) error {
+	return nil
+}
+func (r *fakeMsgRepo) ListTrackingValues(ctx context.Context, messageID int64) ([]activity.TrackingValue, error) {
+	return nil, nil
+}
 
 func (r *fakeNotifRepo) CreateNotification(ctx context.Context, value *activity.Notification) error {
 	return nil

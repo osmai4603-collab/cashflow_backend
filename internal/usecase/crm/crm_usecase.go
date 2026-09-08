@@ -182,11 +182,11 @@ func (u *UseCase) CreateLead(ctx context.Context, in CreateLeadInput) (*crm.Lead
 			switch {
 			case stage.IsWon:
 				probability = 100.0
-			case strings.EqualFold(stage.Name, "Proposition"):
+			case strings.EqualFold(string(stage.Name), "Proposition"):
 				probability = 70.0
-			case strings.EqualFold(stage.Name, "Qualified"):
+			case strings.EqualFold(string(stage.Name), "Qualified"):
 				probability = 30.0
-			case strings.EqualFold(stage.Name, "New"):
+			case strings.EqualFold(string(stage.Name), "New"):
 				probability = 10.0
 			}
 		}

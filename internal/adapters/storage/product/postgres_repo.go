@@ -10,6 +10,7 @@ import (
 	"cashflow_backend/internal/domain/product"
 	platformerrors "cashflow_backend/internal/platform/errors"
 	"cashflow_backend/internal/platform/filter"
+	"cashflow_backend/internal/platform/i18n"
 	"cashflow_backend/internal/platform/pagination"
 
 	"github.com/jackc/pgx/v5"
@@ -163,15 +164,15 @@ func (r *PostgresRepo) GetTemplateByID(ctx context.Context, id int64) (*product.
 	if pt.CategoryID != nil && catName.Valid {
 		pt.Category = &product.ProductCategory{
 			ID:           *pt.CategoryID,
-			Name:         catName.String,
-			CompleteName: catComplete.String,
+			Name:         i18n.NewTranslation(catName.String),
+			CompleteName: i18n.NewTranslation(catComplete.String),
 			Active:       true,
 		}
 	}
 	if pt.UoMID != nil && uomName.Valid {
 		pt.UoM = &product.UnitOfMeasure{
 			ID:       *pt.UoMID,
-			Name:     uomName.String,
+			Name:     i18n.NewTranslation(uomName.String),
 			Category: uomCat.String,
 			Ratio:    uomRatio.Float64,
 			Rounding: uomRounding.Float64,
@@ -361,15 +362,15 @@ func (r *PostgresRepo) ListTemplates(ctx context.Context, f *filter.Filter, page
 		if pt.CategoryID != nil && catName.Valid {
 			pt.Category = &product.ProductCategory{
 				ID:           *pt.CategoryID,
-				Name:         catName.String,
-				CompleteName: catComplete.String,
+				Name:         i18n.NewTranslation(catName.String),
+				CompleteName: i18n.NewTranslation(catComplete.String),
 				Active:       true,
 			}
 		}
 		if pt.UoMID != nil && uomName.Valid {
 			pt.UoM = &product.UnitOfMeasure{
 				ID:       *pt.UoMID,
-				Name:     uomName.String,
+				Name:     i18n.NewTranslation(uomName.String),
 				Category: uomCat.String,
 				Ratio:    uomRatio.Float64,
 				Rounding: uomRounding.Float64,

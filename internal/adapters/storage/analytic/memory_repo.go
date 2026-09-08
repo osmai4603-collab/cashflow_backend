@@ -95,7 +95,7 @@ func (r *MemoryRepo) CreatePlan(ctx context.Context, p *analytic.AnalyticPlan) e
 		if p.ParentID != nil {
 			if parent, ok := r.plans[*p.ParentID]; ok {
 				p.RootID = parent.RootID
-				p.ParentPath = parent.CompleteName
+				p.ParentPath = string(parent.CompleteName)
 			} else {
 				return platformerrors.NotFound(fmt.Sprintf("parent analytic plan with ID %d not found", *p.ParentID))
 			}
@@ -341,7 +341,7 @@ func (r *MemoryRepo) GetRelevantPlans(ctx context.Context, companyID int64, busi
 		}
 		relevant = append(relevant, analytic.RelevantPlan{
 			ID:            c.plan.ID,
-			Name:          c.plan.Name,
+			Name:          string(c.plan.Name),
 			Applicability: planApplicability(c),
 			ColumnName:    columnName,
 		})
@@ -821,7 +821,7 @@ func accountMatches(a *analytic.AnalyticAccount, f *filter.Filter) bool {
 				return false
 			}
 		case "name":
-			if !strings.Contains(strings.ToLower(a.Name), strings.ToLower(val)) {
+			if !strings.Contains(strings.ToLower(string(a.Name)), strings.ToLower(val)) {
 				return false
 			}
 		case "code":
@@ -878,7 +878,7 @@ func lineMatches(l *analytic.AnalyticLine, f *filter.Filter) bool {
 				return false
 			}
 		case "name":
-			if !strings.Contains(strings.ToLower(l.Name), strings.ToLower(val)) {
+			if !strings.Contains(strings.ToLower(string(l.Name)), strings.ToLower(val)) {
 				return false
 			}
 		case "date_from":

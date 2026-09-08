@@ -1,7 +1,6 @@
 package stockhttp_test
 
 import (
-	"context"
 	"io"
 	"log/slog"
 	"net/http"
@@ -15,7 +14,7 @@ import (
 	stockusecase "cashflow_backend/internal/usecase/stock"
 )
 
-func setupTestServer() (*chi.Mux, *stockusecase.UseCase) {
+func setupValuationTestServer() (*chi.Mux, *stockusecase.UseCase) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	repo := stockstorage.NewMemoryRepo()
 	uc := stockusecase.New(repo, nil, nil, nil, nil, nil, logger)
@@ -27,7 +26,7 @@ func setupTestServer() (*chi.Mux, *stockusecase.UseCase) {
 }
 
 func TestStockHandler_GetValuationSummaries(t *testing.T) {
-	r, _ := setupTestServer()
+	r, _ := setupValuationTestServer()
 
 	req := httptest.NewRequest(http.MethodGet, "/valuations", nil)
 	w := httptest.NewRecorder()

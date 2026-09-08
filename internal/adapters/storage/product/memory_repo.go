@@ -293,10 +293,10 @@ func (r *MemoryRepo) matchesTemplateFilter(pt *product.ProductTemplate, f *filte
 		case "name":
 			if val, ok := c.Value.(string); ok {
 				if c.Operator == filter.OpILike || c.Operator == filter.OpLike {
-					if !strings.Contains(strings.ToLower(pt.Name), strings.ToLower(val)) {
+					if !strings.Contains(strings.ToLower(string(pt.Name)), strings.ToLower(val)) {
 						return false
 					}
-				} else if pt.Name != val {
+				} else if string(pt.Name) != val {
 					return false
 				}
 			}

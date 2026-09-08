@@ -70,7 +70,7 @@ func TestProductUseCase_ProductLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to update product: %v", err)
 	}
-	if updated.Name != newName || updated.SalePrice != newPrice {
+	if string(updated.Name) != newName || updated.SalePrice != newPrice {
 		t.Fatalf("product update not reflected: %+v", updated)
 	}
 

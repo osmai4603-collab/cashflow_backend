@@ -50,6 +50,46 @@ type PostgresRepo struct {
 	pool *pgxpool.Pool
 }
 
+func (r *PostgresRepo) CreateRoute(context.Context, *stock.StockRoute) error {
+	return platformerrors.Internal("stock route persistence is not implemented", nil)
+}
+
+func (r *PostgresRepo) GetRouteByID(context.Context, int64) (*stock.StockRoute, error) {
+	return nil, platformerrors.Internal("stock route persistence is not implemented", nil)
+}
+
+func (r *PostgresRepo) ListRoutes(context.Context, *int64) ([]stock.StockRoute, error) {
+	return nil, platformerrors.Internal("stock route persistence is not implemented", nil)
+}
+
+func (r *PostgresRepo) CreateRule(context.Context, *stock.StockRule) error {
+	return platformerrors.Internal("stock rule persistence is not implemented", nil)
+}
+
+func (r *PostgresRepo) GetRuleByID(context.Context, int64) (*stock.StockRule, error) {
+	return nil, platformerrors.Internal("stock rule persistence is not implemented", nil)
+}
+
+func (r *PostgresRepo) ListRulesByRoute(context.Context, int64) ([]stock.StockRule, error) {
+	return nil, platformerrors.Internal("stock rule persistence is not implemented", nil)
+}
+
+func (r *PostgresRepo) FindRule(context.Context, int64, int64) (*stock.StockRule, error) {
+	return nil, platformerrors.Internal("stock rule persistence is not implemented", nil)
+}
+
+func (r *PostgresRepo) CreateScrap(context.Context, *stock.StockScrap) error {
+	return platformerrors.Internal("stock scrap persistence is not implemented", nil)
+}
+
+func (r *PostgresRepo) GetScrapByID(context.Context, int64) (*stock.StockScrap, error) {
+	return nil, platformerrors.Internal("stock scrap persistence is not implemented", nil)
+}
+
+func (r *PostgresRepo) UpdateScrap(context.Context, *stock.StockScrap) error {
+	return platformerrors.Internal("stock scrap persistence is not implemented", nil)
+}
+
 // NewPostgresRepo initializes a new PostgresRepo.
 func NewPostgresRepo(pool *pgxpool.Pool) *PostgresRepo {
 	return &PostgresRepo{pool: pool}

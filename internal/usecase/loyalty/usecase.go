@@ -12,6 +12,7 @@ import (
 	"cashflow_backend/internal/platform/audit"
 	platformerrors "cashflow_backend/internal/platform/errors"
 	"cashflow_backend/internal/platform/filter"
+	"cashflow_backend/internal/platform/i18n"
 	"cashflow_backend/internal/platform/pagination"
 )
 
@@ -61,7 +62,7 @@ type CreateProgramInput struct {
 
 func (uc *UseCase) CreateProgram(ctx context.Context, in CreateProgramInput) (*loyalty.LoyaltyProgram, error) {
 	program := &loyalty.LoyaltyProgram{
-		Name:            in.Name,
+		Name:            i18n.NewTranslation(in.Name),
 		Active:          true,
 		Sequence:        in.Sequence,
 		CompanyID:       in.CompanyID,
@@ -159,7 +160,7 @@ func (uc *UseCase) UpdateProgram(ctx context.Context, id int64, in UpdateProgram
 	}
 
 	if in.Name != nil {
-		program.Name = *in.Name
+		program.Name = i18n.NewTranslation(*in.Name)
 	}
 	if in.Active != nil {
 		program.Active = *in.Active
@@ -469,6 +470,7 @@ type CouponPreview struct {
 
 // OrderPreview aggregates the loyalty state of an order.
 type OrderPreview struct {
+	Order          *sale.SaleOrder        `json:"order,omitempty"`
 	OrderID        int64                  `json:"order_id"`
 	ProgramEarns   []loyalty.ProgramEarn  `json:"program_earns"`
 	AppliedCoupons []CouponPreview        `json:"applied_coupons"`
@@ -488,7 +490,7 @@ func (uc *UseCase) PreviewOrder(ctx context.Context, orderID int64) (*OrderPrevi
 		return nil, err
 	}
 
-	preview := &OrderPreview{OrderID: order.ID, AppliedCoupons: []CouponPreview{}}
+	preview := &OrderPreview{Order: order, OrderID: order.ID, AppliedCoupons: []CouponPreview{}}
 	for _, program := range programs.Items {
 		points, eligible := func() (float64, bool) {
 			lines, err := uc.earnLinesFromOrder(ctx, order)
@@ -506,7 +508,7 @@ func (uc *UseCase) PreviewOrder(ctx context.Context, orderID int64) (*OrderPrevi
 		if eligible {
 			preview.ProgramEarns = append(preview.ProgramEarns, loyalty.ProgramEarn{
 				ProgramID:   program.ID,
-				ProgramName: program.Name,
+				ProgramName: string(program.Name),
 				ProgramType: program.ProgramType,
 				Earned:      points,
 				Eligible:    true,
@@ -531,7 +533,7 @@ func (uc *UseCase) PreviewOrder(ctx context.Context, orderID int64) (*OrderPrevi
 			CouponID:    card.ID,
 			Code:        card.Code,
 			ProgramID:   program.ID,
-			ProgramName: program.Name,
+			ProgramName: string(program.Name),
 			ProgramType: program.ProgramType,
 			AppliesOn:   program.AppliesOn,
 			CardPoints:  card.Points,
@@ -779,7 +781,7 @@ func (uc *UseCase) CheckCoupon(ctx context.Context, code string) (*CouponInfo, e
 	}
 	return &CouponInfo{
 		LoyaltyCard: card,
-		ProgramName: program.Name,
+			ProgramName: string(program.Name),
 		ProgramType: program.ProgramType,
 		AppliesOn:   program.AppliesOn,
 		Rewards:     program.Rewards,

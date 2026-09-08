@@ -62,7 +62,7 @@ func (uc *PurchaseStockUseCase) CreateReceiptsFromOrder(ctx context.Context, ord
 		movesInput = append(movesInput, stockusecase.CreateMoveInput{
 			ProductID:      l.ProductID,
 			ProductQty:     l.ProductQty,
-			Name:           l.Name,
+			Name:           string(l.Name),
 			ProductUom:     l.ProductUom,
 			PurchaseLineID: &lID,
 		})

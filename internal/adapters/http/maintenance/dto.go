@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"cashflow_backend/internal/domain/maintenance"
+	"cashflow_backend/internal/platform/i18n"
 )
 
 // CreateCategoryRequest is the request body for creating an equipment category.
@@ -14,7 +15,7 @@ type CreateCategoryRequest struct {
 
 func (r CreateCategoryRequest) ToDomain(companyID int64) *maintenance.EquipmentCategory {
 	return &maintenance.EquipmentCategory{
-		Name:      r.Name,
+		Name:      i18n.NewTranslation(r.Name),
 		Color:     r.Color,
 		CompanyID: companyID,
 	}
@@ -36,7 +37,7 @@ type CreateStageRequest struct {
 
 func (r CreateStageRequest) ToDomain() *maintenance.EquipmentStage {
 	return &maintenance.EquipmentStage{
-		Name:     r.Name,
+		Name:     i18n.NewTranslation(r.Name),
 		Sequence: r.Sequence,
 		Fold:     r.Fold,
 		Done:     r.Done,
@@ -59,7 +60,7 @@ type CreateTeamRequest struct {
 
 func (r CreateTeamRequest) ToDomain(companyID int64) (*maintenance.Team, []int64) {
 	team := &maintenance.Team{
-		Name:      r.Name,
+		Name:      i18n.NewTranslation(r.Name),
 		CompanyID: &companyID,
 	}
 	return team, r.MemberIDs
@@ -98,7 +99,7 @@ type CreateEquipmentRequest struct {
 
 func (r CreateEquipmentRequest) ToDomain(companyID int64) *maintenance.Equipment {
 	return &maintenance.Equipment{
-		Name:             r.Name,
+		Name:             i18n.NewTranslation(r.Name),
 		CategoryID:       r.CategoryID,
 		TeamID:           r.TeamID,
 		TechnicianUserID: r.TechnicianUserID,
@@ -151,7 +152,7 @@ type UpdateEquipmentRequest struct {
 // Apply fills the domain entity with the non-nil request fields.
 func (r UpdateEquipmentRequest) Apply(e *maintenance.Equipment) {
 	if r.Name != nil {
-		e.Name = *r.Name
+		e.Name = i18n.NewTranslation(*r.Name)
 	}
 	if r.CategoryID != nil {
 		e.CategoryID = r.CategoryID
@@ -243,7 +244,7 @@ type CreateRequestRequest struct {
 
 func (r CreateRequestRequest) ToDomain(companyID int64) *maintenance.MaintenanceRequest {
 	request := &maintenance.MaintenanceRequest{
-		Name:                 r.Name,
+		Name:                 i18n.NewTranslation(r.Name),
 		EquipmentID:          r.EquipmentID,
 		TeamID:               r.TeamID,
 		MaintenanceType:      r.MaintenanceType,
@@ -305,7 +306,7 @@ type UpdateRequestRequest struct {
 // Apply fills the domain entity with the non-nil request fields.
 func (r UpdateRequestRequest) Apply(req *maintenance.MaintenanceRequest) {
 	if r.Name != nil {
-		req.Name = *r.Name
+		req.Name = i18n.NewTranslation(*r.Name)
 	}
 	if r.EquipmentID != nil {
 		req.EquipmentID = r.EquipmentID

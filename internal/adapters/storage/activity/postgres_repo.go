@@ -530,6 +530,14 @@ func (r *PostgresRepo) PopEmails(ctx context.Context, limit int) ([]activity.Ema
 	return items, nil
 }
 
+func (r *PostgresRepo) UpdateEmail(ctx context.Context, e *activity.EmailQueueItem) error {
+	_, err := r.pool.Exec(ctx, `UPDATE mail_email_queue SET status = $1, last_error = $2, updated_at = NOW() WHERE id = $3`, e.Status, e.LastError, e.ID)
+	if err != nil {
+		return platformerrors.Internal("failed to update email queue item", err)
+	}
+	return nil
+}
+
 func (r *PostgresRepo) CreateTrackingValues(ctx context.Context, values []activity.TrackingValue) error {
 	if len(values) == 0 {
 		return nil

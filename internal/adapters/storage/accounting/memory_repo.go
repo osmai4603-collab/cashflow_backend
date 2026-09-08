@@ -879,7 +879,7 @@ func (r *MemoryRepo) GetTrialBalance(ctx context.Context, fromDate, toDate time.
 		report.Lines = append(report.Lines, accounting.TrialBalanceLine{
 			AccountID:      a.ID,
 			AccountCode:    a.Code,
-			AccountName:    a.Name,
+			AccountName:    string(a.Name),
 			AccountType:    a.Type,
 			InitialBalance: bal.initial,
 			Debit:          bal.debit,
@@ -942,7 +942,7 @@ func (r *MemoryRepo) GetProfitAndLoss(ctx context.Context, fromDate, toDate time
 		report.IncomeLines = append(report.IncomeLines, accounting.ReportLine{
 			AccountID:   acc.ID,
 			AccountCode: acc.Code,
-			AccountName: acc.Name,
+			AccountName: string(acc.Name),
 			AccountType: acc.Type,
 			Amount:      amt,
 		})
@@ -956,7 +956,7 @@ func (r *MemoryRepo) GetProfitAndLoss(ctx context.Context, fromDate, toDate time
 		report.ExpenseLines = append(report.ExpenseLines, accounting.ReportLine{
 			AccountID:   acc.ID,
 			AccountCode: acc.Code,
-			AccountName: acc.Name,
+			AccountName: string(acc.Name),
 			AccountType: acc.Type,
 			Amount:      amt,
 		})
@@ -1028,7 +1028,7 @@ func (r *MemoryRepo) GetBalanceSheet(ctx context.Context, asOfDate time.Time) (*
 		report.AssetLines = append(report.AssetLines, accounting.ReportLine{
 			AccountID:   acc.ID,
 			AccountCode: acc.Code,
-			AccountName: acc.Name,
+			AccountName: string(acc.Name),
 			AccountType: acc.Type,
 			Amount:      amt,
 		})
@@ -1042,7 +1042,7 @@ func (r *MemoryRepo) GetBalanceSheet(ctx context.Context, asOfDate time.Time) (*
 		report.LiabilityLines = append(report.LiabilityLines, accounting.ReportLine{
 			AccountID:   acc.ID,
 			AccountCode: acc.Code,
-			AccountName: acc.Name,
+			AccountName: string(acc.Name),
 			AccountType: acc.Type,
 			Amount:      amt,
 		})
@@ -1056,7 +1056,7 @@ func (r *MemoryRepo) GetBalanceSheet(ctx context.Context, asOfDate time.Time) (*
 		report.EquityLines = append(report.EquityLines, accounting.ReportLine{
 			AccountID:   acc.ID,
 			AccountCode: acc.Code,
-			AccountName: acc.Name,
+			AccountName: string(acc.Name),
 			AccountType: acc.Type,
 			Amount:      amt,
 		})

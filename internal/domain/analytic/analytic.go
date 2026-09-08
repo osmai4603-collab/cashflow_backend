@@ -1,6 +1,7 @@
 package analytic
 
 import (
+	"fmt"
 	"math"
 	"time"
 
@@ -111,10 +112,10 @@ func (p *AnalyticPlan) Validate() error {
 
 // BuildCompleteName recomputes the hierarchical display name "parent / name".
 func (p *AnalyticPlan) BuildCompleteName() i18n.TranslationString {
-	// This is tricky for TranslationString.
-	// We'll return the name as complete_name for now,
-	// or implement a merge logic if needed.
-	return p.Name
+	if p.ParentPath == "" {
+		return p.Name
+	}
+	return i18n.NewTranslation(fmt.Sprintf("%s / %s", p.ParentPath, string(p.Name)))
 }
 
 // AnalyticApplicability represents an independent applicability rule scoped to a

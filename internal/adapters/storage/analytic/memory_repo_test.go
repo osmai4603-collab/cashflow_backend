@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"cashflow_backend/internal/domain/analytic"
-	"cashflow_backend/internal/platform/filter"
 	platformerrors "cashflow_backend/internal/platform/errors"
+	"cashflow_backend/internal/platform/filter"
 	"cashflow_backend/internal/platform/pagination"
 )
 
@@ -453,7 +453,7 @@ func TestMemoryRepo_ValidateDistribution(t *testing.T) {
 
 func planByName(plans []analytic.AnalyticPlan, name string) *analytic.AnalyticPlan {
 	for i := range plans {
-		if plans[i].Name == name {
+			if string(plans[i].Name) == name {
 			return &plans[i]
 		}
 	}

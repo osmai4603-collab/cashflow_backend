@@ -125,7 +125,7 @@ func ToProductResponse(pt *product.ProductTemplate) ProductResponse {
 
 	return ProductResponse{
 		ID:          pt.ID,
-		Name:        pt.Name,
+		Name:        string(pt.Name),
 		Type:        pt.Type,
 		CategoryID:  pt.CategoryID,
 		Category:    catResp,
@@ -252,9 +252,9 @@ func ToCategoryResponse(c *product.ProductCategory) CategoryResponse {
 	}
 	return CategoryResponse{
 		ID:           c.ID,
-		Name:         c.Name,
+		Name:         string(c.Name),
 		ParentID:     c.ParentID,
-		CompleteName: c.CompleteName,
+		CompleteName: string(c.CompleteName),
 		Active:       c.Active,
 		CreatedAt:    c.CreatedAt.Format(time.RFC3339),
 		UpdatedAt:    c.UpdatedAt.Format(time.RFC3339),
@@ -322,7 +322,7 @@ func ToUoMResponse(u *product.UnitOfMeasure) UoMResponse {
 	}
 	return UoMResponse{
 		ID:        u.ID,
-		Name:      u.Name,
+		Name:      string(u.Name),
 		Category:  u.Category,
 		Ratio:     u.Ratio,
 		Rounding:  u.Rounding,

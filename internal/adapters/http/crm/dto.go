@@ -260,7 +260,7 @@ type StageResponse struct {
 func ToStageResponse(s *crm.Stage) StageResponse {
 	return StageResponse{
 		ID:           s.ID,
-		Name:         s.Name,
+		Name:         string(s.Name),
 		Sequence:     s.Sequence,
 		IsWon:        s.IsWon,
 		IsClosed:     s.IsClosed,
@@ -284,7 +284,7 @@ type LostReasonResponse struct {
 func ToLostReasonResponse(r *crm.LostReason) LostReasonResponse {
 	return LostReasonResponse{
 		ID:        r.ID,
-		Name:      r.Name,
+		Name:      string(r.Name),
 		Active:    r.Active,
 		CreatedAt: r.CreatedAt,
 		UpdatedAt: r.UpdatedAt,
@@ -300,7 +300,7 @@ type TagResponse struct {
 func ToTagResponse(t *crm.Tag) TagResponse {
 	return TagResponse{
 		ID:    t.ID,
-		Name:  t.Name,
+		Name:  string(t.Name),
 		Color: t.Color,
 	}
 }

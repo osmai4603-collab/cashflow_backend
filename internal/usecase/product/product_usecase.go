@@ -420,10 +420,7 @@ func (uc *ProductUseCase) CreateCategory(ctx context.Context, in CreateCategoryI
 				"parent_id": fmt.Sprintf("category %d not found", *in.ParentID),
 			})
 		}
-		completeName = make(i18n.TranslationString)
-		for lang, val := range parent.CompleteName {
-			completeName[lang] = fmt.Sprintf("%s / %s", val, in.Name)
-		}
+		completeName = i18n.NewTranslation(fmt.Sprintf("%s / %s", parent.CompleteName.Get(i18n.DefaultLang), in.Name))
 	}
 
 	cat := &product.ProductCategory{
@@ -479,10 +476,7 @@ func (uc *ProductUseCase) UpdateCategory(ctx context.Context, id int64, in Updat
 					"parent_id": fmt.Sprintf("category %d not found", *in.ParentID),
 				})
 			}
-			cat.CompleteName = make(i18n.TranslationString)
-			for lang, val := range parent.CompleteName {
-				cat.CompleteName[lang] = fmt.Sprintf("%s / %s", val, cat.Name.Get(i18n.DefaultLang))
-			}
+			cat.CompleteName = i18n.NewTranslation(fmt.Sprintf("%s / %s", parent.CompleteName.Get(i18n.DefaultLang), cat.Name.Get(i18n.DefaultLang)))
 		} else {
 			cat.CompleteName = cat.Name
 		}
@@ -491,10 +485,7 @@ func (uc *ProductUseCase) UpdateCategory(ctx context.Context, id int64, in Updat
 		// Update complete name if only name changed and has parent
 		if cat.ParentID != nil && *cat.ParentID > 0 {
 			if parent, err := uc.repo.GetCategoryByID(ctx, *cat.ParentID); err == nil {
-				cat.CompleteName = make(i18n.TranslationString)
-				for lang, val := range parent.CompleteName {
-					cat.CompleteName[lang] = fmt.Sprintf("%s / %s", val, cat.Name.Get(i18n.DefaultLang))
-				}
+				cat.CompleteName = i18n.NewTranslation(fmt.Sprintf("%s / %s", parent.CompleteName.Get(i18n.DefaultLang), cat.Name.Get(i18n.DefaultLang)))
 			}
 		} else {
 			cat.CompleteName = cat.Name

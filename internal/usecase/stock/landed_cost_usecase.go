@@ -207,7 +207,7 @@ func (uc *UseCase) CreateLandedCostFromVendorBill(ctx context.Context, in Create
 			split = stock.SplitEqual
 		}
 		lines = append(lines, stock.LandedCostLine{
-			Name:        pt.Name,
+			Name:        string(pt.Name),
 			ProductID:   pt.ID,
 			AccountID:   accountID,
 			PriceUnit:   amount,

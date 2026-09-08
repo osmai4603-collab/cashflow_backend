@@ -15,6 +15,7 @@ import (
 	"cashflow_backend/internal/domain/stock"
 	platformerrors "cashflow_backend/internal/platform/errors"
 	"cashflow_backend/internal/platform/filter"
+	"cashflow_backend/internal/platform/i18n"
 	"cashflow_backend/internal/platform/pagination"
 )
 
@@ -181,7 +182,7 @@ func (uc *UseCase) CreateLocation(ctx context.Context, in CreateLocationInput) (
 	}
 
 	loc := &stock.StockLocation{
-		Name:           name,
+		Name:           i18n.NewTranslation(name),
 		Usage:          in.Usage,
 		ParentID:       in.ParentID,
 		ScrapLocation:  in.ScrapLocation,
@@ -197,7 +198,7 @@ func (uc *UseCase) CreateLocation(ctx context.Context, in CreateLocationInput) (
 				"parent_id": fmt.Sprintf("location #%d not found", *in.ParentID),
 			})
 		}
-		loc.ComputeCompleteName(parent.CompleteName)
+		loc.ComputeCompleteName(string(parent.CompleteName))
 	} else {
 		loc.ComputeCompleteName("")
 	}
@@ -229,7 +230,7 @@ func (uc *UseCase) UpdateLocation(ctx context.Context, id int64, in UpdateLocati
 	}
 
 	if in.Name != nil && strings.TrimSpace(*in.Name) != "" {
-		loc.Name = strings.TrimSpace(*in.Name)
+		loc.Name = i18n.NewTranslation(strings.TrimSpace(*in.Name))
 	}
 	if in.Usage != nil {
 		loc.Usage = *in.Usage
@@ -252,12 +253,12 @@ func (uc *UseCase) UpdateLocation(ctx context.Context, id int64, in UpdateLocati
 			return nil, err
 		}
 		loc.ParentID = in.ParentID
-		loc.ComputeCompleteName(parent.CompleteName)
+		loc.ComputeCompleteName(string(parent.CompleteName))
 	} else if in.Name != nil {
 		// Recompute name if parent was unchanged
 		if loc.ParentID != nil {
 			if parent, err := uc.repo.GetLocationByID(ctx, *loc.ParentID); err == nil {
-				loc.ComputeCompleteName(parent.CompleteName)
+				loc.ComputeCompleteName(string(parent.CompleteName))
 			}
 		} else {
 			loc.ComputeCompleteName("")
@@ -312,7 +313,7 @@ func (uc *UseCase) CreateWarehouse(ctx context.Context, in CreateWarehouseInput)
 	}
 
 	wh := &stock.Warehouse{
-		Name:           name,
+		Name:           i18n.NewTranslation(name),
 		Code:           code,
 		LotStockID:     in.LotStockID,
 		ViewLocationID: in.ViewLocationID,
@@ -348,7 +349,7 @@ func (uc *UseCase) UpdateWarehouse(ctx context.Context, id int64, in UpdateWareh
 	}
 
 	if in.Name != nil && strings.TrimSpace(*in.Name) != "" {
-		wh.Name = strings.TrimSpace(*in.Name)
+		wh.Name = i18n.NewTranslation(strings.TrimSpace(*in.Name))
 	}
 	if in.Code != nil && strings.TrimSpace(*in.Code) != "" {
 		wh.Code = strings.ToUpper(strings.TrimSpace(*in.Code))
@@ -509,7 +510,7 @@ func (uc *UseCase) CreatePicking(ctx context.Context, in CreatePickingInput) (*s
 			if prod.Type == product.ProductTypeService {
 				return nil, platformerrors.Conflict(fmt.Sprintf("product '%s' is a service and does not generate stock moves", prod.Name))
 			}
-			prodName = prod.Name
+			prodName = string(prod.Name)
 			uomID = prod.UoMID
 		}
 

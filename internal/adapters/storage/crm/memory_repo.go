@@ -455,7 +455,7 @@ func (r *MemoryRepo) CreateTag(ctx context.Context, tag *crm.Tag) error {
 	defer r.mu.Unlock()
 
 	for _, t := range r.tags {
-		if strings.EqualFold(t.Name, tag.Name) {
+		if strings.EqualFold(string(t.Name), string(tag.Name)) {
 			return platformerrors.Conflict(fmt.Sprintf("tag '%s' already exists", tag.Name))
 		}
 	}
@@ -596,7 +596,7 @@ func (r *MemoryRepo) GetStats(ctx context.Context) (*crm.CRMStats, error) {
 		if s.Active {
 			stageMap[s.ID] = &crm.StageStat{
 				StageID:   s.ID,
-				StageName: s.Name,
+				StageName: string(s.Name),
 			}
 		}
 	}
@@ -606,7 +606,7 @@ func (r *MemoryRepo) GetStats(ctx context.Context) (*crm.CRMStats, error) {
 		if lr.Active {
 			lostMap[lr.ID] = &crm.LostReasonStat{
 				ReasonID:   lr.ID,
-				ReasonName: lr.Name,
+				ReasonName: string(lr.Name),
 			}
 		}
 	}

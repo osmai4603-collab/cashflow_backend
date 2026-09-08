@@ -9,6 +9,7 @@ import (
 	productstorage "cashflow_backend/internal/adapters/storage/product"
 	"cashflow_backend/internal/domain/product"
 	"cashflow_backend/internal/platform/filter"
+	"cashflow_backend/internal/platform/i18n"
 	"cashflow_backend/internal/platform/pagination"
 )
 
@@ -226,7 +227,7 @@ func TestMemoryRepo_ConcurrentOperations(t *testing.T) {
 		go func(idx int) {
 			defer wg.Done()
 			tmpl := &product.ProductTemplate{
-				Name:      fmt.Sprintf("Product %d", idx),
+				Name:      i18n.NewTranslation(fmt.Sprintf("Product %d", idx)),
 				SalePrice: float64(idx * 10),
 			}
 			_ = repo.CreateTemplate(ctx, tmpl)

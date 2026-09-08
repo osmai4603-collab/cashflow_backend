@@ -1,5 +1,22 @@
 -- 000050_localize_all_entities.up.sql
 
+-- PostgreSQL requires text defaults to be removed before changing the column
+-- type to JSONB. The entity migrations use defaults on several name columns.
+DO $$
+DECLARE
+	target RECORD;
+BEGIN
+	FOR target IN
+		SELECT table_name, column_name
+		FROM information_schema.columns
+		WHERE table_schema = 'public'
+		  AND column_name IN ('name', 'complete_name', 'note', 'description')
+		  AND data_type IN ('character varying', 'text')
+	LOOP
+		EXECUTE format('ALTER TABLE %I ALTER COLUMN %I DROP DEFAULT', target.table_name, target.column_name);
+	END LOOP;
+END $$;
+
 -- HR
 ALTER TABLE hr_departments ALTER COLUMN name TYPE JSONB USING jsonb_build_object('en_US', name);
 ALTER TABLE hr_departments ALTER COLUMN complete_name TYPE JSONB USING jsonb_build_object('en_US', complete_name);
@@ -47,7 +64,6 @@ ALTER TABLE loyalty_rewards ALTER COLUMN description TYPE JSONB USING jsonb_buil
 
 -- Analytic
 ALTER TABLE account_analytic_plan ALTER COLUMN name TYPE JSONB USING jsonb_build_object('en_US', name);
-ALTER TABLE account_analytic_plan ALTER COLUMN complete_name TYPE JSONB USING jsonb_build_object('en_US', complete_name);
 ALTER TABLE account_analytic_account ALTER COLUMN name TYPE JSONB USING jsonb_build_object('en_US', name);
 ALTER TABLE account_analytic_line ALTER COLUMN name TYPE JSONB USING jsonb_build_object('en_US', name);
 

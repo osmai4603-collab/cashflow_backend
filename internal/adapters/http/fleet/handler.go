@@ -10,6 +10,7 @@ import (
 	"cashflow_backend/internal/platform/auth"
 	platformerrors "cashflow_backend/internal/platform/errors"
 	"cashflow_backend/internal/platform/filter"
+	"cashflow_backend/internal/platform/i18n"
 	"cashflow_backend/internal/platform/pagination"
 	"cashflow_backend/internal/platform/response"
 	fleetusecase "cashflow_backend/internal/usecase/fleet"
@@ -124,7 +125,7 @@ func (h *Handler) UpdateBrand(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if request.Name != nil {
-		value.Name = *request.Name
+		value.Name = i18n.NewTranslation(*request.Name)
 	}
 	if err := h.useCase.UpdateBrand(r.Context(), value); err != nil {
 		response.Error(w, err)
@@ -222,7 +223,7 @@ func (h *Handler) UpdateModelCategory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if request.Name != nil {
-		value.Name = *request.Name
+		value.Name = i18n.NewTranslation(*request.Name)
 	}
 	if err := h.useCase.UpdateModelCategory(r.Context(), value); err != nil {
 		response.Error(w, err)
@@ -329,7 +330,7 @@ func (h *Handler) UpdateModel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if request.Name != nil {
-		value.Name = *request.Name
+		value.Name = i18n.NewTranslation(*request.Name)
 	}
 	if request.BrandID != nil {
 		value.BrandID = *request.BrandID
@@ -433,7 +434,7 @@ func (h *Handler) UpdateTag(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if request.Name != nil {
-		value.Name = *request.Name
+		value.Name = i18n.NewTranslation(*request.Name)
 	}
 	if request.Color != nil {
 		value.Color = *request.Color
@@ -534,7 +535,7 @@ func (h *Handler) UpdateState(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if request.Name != nil {
-		value.Name = *request.Name
+		value.Name = i18n.NewTranslation(*request.Name)
 	}
 	if request.Sequence != nil {
 		value.Sequence = *request.Sequence
@@ -638,7 +639,7 @@ func (h *Handler) UpdateServiceType(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if request.Name != nil {
-		value.Name = *request.Name
+		value.Name = i18n.NewTranslation(*request.Name)
 	}
 	if request.Category != nil {
 		value.Category = fleet.ServiceTypeCategory(*request.Category)

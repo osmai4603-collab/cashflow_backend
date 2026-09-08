@@ -30,10 +30,10 @@ ALTER TABLE product_templates ALTER COLUMN name TYPE JSONB USING jsonb_build_obj
 ALTER TABLE product_categories ALTER COLUMN name TYPE JSONB USING jsonb_build_object('en_US', name);
 
 -- 5. Convert Account Name to JSONB
-ALTER TABLE accounts ALTER COLUMN name TYPE JSONB USING jsonb_build_object('en_US', name);
+ALTER TABLE account_accounts ALTER COLUMN name TYPE JSONB USING jsonb_build_object('en_US', name);
 
 -- 6. Convert Warehouse and Location names to JSONB
-ALTER TABLE warehouses ALTER COLUMN name TYPE JSONB USING jsonb_build_object('en_US', name);
+ALTER TABLE stock_warehouses ALTER COLUMN name TYPE JSONB USING jsonb_build_object('en_US', name);
 ALTER TABLE stock_locations ALTER COLUMN name TYPE JSONB USING jsonb_build_object('en_US', name);
 ALTER TABLE stock_locations ALTER COLUMN complete_name TYPE JSONB USING jsonb_build_object('en_US', complete_name);
 

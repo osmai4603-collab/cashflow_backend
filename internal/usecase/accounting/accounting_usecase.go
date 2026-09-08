@@ -9,6 +9,7 @@ import (
 	"cashflow_backend/internal/domain/accounting"
 	platformerrors "cashflow_backend/internal/platform/errors"
 	"cashflow_backend/internal/platform/filter"
+	"cashflow_backend/internal/platform/i18n"
 	"cashflow_backend/internal/platform/pagination"
 )
 
@@ -129,7 +130,7 @@ func (uc *UseCase) RegisterEDIProcessor(format accounting.EDIFormat, p EDIProces
 func (uc *UseCase) CreateAccount(ctx context.Context, in CreateAccountInput) (*accounting.Account, error) {
 	acc := &accounting.Account{
 		Code:      strings.TrimSpace(in.Code),
-		Name:      strings.TrimSpace(in.Name),
+		Name:      i18n.NewTranslation(strings.TrimSpace(in.Name)),
 		Type:      in.Type,
 		Reconcile: in.Reconcile,
 		Currency:  in.Currency,
@@ -175,7 +176,7 @@ func (uc *UseCase) UpdateAccount(ctx context.Context, id int64, in UpdateAccount
 		acc.Code = strings.TrimSpace(*in.Code)
 	}
 	if in.Name != nil {
-		acc.Name = strings.TrimSpace(*in.Name)
+		acc.Name = i18n.NewTranslation(strings.TrimSpace(*in.Name))
 	}
 	if in.Type != nil {
 		acc.Type = *in.Type
@@ -232,7 +233,7 @@ func (uc *UseCase) ListAccounts(ctx context.Context, f *filter.Filter, page pagi
 
 func (uc *UseCase) CreateJournal(ctx context.Context, in CreateJournalInput) (*accounting.Journal, error) {
 	j := &accounting.Journal{
-		Name:              strings.TrimSpace(in.Name),
+		Name:              i18n.NewTranslation(strings.TrimSpace(in.Name)),
 		Code:              strings.TrimSpace(strings.ToUpper(in.Code)),
 		Type:              in.Type,
 		DefaultAccountID:  in.DefaultAccountID,
@@ -280,7 +281,7 @@ func (uc *UseCase) UpdateJournal(ctx context.Context, id int64, in UpdateJournal
 	}
 
 	if in.Name != nil {
-		j.Name = strings.TrimSpace(*in.Name)
+		j.Name = i18n.NewTranslation(strings.TrimSpace(*in.Name))
 	}
 	if in.Code != nil {
 		j.Code = strings.TrimSpace(strings.ToUpper(*in.Code))
@@ -346,7 +347,7 @@ func (uc *UseCase) ListJournals(ctx context.Context) ([]accounting.Journal, erro
 
 func (uc *UseCase) CreateTax(ctx context.Context, in CreateTaxInput) (*accounting.Tax, error) {
 	t := &accounting.Tax{
-		Name:            strings.TrimSpace(in.Name),
+		Name:            i18n.NewTranslation(strings.TrimSpace(in.Name)),
 		Type:            in.Type,
 		TypeTaxUse:      in.TypeTaxUse,
 		Amount:          in.Amount,
@@ -392,7 +393,7 @@ func (uc *UseCase) UpdateTax(ctx context.Context, id int64, in UpdateTaxInput) (
 	}
 
 	if in.Name != nil {
-		t.Name = strings.TrimSpace(*in.Name)
+		t.Name = i18n.NewTranslation(strings.TrimSpace(*in.Name))
 	}
 	if in.Type != nil {
 		t.Type = *in.Type
@@ -466,8 +467,8 @@ func (uc *UseCase) ComputeTax(ctx context.Context, taxID int64, amount float64) 
 
 func (uc *UseCase) CreatePaymentTerm(ctx context.Context, in CreatePaymentTermInput) (*accounting.PaymentTerm, error) {
 	pt := &accounting.PaymentTerm{
-		Name:  strings.TrimSpace(in.Name),
-		Note:  in.Note,
+		Name:  i18n.NewTranslation(strings.TrimSpace(in.Name)),
+		Note:  i18n.NewTranslation(in.Note),
 		Lines: make([]accounting.PaymentTermLine, len(in.Lines)),
 	}
 
@@ -503,10 +504,10 @@ func (uc *UseCase) UpdatePaymentTerm(ctx context.Context, id int64, in UpdatePay
 	}
 
 	if in.Name != nil {
-		pt.Name = strings.TrimSpace(*in.Name)
+		pt.Name = i18n.NewTranslation(strings.TrimSpace(*in.Name))
 	}
 	if in.Note != nil {
-		pt.Note = *in.Note
+		pt.Note = i18n.NewTranslation(*in.Note)
 	}
 	if in.Lines != nil {
 		pt.Lines = make([]accounting.PaymentTermLine, len(in.Lines))

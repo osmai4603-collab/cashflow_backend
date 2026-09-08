@@ -340,7 +340,7 @@ func (uc *UseCase) ensurePurchaseOrder(ctx context.Context, op *stock.Orderpoint
 			}
 			productName := ""
 			if tmpl, err := uc.productRepo.GetTemplateByID(ctx, op.ProductID); err == nil {
-				productName = tmpl.Name
+				productName = string(tmpl.Name)
 			}
 			price := uc.productCost(ctx, op.ProductID)
 			line := purchase.PurchaseOrderLine{
@@ -371,7 +371,7 @@ func (uc *UseCase) ensurePurchaseOrder(ctx context.Context, op *stock.Orderpoint
 	}
 	productName := ""
 	if tmpl, err := uc.productRepo.GetTemplateByID(ctx, op.ProductID); err == nil {
-		productName = tmpl.Name
+		productName = string(tmpl.Name)
 	}
 	deadline := now.AddDate(0, 0, op.LeadDays)
 	order := &purchase.PurchaseOrder{
@@ -415,7 +415,7 @@ func (uc *UseCase) productName(ctx context.Context, productID int64) (string, er
 	if err != nil {
 		return "", err
 	}
-	return t.Name, nil
+	return string(t.Name), nil
 }
 
 func (uc *UseCase) productCost(ctx context.Context, productID int64) float64 {

@@ -28,6 +28,22 @@ type mockPaymentRepo struct {
 	lastSeq         int
 }
 
+func (m *mockPaymentRepo) CreateTransaction(ctx context.Context, t *payment.PaymentTransaction) error {
+	return nil
+}
+func (m *mockPaymentRepo) GetTransactionByID(ctx context.Context, id int64) (*payment.PaymentTransaction, error) {
+	return nil, platformerrors.NotFound("transaction not found")
+}
+func (m *mockPaymentRepo) GetTransactionByReference(ctx context.Context, ref string) (*payment.PaymentTransaction, error) {
+	return nil, platformerrors.NotFound("transaction not found")
+}
+func (m *mockPaymentRepo) UpdateTransaction(ctx context.Context, t *payment.PaymentTransaction) error {
+	return nil
+}
+func (m *mockPaymentRepo) GetProviderByCode(ctx context.Context, code string, companyID int64) (*payment.PaymentProvider, error) {
+	return nil, platformerrors.NotFound("provider not found")
+}
+
 func newMockPaymentRepo() *mockPaymentRepo {
 	return &mockPaymentRepo{
 		payments:        make(map[int64]*payment.Payment),

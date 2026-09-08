@@ -82,11 +82,7 @@ func (u *UseCase) CreateDepartment(ctx context.Context, in CreateDepartmentInput
 				"parent_id": fmt.Sprintf("department %d not found", *dept.ParentID),
 			})
 		}
-		// Merge translations for complete name
-		dept.CompleteName = make(i18n.TranslationString)
-		for lang, parentComp := range parent.CompleteName {
-			dept.CompleteName[lang] = fmt.Sprintf("%s / %s", parentComp, dept.Name.Get(lang))
-		}
+		dept.CompleteName = i18n.NewTranslation(fmt.Sprintf("%s / %s", string(parent.CompleteName), string(dept.Name)))
 	} else {
 		dept.CompleteName = dept.Name
 	}
@@ -153,11 +149,7 @@ func (u *UseCase) UpdateDepartment(ctx context.Context, id int64, in UpdateDepar
 				"parent_id": fmt.Sprintf("department %d not found", *dept.ParentID),
 			})
 		}
-		// Merge translations for complete name
-		dept.CompleteName = make(i18n.TranslationString)
-		for lang, parentComp := range parent.CompleteName {
-			dept.CompleteName[lang] = fmt.Sprintf("%s / %s", parentComp, dept.Name.Get(lang))
-		}
+		dept.CompleteName = i18n.NewTranslation(fmt.Sprintf("%s / %s", string(parent.CompleteName), string(dept.Name)))
 	} else {
 		dept.CompleteName = dept.Name
 	}
@@ -457,7 +449,7 @@ func (u *UseCase) CreateEmployee(ctx context.Context, in CreateEmployeeInput) (*
 			})
 		}
 		if emp.JobTitle == "" {
-			emp.JobTitle = job.Name
+			emp.JobTitle = string(job.Name)
 		}
 	}
 

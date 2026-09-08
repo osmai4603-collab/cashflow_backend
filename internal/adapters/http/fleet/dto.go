@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"cashflow_backend/internal/domain/fleet"
+	"cashflow_backend/internal/platform/i18n"
 )
 
 // CreateBrandRequest is the request body for creating a vehicle brand.
@@ -12,7 +13,7 @@ type CreateBrandRequest struct {
 }
 
 func (r CreateBrandRequest) ToDomain() *fleet.VehicleBrand {
-	return &fleet.VehicleBrand{Name: r.Name}
+	return &fleet.VehicleBrand{Name: i18n.NewTranslation(r.Name)}
 }
 
 // UpdateBrandRequest is the request body for updating a vehicle brand.
@@ -26,7 +27,7 @@ type CreateModelCategoryRequest struct {
 }
 
 func (r CreateModelCategoryRequest) ToDomain() *fleet.VehicleModelCategory {
-	return &fleet.VehicleModelCategory{Name: r.Name}
+	return &fleet.VehicleModelCategory{Name: i18n.NewTranslation(r.Name)}
 }
 
 // UpdateModelCategoryRequest is the request body for updating a model category.
@@ -43,7 +44,7 @@ type CreateModelRequest struct {
 
 func (r CreateModelRequest) ToDomain() *fleet.VehicleModel {
 	return &fleet.VehicleModel{
-		Name:       r.Name,
+		Name:       i18n.NewTranslation(r.Name),
 		BrandID:    r.BrandID,
 		CategoryID: r.CategoryID,
 	}
@@ -63,7 +64,7 @@ type CreateTagRequest struct {
 }
 
 func (r CreateTagRequest) ToDomain() *fleet.VehicleTag {
-	return &fleet.VehicleTag{Name: r.Name, Color: r.Color}
+	return &fleet.VehicleTag{Name: i18n.NewTranslation(r.Name), Color: r.Color}
 }
 
 // UpdateTagRequest is the request body for updating a vehicle tag.
@@ -80,7 +81,7 @@ type CreateStateRequest struct {
 }
 
 func (r CreateStateRequest) ToDomain() *fleet.VehicleState {
-	return &fleet.VehicleState{Name: r.Name, Sequence: r.Sequence, Fold: r.Fold}
+	return &fleet.VehicleState{Name: i18n.NewTranslation(r.Name), Sequence: r.Sequence, Fold: r.Fold}
 }
 
 // UpdateStateRequest is the request body for updating a vehicle state.
@@ -98,7 +99,7 @@ type CreateServiceTypeRequest struct {
 
 func (r CreateServiceTypeRequest) ToDomain() *fleet.ServiceType {
 	return &fleet.ServiceType{
-		Name:     r.Name,
+		Name:     i18n.NewTranslation(r.Name),
 		Category: fleet.ServiceTypeCategory(r.Category),
 	}
 }

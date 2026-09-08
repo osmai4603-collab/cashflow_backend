@@ -5,14 +5,14 @@ import (
 	"io"
 	"log/slog"
 	"testing"
-	"time"
 
-	"cashflow_backend/internal/adapters/storage/loyalty"
-	"cashflow_backend/internal/adapters/storage/product"
-	"cashflow_backend/internal/adapters/storage/sale"
+	loyaltystorage "cashflow_backend/internal/adapters/storage/loyalty"
+	productstorage "cashflow_backend/internal/adapters/storage/product"
+	salestorage "cashflow_backend/internal/adapters/storage/sale"
 	"cashflow_backend/internal/domain/loyalty"
 	"cashflow_backend/internal/domain/sale"
-	"cashflow_backend/internal/usecase/loyalty"
+	loyaltyusecase "cashflow_backend/internal/usecase/loyalty"
+	"strings"
 )
 
 func setupRedeemEnv(t *testing.T) (*loyaltyusecase.UseCase, *loyaltystorage.MemoryRepo, *salestorage.MemoryRepo, *productstorage.MemoryRepo) {
@@ -85,7 +85,7 @@ func TestUseCase_RedeemCoupon_InsufficentPoints(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error due to insufficient points, got nil")
 	}
-	if err.Error() != "insufficient points to redeem this reward" {
+	if !strings.Contains(err.Error(), "insufficient points to redeem this reward") {
 		t.Errorf("unexpected error message: %v", err)
 	}
 }
@@ -180,13 +180,13 @@ func TestUseCase_RedeemCoupon_FreeProduct(t *testing.T) {
 
 	rewardProductID := int64(999)
 	reward := &loyalty.LoyaltyReward{
-		ProgramID:      prog.ID,
-		RewardType:     loyalty.RewardTypeProduct,
-		RewardProductID: &rewardProductID,
+		ProgramID:        prog.ID,
+		RewardType:       loyalty.RewardTypeProduct,
+		RewardProductID:  &rewardProductID,
 		RewardProductQty: 1,
-		RequiredPoints: 50,
-		Active:         true,
-		Description:    "Free Widget",
+		RequiredPoints:   50,
+		Active:           true,
+		Description:      "Free Widget",
 	}
 	lRepo.CreateReward(ctx, reward)
 

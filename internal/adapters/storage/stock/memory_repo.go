@@ -29,6 +29,7 @@ type MemoryRepo struct {
 	orderpoints    map[int64]*stock.Orderpoint
 	landedCosts    map[int64]*stock.LandedCost
 	procurements   map[int64]*stock.ProcurementGroup
+	scraps         map[int64]*stock.StockScrap
 	seqInCounters  map[int]int64
 	seqOutCounters map[int]int64
 	seqIntCounters map[int]int64
@@ -158,7 +159,7 @@ func (r *MemoryRepo) GetLocationByName(ctx context.Context, name string) (*stock
 	defer r.mu.RUnlock()
 
 	for _, loc := range r.locations {
-		if loc.Active && strings.EqualFold(loc.Name, name) {
+		if loc.Active && strings.EqualFold(string(loc.Name), name) {
 			clone := *loc
 			return &clone, nil
 		}
@@ -228,7 +229,7 @@ func (r *MemoryRepo) ListLocations(ctx context.Context, f *filter.Filter, page p
 					}
 				case "name", "search":
 					s := strings.ToLower(fmt.Sprintf("%v", crit.Value))
-					if !strings.Contains(strings.ToLower(loc.Name), s) && !strings.Contains(strings.ToLower(loc.CompleteName), s) {
+					if !strings.Contains(strings.ToLower(string(loc.Name)), s) && !strings.Contains(strings.ToLower(string(loc.CompleteName)), s) {
 						match = false
 					}
 				}
@@ -365,7 +366,7 @@ func (r *MemoryRepo) ListWarehouses(ctx context.Context, f *filter.Filter, page 
 					}
 				case "name", "search":
 					s := strings.ToLower(fmt.Sprintf("%v", crit.Value))
-					if !strings.Contains(strings.ToLower(wh.Name), s) && !strings.Contains(strings.ToLower(wh.Code), s) {
+					if !strings.Contains(strings.ToLower(string(wh.Name)), s) && !strings.Contains(strings.ToLower(wh.Code), s) {
 						match = false
 					}
 				}
@@ -1160,7 +1161,7 @@ func (r *MemoryRepo) GetOnHandStock(ctx context.Context, productID *int64, locat
 		for _, w := range r.warehouses {
 			if w.Active && w.LotStockID == loc.ID {
 				whID = &w.ID
-				whName = w.Name
+				whName = string(w.Name)
 				break
 			}
 		}
@@ -1172,7 +1173,7 @@ func (r *MemoryRepo) GetOnHandStock(ctx context.Context, productID *int64, locat
 		item := stock.StockOnHandItem{
 			ProductID:         q.ProductID,
 			LocationID:        q.LocationID,
-			LocationName:      loc.CompleteName,
+			LocationName:      string(loc.CompleteName),
 			WarehouseID:       whID,
 			WarehouseName:     whName,
 			Quantity:          q.Quantity,
@@ -1411,7 +1412,7 @@ func (r *MemoryRepo) ComputeTotalValuation(ctx context.Context, productID *int64
 				ProductID:   q.ProductID,
 				ProductName: r.productNameLocked(q.ProductID),
 				LocationID:  &locID,
-				Location:    loc.CompleteName,
+				Location:    string(loc.CompleteName),
 				Quantity:    q.Quantity,
 				UnitCost:    unitCost,
 				Value:       q.Quantity * unitCost,

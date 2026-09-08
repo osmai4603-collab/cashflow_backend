@@ -238,8 +238,8 @@ type LocationResponse struct {
 func ToLocationResponse(l *stock.StockLocation) LocationResponse {
 	return LocationResponse{
 		ID:             l.ID,
-		Name:           l.Name,
-		CompleteName:   l.CompleteName,
+			Name:           string(l.Name),
+			CompleteName:   string(l.CompleteName),
 		Usage:          l.Usage,
 		ParentID:       l.ParentID,
 		ScrapLocation:  l.ScrapLocation,
@@ -267,7 +267,7 @@ type WarehouseResponse struct {
 func ToWarehouseResponse(w *stock.Warehouse) WarehouseResponse {
 	return WarehouseResponse{
 		ID:             w.ID,
-		Name:           w.Name,
+			Name:           string(w.Name),
 		Code:           w.Code,
 		LotStockID:     w.LotStockID,
 		ViewLocationID: w.ViewLocationID,

@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	platformerrors "cashflow_backend/internal/platform/errors"
+	"cashflow_backend/internal/platform/i18n"
 )
 
 // Standard Response Envelopes
@@ -56,16 +57,26 @@ func NoContent(w http.ResponseWriter) {
 // The variadic form keeps compatibility with handlers that pass either (writer, err)
 // or (writer, request, err) while the response translation migration is completed.
 func Error(w http.ResponseWriter, args ...any) {
+	var req *http.Request
 	var err error
 	for _, arg := range args {
-		if candidate, ok := arg.(error); ok {
-			err = candidate
+		switch v := arg.(type) {
+		case *http.Request:
+			req = v
+		case error:
+			err = v
 		}
 	}
 	if err == nil {
 		err = platformerrors.Internal("internal server error", nil)
 	}
 	status := platformerrors.HTTPStatus(err)
+	translate := func(msg string) string {
+		if req == nil {
+			return msg
+		}
+		return i18n.T(req.Context(), msg)
+	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 
@@ -75,7 +86,7 @@ func Error(w http.ResponseWriter, args ...any) {
 			Success: false,
 			Error: &ErrorPayload{
 				Code:    appErr.Code,
-				Message: appErr.Message,
+				Message: translate(appErr.Message),
 				Details: appErr.Details,
 			},
 		})
@@ -86,7 +97,7 @@ func Error(w http.ResponseWriter, args ...any) {
 		Success: false,
 		Error: &ErrorPayload{
 			Code:    platformerrors.CodeInternal,
-			Message: "internal server error",
+			Message: translate("internal server error"),
 		},
 	})
 }

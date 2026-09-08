@@ -30,7 +30,7 @@ func NewSMTPSender(cfg Config) *SMTPSender {
 func (s *SMTPSender) Send(to string, subject, body string) error {
 	addr := fmt.Sprintf("%s:%d", s.cfg.Host, s.cfg.Port)
 
-	msg := []byte(fmt.Sprintf("To: %s\r\nSubject: %s\r\n\r\n%s\r\n", to, subject, body))
+	msg := fmt.Appendf(nil, "To: %s\r\nSubject: %s\r\n\r\n%s\r\n", to, subject, body)
 
 	auth := smtp.PlainAuth("", s.cfg.User, s.cfg.Password, s.cfg.Host)
 

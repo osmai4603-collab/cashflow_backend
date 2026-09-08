@@ -14,8 +14,8 @@ import (
 	bankstatementhttp "cashflow_backend/internal/adapters/http/bankstatement"
 	bankstatementstorage "cashflow_backend/internal/adapters/storage/bankstatement"
 	"cashflow_backend/internal/domain/accounting"
-	bankstatementusecase "cashflow_backend/internal/usecase/bankstatement"
 	accountingusecase "cashflow_backend/internal/usecase/accounting"
+	bankstatementusecase "cashflow_backend/internal/usecase/bankstatement"
 
 	"github.com/go-chi/chi/v5"
 )
@@ -32,7 +32,7 @@ func (m *mockAccountingSvc) GetMove(ctx context.Context, id int64) (*accounting.
 	return &accounting.AccountMove{ID: id}, nil
 }
 func (m *mockAccountingSvc) GetJournal(ctx context.Context, id int64) (*accounting.Journal, error) {
-	return &accounting.Journal{ID: id, Name: "Bank", Code: "BNK"}, nil
+	return &accounting.Journal{ID: id, Name: "Bank", Code: "BNK", Type: accounting.JournalTypeBank}, nil
 }
 func (m *mockAccountingSvc) GetAccount(ctx context.Context, id int64) (*accounting.Account, error) {
 	return &accounting.Account{ID: id, Code: "101000"}, nil
@@ -78,8 +78,8 @@ func TestBankStatementHandler_CRUD(t *testing.T) {
 
 	// 1. Create Statement
 	reqBody := bankstatementhttp.CreateStatementRequest{
-		JournalID: 1,
-		Date:      time.Now(),
+		JournalID: 3,
+		Date:      func() *time.Time { value := time.Now(); return &value }(),
 		Currency:  "USD",
 	}
 	body, _ := json.Marshal(reqBody)

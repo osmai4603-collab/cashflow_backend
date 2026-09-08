@@ -130,7 +130,7 @@ func (i *AccountingIntegration) computeTaxes(ctx context.Context, value *expense
 			base = result.TotalAmount
 		}
 		taxTotal += result.TaxAmount
-		lines = append(lines, accountingusecase.JournalEntryLineInput{AccountID: tax.AccountID, Name: tax.Name, Debit: result.TaxAmount})
+		lines = append(lines, accountingusecase.JournalEntryLineInput{AccountID: tax.AccountID, Name: string(tax.Name), Debit: result.TaxAmount})
 	}
 	if len(value.TaxIDs) == 0 {
 		untaxed = value.TotalAmount

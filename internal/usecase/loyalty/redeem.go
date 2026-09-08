@@ -8,6 +8,7 @@ import (
 	"cashflow_backend/internal/domain/product"
 	"cashflow_backend/internal/domain/sale"
 	platformerrors "cashflow_backend/internal/platform/errors"
+	"cashflow_backend/internal/platform/i18n"
 )
 
 // RedeemInput requests the redemption of a reward from an applied coupon.
@@ -214,16 +215,17 @@ func (uc *UseCase) buildRewardLine(ctx context.Context, reward loyalty.LoyaltyRe
 	rewardID := reward.ID
 	couponID := card.ID
 
-	name := fmt.Sprintf("%s - %s", program.Name, reward.Description)
-	if name == "" || name == program.Name+" - " {
-		name = fmt.Sprintf("%s discount", program.Name)
+	programName := string(program.Name)
+	name := fmt.Sprintf("%s - %s", programName, reward.Description)
+	if name == "" || name == programName+" - " {
+		name = fmt.Sprintf("%s discount", programName)
 	}
 
 	if reward.RewardType == loyalty.RewardTypeProduct {
 		line := sale.SaleOrderLine{
 			Sequence:             sequence,
 			ProductID:            *reward.RewardProductID,
-			Name:                 name,
+			Name:                 i18n.NewTranslation(name),
 			ProductUomQty:        float64(reward.RewardProductQty),
 			ProductUom:           reward.RewardProductUomID,
 			UnitPrice:            0,
@@ -248,7 +250,7 @@ func (uc *UseCase) buildRewardLine(ctx context.Context, reward loyalty.LoyaltyRe
 		line := sale.SaleOrderLine{
 			Sequence:             sequence,
 			ProductID:            *discountProductID,
-			Name:                 name,
+			Name:                 i18n.NewTranslation(name),
 			ProductUomQty:        1,
 			UnitPrice:            -discountAmount,
 			IsRewardLine:         true,
@@ -264,7 +266,7 @@ func (uc *UseCase) buildRewardLine(ctx context.Context, reward loyalty.LoyaltyRe
 	// Fallback: represent the discount on a synthetic line without a product.
 	line := sale.SaleOrderLine{
 		Sequence:             sequence,
-		Name:                 name,
+		Name:                 i18n.NewTranslation(name),
 		UnitPrice:            -discountAmount,
 		ProductUomQty:        1,
 		IsRewardLine:         true,
@@ -283,7 +285,7 @@ func (uc *UseCase) ensureDiscountProduct(ctx context.Context, program *loyalty.L
 		return nil, nil
 	}
 	pt := &product.ProductTemplate{
-		Name:        fmt.Sprintf("Loyalty Discount (%s)", program.Name),
+		Name:        i18n.NewTranslation(fmt.Sprintf("Loyalty Discount (%s)", string(program.Name))),
 		Type:        product.ProductTypeService,
 		SalePrice:   0,
 		CostPrice:   0,

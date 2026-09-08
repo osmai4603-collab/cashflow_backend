@@ -10,6 +10,7 @@ import (
 	"cashflow_backend/internal/platform/auth"
 	platformerrors "cashflow_backend/internal/platform/errors"
 	"cashflow_backend/internal/platform/filter"
+	"cashflow_backend/internal/platform/i18n"
 	"cashflow_backend/internal/platform/pagination"
 	"cashflow_backend/internal/platform/response"
 	maintenanceusecase "cashflow_backend/internal/usecase/maintenance"
@@ -128,7 +129,7 @@ func (h *Handler) UpdateCategory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if request.Name != nil {
-		value.Name = *request.Name
+		value.Name = i18n.NewTranslation(*request.Name)
 	}
 	if request.Color != nil {
 		value.Color = *request.Color
@@ -230,7 +231,7 @@ func (h *Handler) UpdateStage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if request.Name != nil {
-		value.Name = *request.Name
+		value.Name = i18n.NewTranslation(*request.Name)
 	}
 	if request.Sequence != nil {
 		value.Sequence = *request.Sequence
@@ -347,7 +348,7 @@ func (h *Handler) UpdateTeam(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if request.Name != nil {
-		value.Name = *request.Name
+		value.Name = i18n.NewTranslation(*request.Name)
 	}
 	if err := h.useCase.UpdateTeam(r.Context(), value); err != nil {
 		response.Error(w, err)

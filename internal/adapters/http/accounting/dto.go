@@ -73,7 +73,7 @@ func ToAccountResponse(a *accounting.Account) AccountResponse {
 	return AccountResponse{
 		ID:        a.ID,
 		Code:      a.Code,
-		Name:      a.Name,
+		Name:      string(a.Name),
 		Type:      a.Type,
 		Reconcile: a.Reconcile,
 		Currency:  a.Currency,
@@ -148,7 +148,7 @@ type JournalResponse struct {
 func ToJournalResponse(j *accounting.Journal) JournalResponse {
 	return JournalResponse{
 		ID:                j.ID,
-		Name:              j.Name,
+				Name:              string(j.Name),
 		Code:              j.Code,
 		Type:              j.Type,
 		DefaultAccountID:  j.DefaultAccountID,
@@ -226,7 +226,7 @@ type TaxResponse struct {
 func ToTaxResponse(t *accounting.Tax) TaxResponse {
 	return TaxResponse{
 		ID:              t.ID,
-		Name:            t.Name,
+			Name:            string(t.Name),
 		Type:            t.Type,
 		TypeTaxUse:      t.TypeTaxUse,
 		Amount:          t.Amount,
@@ -335,8 +335,8 @@ func ToPaymentTermResponse(pt *accounting.PaymentTerm) PaymentTermResponse {
 	}
 	return PaymentTermResponse{
 		ID:        pt.ID,
-		Name:      pt.Name,
-		Note:      pt.Note,
+		Name:      string(pt.Name),
+		Note:      string(pt.Note),
 		Active:    pt.Active,
 		Lines:     lines,
 		CreatedAt: pt.CreatedAt,

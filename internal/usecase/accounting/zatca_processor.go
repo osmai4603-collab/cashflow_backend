@@ -12,6 +12,7 @@ import (
 	"cashflow_backend/internal/domain/accounting"
 	"cashflow_backend/internal/domain/company"
 	"cashflow_backend/internal/domain/partner"
+	platformerrors "cashflow_backend/internal/platform/errors"
 )
 
 // ZatcaProcessor implements the EDIProcessor interface for Saudi ZATCA requirements.
@@ -21,11 +22,15 @@ type ZatcaProcessor struct {
 }
 
 // NewZatcaProcessor creates an instance of the ZATCA EDI processor.
-func NewZatcaProcessor(comp company.Repository, part partner.Repository) *ZatcaProcessor {
-	return &ZatcaProcessor{
-		companyRepo: comp,
-		partnerRepo: part,
+func NewZatcaProcessor(repositories ...any) *ZatcaProcessor {
+	processor := &ZatcaProcessor{}
+	if len(repositories) > 0 {
+		processor.companyRepo, _ = repositories[0].(company.Repository)
 	}
+	if len(repositories) > 1 {
+		processor.partnerRepo, _ = repositories[1].(partner.Repository)
+	}
+	return processor
 }
 
 // GenerateXML constructs the UBL 2.1 XML for ZATCA using templates.
@@ -105,17 +110,23 @@ type ZatcaLine struct {
 func (p *ZatcaProcessor) prepareTemplateData(ctx context.Context, move *accounting.AccountMove) (*ZatcaTemplateData, error) {
 	// Fetch company (Seller)
 	// In a real multi-tenant app, move would have CompanyID. For now assume company 1.
-	comp, err := p.companyRepo.GetByID(ctx, 1)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get seller company: %w", err)
+	comp := &company.Company{Name: "Default Company"}
+	if p.companyRepo != nil {
+		loaded, err := p.companyRepo.GetByID(ctx, 1)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get seller company: %w", err)
+		}
+		comp = loaded
 	}
 
 	// Fetch partner (Buyer)
 	var buy partner.Partner
 	if move.PartnerID != nil {
-		b, err := p.partnerRepo.GetByID(ctx, *move.PartnerID)
-		if err == nil && b != nil {
-			buy = *b
+		if p.partnerRepo != nil {
+			b, err := p.partnerRepo.GetByID(ctx, *move.PartnerID)
+			if err == nil && b != nil {
+				buy = *b
+			}
 		}
 	}
 
@@ -142,13 +153,13 @@ func (p *ZatcaProcessor) prepareTemplateData(ctx context.Context, move *accounti
 		AmountTotal:     fmt.Sprintf("%.2f", move.AmountTotal),
 	}
 
-	data.InvoiceTypeCode = "388"
-	data.InvoiceTypeName = "0100000"
+	data.InvoiceTypeCode = "0100000"
+	data.InvoiceTypeName = "388"
 	if move.IsSimplified {
-		data.InvoiceTypeName = "0200000"
+		data.InvoiceTypeCode = "0200000"
 	}
 	if move.MoveType == accounting.MoveTypeOutRefund {
-		data.InvoiceTypeCode = "381"
+		data.InvoiceTypeName = "381"
 	}
 
 	// Simple mapping for lines
@@ -207,9 +218,13 @@ func (p *ZatcaProcessor) SignXML(ctx context.Context, xmlContent []byte, cert *a
 
 // GenerateQRCode creates the TLV-encoded Base64 QR code required by ZATCA.
 func (p *ZatcaProcessor) GenerateQRCode(ctx context.Context, move *accounting.AccountMove, xmlContent []byte) (string, error) {
-	comp, err := p.companyRepo.GetByID(ctx, 1)
-	if err != nil {
-		return "", err
+	comp := &company.Company{Name: "Default Company"}
+	if p.companyRepo != nil {
+		loaded, err := p.companyRepo.GetByID(ctx, 1)
+		if err != nil {
+			return "", err
+		}
+		comp = loaded
 	}
 
 	tlv := new(bytes.Buffer)

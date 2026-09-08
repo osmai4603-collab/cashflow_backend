@@ -110,12 +110,12 @@ type PlanResponse struct {
 func ToPlanResponse(p *analytic.AnalyticPlan) PlanResponse {
 	resp := PlanResponse{
 		ID:                   p.ID,
-		Name:                 p.Name,
+		Name:                 string(p.Name),
 		Description:          p.Description,
 		ParentID:             p.ParentID,
 		ParentPath:           p.ParentPath,
 		RootID:               p.RootID,
-		CompleteName:         p.CompleteName,
+		CompleteName:         string(p.CompleteName),
 		Sequence:             p.Sequence,
 		Color:                p.Color,
 		DefaultApplicability: string(p.DefaultApplicability),
@@ -224,7 +224,7 @@ type AccountResponse struct {
 func ToAccountResponse(a *analytic.AnalyticAccount) AccountResponse {
 	return AccountResponse{
 		ID:         a.ID,
-		Name:       a.Name,
+		Name:       string(a.Name),
 		Code:       a.Code,
 		PlanID:     a.PlanID,
 		RootPlanID: a.RootPlanID,
@@ -334,7 +334,7 @@ type LineResponse struct {
 func ToLineResponse(l *analytic.AnalyticLine) LineResponse {
 	return LineResponse{
 		ID:               l.ID,
-		Name:             l.Name,
+		Name:             string(l.Name),
 		Date:             l.Date,
 		Amount:           l.Amount,
 		UnitAmount:       l.UnitAmount,

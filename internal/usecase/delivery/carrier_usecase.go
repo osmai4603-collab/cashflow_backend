@@ -4,13 +4,12 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"regexp"
-	"strings"
 
 	"cashflow_backend/internal/domain/delivery"
 	"cashflow_backend/internal/domain/product"
 	"cashflow_backend/internal/domain/sale"
 	platformerrors "cashflow_backend/internal/platform/errors"
+	"cashflow_backend/internal/platform/i18n"
 )
 
 type UseCase struct {
@@ -36,7 +35,7 @@ func NewUseCase(
 
 // CalculateRate computes the shipping cost for a given Sale Order and Carrier.
 func (uc *UseCase) CalculateRate(ctx context.Context, orderID int64, carrierID int64) (*delivery.RateResult, error) {
-	order, err := uc.saleRepo.GetOrder(ctx, orderID)
+	order, err := uc.saleRepo.GetOrderByID(ctx, orderID)
 	if err != nil {
 		return nil, err
 	}
@@ -136,11 +135,11 @@ func (uc *UseCase) getOrderWeight(ctx context.Context, order *sale.SaleOrder) fl
 		if line.IsRewardLine || line.IsDelivery {
 			continue
 		}
-		p, err := uc.productRepo.GetProductVariant(ctx, line.ProductID)
+		p, err := uc.productRepo.GetVariantByID(ctx, line.ProductID)
 		if err != nil {
 			continue
 		}
-		tmpl, err := uc.productRepo.GetProductTemplate(ctx, p.TemplateID)
+		tmpl, err := uc.productRepo.GetTemplateByID(ctx, p.TemplateID)
 		if err != nil {
 			continue
 		}
@@ -159,11 +158,11 @@ func (uc *UseCase) getOrderStats(ctx context.Context, order *sale.SaleOrder) map
 		if line.IsRewardLine || line.IsDelivery {
 			continue
 		}
-		p, err := uc.productRepo.GetProductVariant(ctx, line.ProductID)
+		p, err := uc.productRepo.GetVariantByID(ctx, line.ProductID)
 		if err != nil {
 			continue
 		}
-		tmpl, err := uc.productRepo.GetProductTemplate(ctx, p.TemplateID)
+		tmpl, err := uc.productRepo.GetTemplateByID(ctx, p.TemplateID)
 		if err != nil {
 			continue
 		}
@@ -197,7 +196,7 @@ func (uc *UseCase) AddShippingToOrder(ctx context.Context, orderID int64, carrie
 		return platformerrors.Conflict(res.ErrorMessage)
 	}
 
-	order, err := uc.saleRepo.GetOrder(ctx, orderID)
+	order, err := uc.saleRepo.GetOrderByID(ctx, orderID)
 	if err != nil {
 		return err
 	}
@@ -222,7 +221,7 @@ func (uc *UseCase) AddShippingToOrder(ctx context.Context, orderID int64, carrie
 	deliveryLine := sale.SaleOrderLine{
 		OrderID:       order.ID,
 		ProductID:     carrier.ProductID,
-		Name:          carrier.Name,
+		Name:          i18n.NewTranslation(carrier.Name),
 		ProductUomQty: 1,
 		UnitPrice:     res.Price,
 		IsDelivery:    true,

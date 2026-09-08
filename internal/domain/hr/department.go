@@ -1,6 +1,7 @@
 package hr
 
 import (
+	"strings"
 	"time"
 
 	"cashflow_backend/internal/platform/audit"
@@ -34,11 +35,13 @@ type DepartmentNode struct {
 
 // Validate checks business invariants on the Department entity.
 func (d *Department) Validate() error {
-	if len(d.Name) == 0 {
+	name := strings.TrimSpace(string(d.Name))
+	if name == "" {
 		return platformerrors.Validation("department name is required", map[string]string{
 			"name": "cannot be empty",
 		})
 	}
+	d.Name = i18n.NewTranslation(name)
 
 	if d.ParentID != nil && d.ID > 0 && *d.ParentID == d.ID {
 		return platformerrors.Validation("invalid parent department", map[string]string{

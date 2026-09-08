@@ -64,7 +64,7 @@ func (uc *SaleStockUseCase) CreateDeliveriesFromOrder(ctx context.Context, order
 		movesInput = append(movesInput, stockusecase.CreateMoveInput{
 			ProductID:  l.ProductID,
 			ProductQty: l.ProductUomQty,
-			Name:       l.Name,
+			Name:       string(l.Name),
 			ProductUom: l.ProductUom,
 			SaleLineID: &lID,
 		})

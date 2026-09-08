@@ -4,11 +4,11 @@ import (
 	"context"
 	"testing"
 
-	"cashflow_backend/internal/domain/delivery"
+	deliverystorage "cashflow_backend/internal/adapters/storage/delivery"
+	productstorage "cashflow_backend/internal/adapters/storage/product"
+	salestorage "cashflow_backend/internal/adapters/storage/sale"
+	deliverydomain "cashflow_backend/internal/domain/delivery"
 	"cashflow_backend/internal/domain/sale"
-	"cashflow_backend/internal/adapters/storage/delivery"
-	"cashflow_backend/internal/adapters/storage/sale"
-	"cashflow_backend/internal/adapters/storage/product"
 	"log/slog"
 	"os"
 )
@@ -17,16 +17,16 @@ func TestCalculateRateFixed(t *testing.T) {
 	ctx := context.Background()
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 
-	repo := delivery.NewMemoryRepository()
-	saleRepo := sale.NewMemoryRepo()
-	prodRepo := product.NewMemoryRepo()
+	repo := deliverystorage.NewMemoryRepository()
+	saleRepo := salestorage.NewMemoryRepo()
+	prodRepo := productstorage.NewMemoryRepo()
 
 	uc := NewUseCase(repo, saleRepo, prodRepo, logger)
 
 	// Setup carrier
-	carrier := &delivery.DeliveryCarrier{
+	carrier := &deliverydomain.DeliveryCarrier{
 		Name: "Fixed $10",
-		DeliveryType: delivery.CarrierTypeFixed,
+		DeliveryType: deliverydomain.CarrierTypeFixed,
 		FixedPrice: 10.0,
 		ProductID: 1,
 		Active: true,

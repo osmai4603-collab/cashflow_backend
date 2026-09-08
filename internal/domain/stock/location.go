@@ -43,11 +43,13 @@ type StockLocation struct {
 
 // Validate checks business invariants for StockLocation.
 func (l *StockLocation) Validate() error {
-	if len(l.Name) == 0 {
+	name := strings.TrimSpace(string(l.Name))
+	if name == "" {
 		return platformerrors.Validation("location name is required", map[string]string{
 			"name": "cannot be empty",
 		})
 	}
+	l.Name = i18n.NewTranslation(name)
 
 	if l.Usage == "" {
 		l.Usage = LocationUsageInternal
@@ -82,9 +84,7 @@ func (l *StockLocation) Validate() error {
 func (l *StockLocation) ComputeCompleteName(parentCompleteName string) {
 	parentCompleteName = strings.TrimSpace(parentCompleteName)
 	if parentCompleteName != "" {
-		l.CompleteName = i18n.TranslationString{
-			"en_US": parentCompleteName + "/" + l.Name.Get("en_US"),
-		}
+		l.CompleteName = i18n.NewTranslation(parentCompleteName + "/" + l.Name.Get(i18n.DefaultLang))
 	} else {
 		l.CompleteName = l.Name
 	}

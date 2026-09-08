@@ -6,10 +6,11 @@ import (
 )
 
 func TestTranslationString_Get(t *testing.T) {
-	ts := TranslationString{
-		"en_US": "Apple",
-		"ar_SA": "تفاح",
-	}
+	LoadTranslations("ar_SA", map[string]string{
+		"Apple": "تفاح",
+	})
+
+	ts := NewTranslation("Apple")
 
 	tests := []struct {
 		lang     string
@@ -29,10 +30,11 @@ func TestTranslationString_Get(t *testing.T) {
 }
 
 func TestTranslationString_GetLocalized(t *testing.T) {
-	ts := TranslationString{
-		"en_US": "Hello",
-		"ar_SA": "مرحبا",
-	}
+	LoadTranslations("ar_SA", map[string]string{
+		"Hello": "مرحبا",
+	})
+
+	ts := NewTranslation("Hello")
 
 	ctx := context.WithValue(context.Background(), LangKey, "ar_SA")
 	if got := ts.GetLocalized(ctx); got != "مرحبا" {

@@ -7,7 +7,6 @@ ALTER TABLE account_payment_terms ALTER COLUMN name TYPE VARCHAR(255) USING name
 
 ALTER TABLE account_analytic_line ALTER COLUMN name TYPE VARCHAR(255) USING name->>'en_US';
 ALTER TABLE account_analytic_account ALTER COLUMN name TYPE VARCHAR(255) USING name->>'en_US';
-ALTER TABLE account_analytic_plan ALTER COLUMN complete_name TYPE VARCHAR(500) USING complete_name->>'en_US';
 ALTER TABLE account_analytic_plan ALTER COLUMN name TYPE VARCHAR(255) USING name->>'en_US';
 
 ALTER TABLE loyalty_rewards ALTER COLUMN description TYPE TEXT USING description->>'en_US';

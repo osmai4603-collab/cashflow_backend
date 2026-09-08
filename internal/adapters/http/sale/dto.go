@@ -45,7 +45,7 @@ func (r CreateSaleOrderRequest) ToInput() saleusecase.CreateSaleOrderInput {
 	for i, l := range r.Lines {
 		lines[i] = saleusecase.CreateSaleOrderLineInput{
 			ProductID:     l.ProductID,
-			Name:          l.Name,
+			Name:          string(l.Name),
 			ProductUomQty: l.ProductUomQty,
 			ProductUom:    l.ProductUom,
 			UnitPrice:     l.UnitPrice,
@@ -201,7 +201,7 @@ func ToSaleOrderResponse(o *sale.SaleOrder) SaleOrderResponse {
 			OrderID:       l.OrderID,
 			Sequence:      l.Sequence,
 			ProductID:     l.ProductID,
-			Name:          l.Name,
+			Name:          string(l.Name),
 			ProductUomQty: l.ProductUomQty,
 			ProductUom:    l.ProductUom,
 			UnitPrice:     l.UnitPrice,
