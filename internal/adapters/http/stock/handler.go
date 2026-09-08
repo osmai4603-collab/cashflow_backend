@@ -41,13 +41,13 @@ func NewHandler(uc *stockusecase.UseCase, logger *slog.Logger) *Handler {
 func (h *Handler) CreateLocation(w http.ResponseWriter, r *http.Request) {
 	var req CreateLocationRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		response.Error(w, platformerrors.BadRequest("malformed request body", err))
+		response.Error(w, r, platformerrors.BadRequest("malformed request body", err))
 		return
 	}
 
 	loc, err := h.uc.CreateLocation(r.Context(), req.ToInput())
 	if err != nil {
-		response.Error(w, err)
+		response.Error(w, r, err)
 		return
 	}
 
@@ -57,13 +57,13 @@ func (h *Handler) CreateLocation(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) GetLocation(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
 	if err != nil || id <= 0 {
-		response.Error(w, platformerrors.BadRequest("invalid location id", nil))
+		response.Error(w, r, platformerrors.BadRequest("invalid location id", nil))
 		return
 	}
 
 	loc, err := h.uc.GetLocation(r.Context(), id)
 	if err != nil {
-		response.Error(w, err)
+		response.Error(w, r, err)
 		return
 	}
 
@@ -83,7 +83,7 @@ func (h *Handler) ListLocations(w http.ResponseWriter, r *http.Request) {
 
 	res, err := h.uc.ListLocations(r.Context(), f, page)
 	if err != nil {
-		response.Error(w, err)
+		response.Error(w, r, err)
 		return
 	}
 
@@ -99,19 +99,19 @@ func (h *Handler) ListLocations(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) UpdateLocation(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
 	if err != nil || id <= 0 {
-		response.Error(w, platformerrors.BadRequest("invalid location id", nil))
+		response.Error(w, r, platformerrors.BadRequest("invalid location id", nil))
 		return
 	}
 
 	var req UpdateLocationRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		response.Error(w, platformerrors.BadRequest("malformed request body", err))
+		response.Error(w, r, platformerrors.BadRequest("malformed request body", err))
 		return
 	}
 
 	loc, err := h.uc.UpdateLocation(r.Context(), id, req.ToInput())
 	if err != nil {
-		response.Error(w, err)
+		response.Error(w, r, err)
 		return
 	}
 
@@ -121,12 +121,12 @@ func (h *Handler) UpdateLocation(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) DeleteLocation(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
 	if err != nil || id <= 0 {
-		response.Error(w, platformerrors.BadRequest("invalid location id", nil))
+		response.Error(w, r, platformerrors.BadRequest("invalid location id", nil))
 		return
 	}
 
 	if err := h.uc.DeleteLocation(r.Context(), id); err != nil {
-		response.Error(w, err)
+		response.Error(w, r, err)
 		return
 	}
 
@@ -140,13 +140,13 @@ func (h *Handler) DeleteLocation(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) CreateWarehouse(w http.ResponseWriter, r *http.Request) {
 	var req CreateWarehouseRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		response.Error(w, platformerrors.BadRequest("malformed request body", err))
+		response.Error(w, r, platformerrors.BadRequest("malformed request body", err))
 		return
 	}
 
 	wh, err := h.uc.CreateWarehouse(r.Context(), req.ToInput())
 	if err != nil {
-		response.Error(w, err)
+		response.Error(w, r, err)
 		return
 	}
 
@@ -156,13 +156,13 @@ func (h *Handler) CreateWarehouse(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) GetWarehouse(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
 	if err != nil || id <= 0 {
-		response.Error(w, platformerrors.BadRequest("invalid warehouse id", nil))
+		response.Error(w, r, platformerrors.BadRequest("invalid warehouse id", nil))
 		return
 	}
 
 	wh, err := h.uc.GetWarehouse(r.Context(), id)
 	if err != nil {
-		response.Error(w, err)
+		response.Error(w, r, err)
 		return
 	}
 
@@ -182,7 +182,7 @@ func (h *Handler) ListWarehouses(w http.ResponseWriter, r *http.Request) {
 
 	res, err := h.uc.ListWarehouses(r.Context(), f, page)
 	if err != nil {
-		response.Error(w, err)
+		response.Error(w, r, err)
 		return
 	}
 
@@ -198,19 +198,19 @@ func (h *Handler) ListWarehouses(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) UpdateWarehouse(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
 	if err != nil || id <= 0 {
-		response.Error(w, platformerrors.BadRequest("invalid warehouse id", nil))
+		response.Error(w, r, platformerrors.BadRequest("invalid warehouse id", nil))
 		return
 	}
 
 	var req UpdateWarehouseRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		response.Error(w, platformerrors.BadRequest("malformed request body", err))
+		response.Error(w, r, platformerrors.BadRequest("malformed request body", err))
 		return
 	}
 
 	wh, err := h.uc.UpdateWarehouse(r.Context(), id, req.ToInput())
 	if err != nil {
-		response.Error(w, err)
+		response.Error(w, r, err)
 		return
 	}
 
@@ -220,12 +220,12 @@ func (h *Handler) UpdateWarehouse(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) DeleteWarehouse(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
 	if err != nil || id <= 0 {
-		response.Error(w, platformerrors.BadRequest("invalid warehouse id", nil))
+		response.Error(w, r, platformerrors.BadRequest("invalid warehouse id", nil))
 		return
 	}
 
 	if err := h.uc.DeleteWarehouse(r.Context(), id); err != nil {
-		response.Error(w, err)
+		response.Error(w, r, err)
 		return
 	}
 
@@ -239,13 +239,13 @@ func (h *Handler) DeleteWarehouse(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) CreatePicking(w http.ResponseWriter, r *http.Request) {
 	var req CreatePickingRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		response.Error(w, platformerrors.BadRequest("malformed request body", err))
+		response.Error(w, r, platformerrors.BadRequest("malformed request body", err))
 		return
 	}
 
 	picking, err := h.uc.CreatePicking(r.Context(), req.ToInput())
 	if err != nil {
-		response.Error(w, err)
+		response.Error(w, r, err)
 		return
 	}
 
@@ -255,13 +255,13 @@ func (h *Handler) CreatePicking(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) GetPicking(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
 	if err != nil || id <= 0 {
-		response.Error(w, platformerrors.BadRequest("invalid picking id", nil))
+		response.Error(w, r, platformerrors.BadRequest("invalid picking id", nil))
 		return
 	}
 
 	picking, err := h.uc.GetPicking(r.Context(), id)
 	if err != nil {
-		response.Error(w, err)
+		response.Error(w, r, err)
 		return
 	}
 
@@ -292,7 +292,7 @@ func (h *Handler) ListPickings(w http.ResponseWriter, r *http.Request) {
 
 	res, err := h.uc.ListPickings(r.Context(), f, page)
 	if err != nil {
-		response.Error(w, err)
+		response.Error(w, r, err)
 		return
 	}
 
@@ -308,19 +308,19 @@ func (h *Handler) ListPickings(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) UpdatePicking(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
 	if err != nil || id <= 0 {
-		response.Error(w, platformerrors.BadRequest("invalid picking id", nil))
+		response.Error(w, r, platformerrors.BadRequest("invalid picking id", nil))
 		return
 	}
 
 	var req UpdatePickingRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		response.Error(w, platformerrors.BadRequest("malformed request body", err))
+		response.Error(w, r, platformerrors.BadRequest("malformed request body", err))
 		return
 	}
 
 	picking, err := h.uc.UpdatePicking(r.Context(), id, req.ToInput())
 	if err != nil {
-		response.Error(w, err)
+		response.Error(w, r, err)
 		return
 	}
 
@@ -330,12 +330,12 @@ func (h *Handler) UpdatePicking(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) DeletePicking(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
 	if err != nil || id <= 0 {
-		response.Error(w, platformerrors.BadRequest("invalid picking id", nil))
+		response.Error(w, r, platformerrors.BadRequest("invalid picking id", nil))
 		return
 	}
 
 	if err := h.uc.DeletePicking(r.Context(), id); err != nil {
-		response.Error(w, err)
+		response.Error(w, r, err)
 		return
 	}
 
@@ -345,13 +345,13 @@ func (h *Handler) DeletePicking(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) ConfirmPicking(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
 	if err != nil || id <= 0 {
-		response.Error(w, platformerrors.BadRequest("invalid picking id", nil))
+		response.Error(w, r, platformerrors.BadRequest("invalid picking id", nil))
 		return
 	}
 
 	picking, err := h.uc.ConfirmPicking(r.Context(), id)
 	if err != nil {
-		response.Error(w, err)
+		response.Error(w, r, err)
 		return
 	}
 
@@ -361,7 +361,7 @@ func (h *Handler) ConfirmPicking(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) ValidatePicking(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
 	if err != nil || id <= 0 {
-		response.Error(w, platformerrors.BadRequest("invalid picking id", nil))
+		response.Error(w, r, platformerrors.BadRequest("invalid picking id", nil))
 		return
 	}
 
@@ -372,7 +372,7 @@ func (h *Handler) ValidatePicking(w http.ResponseWriter, r *http.Request) {
 
 	picking, err := h.uc.ValidatePicking(r.Context(), id, req.ToInput())
 	if err != nil {
-		response.Error(w, err)
+		response.Error(w, r, err)
 		return
 	}
 
@@ -382,13 +382,13 @@ func (h *Handler) ValidatePicking(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) CancelPicking(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
 	if err != nil || id <= 0 {
-		response.Error(w, platformerrors.BadRequest("invalid picking id", nil))
+		response.Error(w, r, platformerrors.BadRequest("invalid picking id", nil))
 		return
 	}
 
 	picking, err := h.uc.CancelPicking(r.Context(), id)
 	if err != nil {
-		response.Error(w, err)
+		response.Error(w, r, err)
 		return
 	}
 
@@ -420,7 +420,7 @@ func (h *Handler) GetOnHandStock(w http.ResponseWriter, r *http.Request) {
 
 	items, err := h.uc.GetOnHandStock(r.Context(), productID, locationID, warehouseID)
 	if err != nil {
-		response.Error(w, err)
+		response.Error(w, r, err)
 		return
 	}
 
@@ -451,7 +451,7 @@ func (h *Handler) ListMoves(w http.ResponseWriter, r *http.Request) {
 
 	res, err := h.uc.ListMoves(r.Context(), f, page)
 	if err != nil {
-		response.Error(w, err)
+		response.Error(w, r, err)
 		return
 	}
 
@@ -467,13 +467,13 @@ func (h *Handler) ListMoves(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) AdjustStock(w http.ResponseWriter, r *http.Request) {
 	var req StockAdjustmentRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		response.Error(w, platformerrors.BadRequest("malformed request body", err))
+		response.Error(w, r, platformerrors.BadRequest("malformed request body", err))
 		return
 	}
 
 	quant, err := h.uc.AdjustStock(r.Context(), req.ToInput())
 	if err != nil {
-		response.Error(w, err)
+		response.Error(w, r, err)
 		return
 	}
 

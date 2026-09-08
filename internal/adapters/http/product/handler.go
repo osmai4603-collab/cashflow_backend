@@ -40,13 +40,13 @@ func NewHandler(useCase productusecase.UseCase, logger *slog.Logger) *Handler {
 func (h *Handler) CreateProduct(w http.ResponseWriter, r *http.Request) {
 	var req CreateProductRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		response.Error(w, platformerrors.BadRequest("invalid JSON request body", err))
+		response.Error(w, r, platformerrors.BadRequest("invalid JSON request body", err))
 		return
 	}
 
 	created, err := h.useCase.CreateProduct(r.Context(), req.ToInput())
 	if err != nil {
-		response.Error(w, err)
+		response.Error(w, r, err)
 		return
 	}
 
@@ -56,13 +56,13 @@ func (h *Handler) CreateProduct(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) GetProduct(w http.ResponseWriter, r *http.Request) {
 	id, err := parseID(chi.URLParam(r, "id"))
 	if err != nil {
-		response.Error(w, platformerrors.BadRequest("invalid product ID in path", err))
+		response.Error(w, r, platformerrors.BadRequest("invalid product ID in path", err))
 		return
 	}
 
 	pt, err := h.useCase.GetProduct(r.Context(), id)
 	if err != nil {
-		response.Error(w, err)
+		response.Error(w, r, err)
 		return
 	}
 
@@ -72,19 +72,19 @@ func (h *Handler) GetProduct(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) UpdateProduct(w http.ResponseWriter, r *http.Request) {
 	id, err := parseID(chi.URLParam(r, "id"))
 	if err != nil {
-		response.Error(w, platformerrors.BadRequest("invalid product ID in path", err))
+		response.Error(w, r, platformerrors.BadRequest("invalid product ID in path", err))
 		return
 	}
 
 	var req UpdateProductRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		response.Error(w, platformerrors.BadRequest("invalid JSON request body", err))
+		response.Error(w, r, platformerrors.BadRequest("invalid JSON request body", err))
 		return
 	}
 
 	updated, err := h.useCase.UpdateProduct(r.Context(), id, req.ToInput())
 	if err != nil {
-		response.Error(w, err)
+		response.Error(w, r, err)
 		return
 	}
 
@@ -94,12 +94,12 @@ func (h *Handler) UpdateProduct(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) DeleteProduct(w http.ResponseWriter, r *http.Request) {
 	id, err := parseID(chi.URLParam(r, "id"))
 	if err != nil {
-		response.Error(w, platformerrors.BadRequest("invalid product ID in path", err))
+		response.Error(w, r, platformerrors.BadRequest("invalid product ID in path", err))
 		return
 	}
 
 	if err := h.useCase.DeleteProduct(r.Context(), id); err != nil {
-		response.Error(w, err)
+		response.Error(w, r, err)
 		return
 	}
 
@@ -112,7 +112,7 @@ func (h *Handler) ListProducts(w http.ResponseWriter, r *http.Request) {
 
 	result, err := h.useCase.ListProducts(r.Context(), f, pageReq)
 	if err != nil {
-		response.Error(w, err)
+		response.Error(w, r, err)
 		return
 	}
 
@@ -126,19 +126,19 @@ func (h *Handler) ListProducts(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) CreateProductVariant(w http.ResponseWriter, r *http.Request) {
 	tmplID, err := parseID(chi.URLParam(r, "id"))
 	if err != nil {
-		response.Error(w, platformerrors.BadRequest("invalid product template ID in path", err))
+		response.Error(w, r, platformerrors.BadRequest("invalid product template ID in path", err))
 		return
 	}
 
 	var req CreateVariantRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		response.Error(w, platformerrors.BadRequest("invalid JSON request body", err))
+		response.Error(w, r, platformerrors.BadRequest("invalid JSON request body", err))
 		return
 	}
 
 	variant, err := h.useCase.CreateProductVariant(r.Context(), tmplID, req.ToInput())
 	if err != nil {
-		response.Error(w, err)
+		response.Error(w, r, err)
 		return
 	}
 
@@ -148,13 +148,13 @@ func (h *Handler) CreateProductVariant(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) GetProductVariants(w http.ResponseWriter, r *http.Request) {
 	tmplID, err := parseID(chi.URLParam(r, "id"))
 	if err != nil {
-		response.Error(w, platformerrors.BadRequest("invalid product template ID in path", err))
+		response.Error(w, r, platformerrors.BadRequest("invalid product template ID in path", err))
 		return
 	}
 
 	variants, err := h.useCase.GetProductVariants(r.Context(), tmplID)
 	if err != nil {
-		response.Error(w, err)
+		response.Error(w, r, err)
 		return
 	}
 
@@ -164,13 +164,13 @@ func (h *Handler) GetProductVariants(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) GetVariant(w http.ResponseWriter, r *http.Request) {
 	id, err := parseID(chi.URLParam(r, "id"))
 	if err != nil {
-		response.Error(w, platformerrors.BadRequest("invalid variant ID in path", err))
+		response.Error(w, r, platformerrors.BadRequest("invalid variant ID in path", err))
 		return
 	}
 
 	variant, err := h.useCase.GetVariant(r.Context(), id)
 	if err != nil {
-		response.Error(w, err)
+		response.Error(w, r, err)
 		return
 	}
 
@@ -180,12 +180,12 @@ func (h *Handler) GetVariant(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) DeleteVariant(w http.ResponseWriter, r *http.Request) {
 	id, err := parseID(chi.URLParam(r, "id"))
 	if err != nil {
-		response.Error(w, platformerrors.BadRequest("invalid variant ID in path", err))
+		response.Error(w, r, platformerrors.BadRequest("invalid variant ID in path", err))
 		return
 	}
 
 	if err := h.useCase.DeleteVariant(r.Context(), id); err != nil {
-		response.Error(w, err)
+		response.Error(w, r, err)
 		return
 	}
 
@@ -199,13 +199,13 @@ func (h *Handler) DeleteVariant(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) CreateCategory(w http.ResponseWriter, r *http.Request) {
 	var req CreateCategoryRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		response.Error(w, platformerrors.BadRequest("invalid JSON request body", err))
+		response.Error(w, r, platformerrors.BadRequest("invalid JSON request body", err))
 		return
 	}
 
 	created, err := h.useCase.CreateCategory(r.Context(), req.ToInput())
 	if err != nil {
-		response.Error(w, err)
+		response.Error(w, r, err)
 		return
 	}
 
@@ -215,13 +215,13 @@ func (h *Handler) CreateCategory(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) GetCategory(w http.ResponseWriter, r *http.Request) {
 	id, err := parseID(chi.URLParam(r, "id"))
 	if err != nil {
-		response.Error(w, platformerrors.BadRequest("invalid category ID in path", err))
+		response.Error(w, r, platformerrors.BadRequest("invalid category ID in path", err))
 		return
 	}
 
 	cat, err := h.useCase.GetCategory(r.Context(), id)
 	if err != nil {
-		response.Error(w, err)
+		response.Error(w, r, err)
 		return
 	}
 
@@ -231,19 +231,19 @@ func (h *Handler) GetCategory(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) UpdateCategory(w http.ResponseWriter, r *http.Request) {
 	id, err := parseID(chi.URLParam(r, "id"))
 	if err != nil {
-		response.Error(w, platformerrors.BadRequest("invalid category ID in path", err))
+		response.Error(w, r, platformerrors.BadRequest("invalid category ID in path", err))
 		return
 	}
 
 	var req UpdateCategoryRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		response.Error(w, platformerrors.BadRequest("invalid JSON request body", err))
+		response.Error(w, r, platformerrors.BadRequest("invalid JSON request body", err))
 		return
 	}
 
 	updated, err := h.useCase.UpdateCategory(r.Context(), id, req.ToInput())
 	if err != nil {
-		response.Error(w, err)
+		response.Error(w, r, err)
 		return
 	}
 
@@ -253,12 +253,12 @@ func (h *Handler) UpdateCategory(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) DeleteCategory(w http.ResponseWriter, r *http.Request) {
 	id, err := parseID(chi.URLParam(r, "id"))
 	if err != nil {
-		response.Error(w, platformerrors.BadRequest("invalid category ID in path", err))
+		response.Error(w, r, platformerrors.BadRequest("invalid category ID in path", err))
 		return
 	}
 
 	if err := h.useCase.DeleteCategory(r.Context(), id); err != nil {
-		response.Error(w, err)
+		response.Error(w, r, err)
 		return
 	}
 
@@ -268,7 +268,7 @@ func (h *Handler) DeleteCategory(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) ListCategories(w http.ResponseWriter, r *http.Request) {
 	cats, err := h.useCase.ListCategories(r.Context())
 	if err != nil {
-		response.Error(w, err)
+		response.Error(w, r, err)
 		return
 	}
 
@@ -282,13 +282,13 @@ func (h *Handler) ListCategories(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) CreateUoM(w http.ResponseWriter, r *http.Request) {
 	var req CreateUoMRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		response.Error(w, platformerrors.BadRequest("invalid JSON request body", err))
+		response.Error(w, r, platformerrors.BadRequest("invalid JSON request body", err))
 		return
 	}
 
 	uom, err := h.useCase.CreateUoM(r.Context(), req.ToInput())
 	if err != nil {
-		response.Error(w, err)
+		response.Error(w, r, err)
 		return
 	}
 
@@ -298,13 +298,13 @@ func (h *Handler) CreateUoM(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) GetUoM(w http.ResponseWriter, r *http.Request) {
 	id, err := parseID(chi.URLParam(r, "id"))
 	if err != nil {
-		response.Error(w, platformerrors.BadRequest("invalid unit of measure ID in path", err))
+		response.Error(w, r, platformerrors.BadRequest("invalid unit of measure ID in path", err))
 		return
 	}
 
 	uom, err := h.useCase.GetUoM(r.Context(), id)
 	if err != nil {
-		response.Error(w, err)
+		response.Error(w, r, err)
 		return
 	}
 
@@ -314,19 +314,19 @@ func (h *Handler) GetUoM(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) UpdateUoM(w http.ResponseWriter, r *http.Request) {
 	id, err := parseID(chi.URLParam(r, "id"))
 	if err != nil {
-		response.Error(w, platformerrors.BadRequest("invalid unit of measure ID in path", err))
+		response.Error(w, r, platformerrors.BadRequest("invalid unit of measure ID in path", err))
 		return
 	}
 
 	var req UpdateUoMRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		response.Error(w, platformerrors.BadRequest("invalid JSON request body", err))
+		response.Error(w, r, platformerrors.BadRequest("invalid JSON request body", err))
 		return
 	}
 
 	updated, err := h.useCase.UpdateUoM(r.Context(), id, req.ToInput())
 	if err != nil {
-		response.Error(w, err)
+		response.Error(w, r, err)
 		return
 	}
 
@@ -336,12 +336,12 @@ func (h *Handler) UpdateUoM(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) DeleteUoM(w http.ResponseWriter, r *http.Request) {
 	id, err := parseID(chi.URLParam(r, "id"))
 	if err != nil {
-		response.Error(w, platformerrors.BadRequest("invalid unit of measure ID in path", err))
+		response.Error(w, r, platformerrors.BadRequest("invalid unit of measure ID in path", err))
 		return
 	}
 
 	if err := h.useCase.DeleteUoM(r.Context(), id); err != nil {
-		response.Error(w, err)
+		response.Error(w, r, err)
 		return
 	}
 
@@ -351,7 +351,7 @@ func (h *Handler) DeleteUoM(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) ListUoMs(w http.ResponseWriter, r *http.Request) {
 	uoms, err := h.useCase.ListUoMs(r.Context())
 	if err != nil {
-		response.Error(w, err)
+		response.Error(w, r, err)
 		return
 	}
 
@@ -365,13 +365,13 @@ func (h *Handler) ListUoMs(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) CreatePricelist(w http.ResponseWriter, r *http.Request) {
 	var req CreatePricelistRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		response.Error(w, platformerrors.BadRequest("invalid JSON request body", err))
+		response.Error(w, r, platformerrors.BadRequest("invalid JSON request body", err))
 		return
 	}
 
 	created, err := h.useCase.CreatePricelist(r.Context(), req.ToInput())
 	if err != nil {
-		response.Error(w, err)
+		response.Error(w, r, err)
 		return
 	}
 
@@ -381,13 +381,13 @@ func (h *Handler) CreatePricelist(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) GetPricelist(w http.ResponseWriter, r *http.Request) {
 	id, err := parseID(chi.URLParam(r, "id"))
 	if err != nil {
-		response.Error(w, platformerrors.BadRequest("invalid pricelist ID in path", err))
+		response.Error(w, r, platformerrors.BadRequest("invalid pricelist ID in path", err))
 		return
 	}
 
 	pl, err := h.useCase.GetPricelist(r.Context(), id)
 	if err != nil {
-		response.Error(w, err)
+		response.Error(w, r, err)
 		return
 	}
 
@@ -397,19 +397,19 @@ func (h *Handler) GetPricelist(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) UpdatePricelist(w http.ResponseWriter, r *http.Request) {
 	id, err := parseID(chi.URLParam(r, "id"))
 	if err != nil {
-		response.Error(w, platformerrors.BadRequest("invalid pricelist ID in path", err))
+		response.Error(w, r, platformerrors.BadRequest("invalid pricelist ID in path", err))
 		return
 	}
 
 	var req UpdatePricelistRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		response.Error(w, platformerrors.BadRequest("invalid JSON request body", err))
+		response.Error(w, r, platformerrors.BadRequest("invalid JSON request body", err))
 		return
 	}
 
 	updated, err := h.useCase.UpdatePricelist(r.Context(), id, req.ToInput())
 	if err != nil {
-		response.Error(w, err)
+		response.Error(w, r, err)
 		return
 	}
 
@@ -419,12 +419,12 @@ func (h *Handler) UpdatePricelist(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) DeletePricelist(w http.ResponseWriter, r *http.Request) {
 	id, err := parseID(chi.URLParam(r, "id"))
 	if err != nil {
-		response.Error(w, platformerrors.BadRequest("invalid pricelist ID in path", err))
+		response.Error(w, r, platformerrors.BadRequest("invalid pricelist ID in path", err))
 		return
 	}
 
 	if err := h.useCase.DeletePricelist(r.Context(), id); err != nil {
-		response.Error(w, err)
+		response.Error(w, r, err)
 		return
 	}
 
@@ -434,7 +434,7 @@ func (h *Handler) DeletePricelist(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) ListPricelists(w http.ResponseWriter, r *http.Request) {
 	pricelists, err := h.useCase.ListPricelists(r.Context())
 	if err != nil {
-		response.Error(w, err)
+		response.Error(w, r, err)
 		return
 	}
 
@@ -444,19 +444,19 @@ func (h *Handler) ListPricelists(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) AddPricelistItem(w http.ResponseWriter, r *http.Request) {
 	pricelistID, err := parseID(chi.URLParam(r, "id"))
 	if err != nil {
-		response.Error(w, platformerrors.BadRequest("invalid pricelist ID in path", err))
+		response.Error(w, r, platformerrors.BadRequest("invalid pricelist ID in path", err))
 		return
 	}
 
 	var req CreatePricelistItemRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		response.Error(w, platformerrors.BadRequest("invalid JSON request body", err))
+		response.Error(w, r, platformerrors.BadRequest("invalid JSON request body", err))
 		return
 	}
 
 	item, err := h.useCase.AddPricelistItem(r.Context(), pricelistID, req.ToInput())
 	if err != nil {
-		response.Error(w, err)
+		response.Error(w, r, err)
 		return
 	}
 
@@ -466,12 +466,12 @@ func (h *Handler) AddPricelistItem(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) DeletePricelistItem(w http.ResponseWriter, r *http.Request) {
 	itemID, err := parseID(chi.URLParam(r, "itemId"))
 	if err != nil {
-		response.Error(w, platformerrors.BadRequest("invalid pricelist item ID in path", err))
+		response.Error(w, r, platformerrors.BadRequest("invalid pricelist item ID in path", err))
 		return
 	}
 
 	if err := h.useCase.DeletePricelistItem(r.Context(), itemID); err != nil {
-		response.Error(w, err)
+		response.Error(w, r, err)
 		return
 	}
 
@@ -481,19 +481,19 @@ func (h *Handler) DeletePricelistItem(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) ComputePrice(w http.ResponseWriter, r *http.Request) {
 	pricelistID, err := parseID(chi.URLParam(r, "id"))
 	if err != nil {
-		response.Error(w, platformerrors.BadRequest("invalid pricelist ID in path", err))
+		response.Error(w, r, platformerrors.BadRequest("invalid pricelist ID in path", err))
 		return
 	}
 
 	var req ComputePriceRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		response.Error(w, platformerrors.BadRequest("invalid JSON request body", err))
+		response.Error(w, r, platformerrors.BadRequest("invalid JSON request body", err))
 		return
 	}
 
 	unitPrice, err := h.useCase.ComputePrice(r.Context(), pricelistID, req.ProductID, req.VariantID, req.Quantity)
 	if err != nil {
-		response.Error(w, err)
+		response.Error(w, r, err)
 		return
 	}
 

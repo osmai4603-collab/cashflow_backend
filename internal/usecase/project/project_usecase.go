@@ -6,6 +6,7 @@ import (
 
 	"cashflow_backend/internal/domain/project"
 	platformerrors "cashflow_backend/internal/platform/errors"
+	"cashflow_backend/internal/platform/i18n"
 )
 
 type CreateProjectInput struct {
@@ -47,7 +48,7 @@ func New(repo project.Repository) *Service { return &Service{repo: repo} }
 
 func (s *Service) CreateProject(ctx context.Context, input CreateProjectInput) (*project.Project, error) {
 	value := &project.Project{
-		Name: input.Name, Description: input.Description, PartnerID: input.PartnerID,
+		Name: i18n.NewTranslation(input.Name), Description: input.Description, PartnerID: input.PartnerID,
 		ManagerID: input.ManagerID, StageID: input.StageID, DateStart: input.DateStart,
 		DateEnd: input.DateEnd, AllowMilestones: input.AllowMilestones, AllowSubtasks: input.AllowSubtasks,
 		AllowDependencies: input.AllowDependencies, AnalyticAccountID: input.AnalyticAccountID, CompanyID: input.CompanyID,
@@ -213,7 +214,7 @@ func (s *Service) CreateTask(ctx context.Context, input CreateTaskInput) (*proje
 		return nil, platformerrors.Conflict("milestones are disabled for this project")
 	}
 	value := &project.Task{
-		Name: input.Name, ProjectID: input.ProjectID, StageID: input.StageID,
+		Name: i18n.NewTranslation(input.Name), ProjectID: input.ProjectID, StageID: input.StageID,
 		AssigneeIDs: append([]int64(nil), input.AssigneeIDs...), ParentID: input.ParentID,
 		Priority: input.Priority, DateDeadline: input.DateDeadline, Description: input.Description,
 		MilestoneID: input.MilestoneID, TagIDs: append([]int64(nil), input.TagIDs...), Sequence: input.Sequence,

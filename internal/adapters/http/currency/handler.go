@@ -37,13 +37,13 @@ func NewHandler(useCase currencyusecase.UseCase, logger *slog.Logger) *Handler {
 func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	var req CreateCurrencyRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		response.Error(w, platformerrors.BadRequest("invalid JSON request body", err))
+		response.Error(w, r, platformerrors.BadRequest("invalid JSON request body", err))
 		return
 	}
 
 	created, err := h.useCase.CreateCurrency(r.Context(), req.ToInput())
 	if err != nil {
-		response.Error(w, err)
+		response.Error(w, r, err)
 		return
 	}
 
@@ -54,13 +54,13 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) GetByID(w http.ResponseWriter, r *http.Request) {
 	id, err := parseCurrencyID(chi.URLParam(r, "id"))
 	if err != nil {
-		response.Error(w, platformerrors.BadRequest("invalid currency ID in path", err))
+		response.Error(w, r, platformerrors.BadRequest("invalid currency ID in path", err))
 		return
 	}
 
 	c, err := h.useCase.GetCurrency(r.Context(), id)
 	if err != nil {
-		response.Error(w, err)
+		response.Error(w, r, err)
 		return
 	}
 
@@ -71,19 +71,19 @@ func (h *Handler) GetByID(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 	id, err := parseCurrencyID(chi.URLParam(r, "id"))
 	if err != nil {
-		response.Error(w, platformerrors.BadRequest("invalid currency ID in path", err))
+		response.Error(w, r, platformerrors.BadRequest("invalid currency ID in path", err))
 		return
 	}
 
 	var req UpdateCurrencyRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		response.Error(w, platformerrors.BadRequest("invalid JSON request body", err))
+		response.Error(w, r, platformerrors.BadRequest("invalid JSON request body", err))
 		return
 	}
 
 	updated, err := h.useCase.UpdateCurrency(r.Context(), id, req.ToInput())
 	if err != nil {
-		response.Error(w, err)
+		response.Error(w, r, err)
 		return
 	}
 
@@ -94,12 +94,12 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 	id, err := parseCurrencyID(chi.URLParam(r, "id"))
 	if err != nil {
-		response.Error(w, platformerrors.BadRequest("invalid currency ID in path", err))
+		response.Error(w, r, platformerrors.BadRequest("invalid currency ID in path", err))
 		return
 	}
 
 	if err := h.useCase.DeleteCurrency(r.Context(), id); err != nil {
-		response.Error(w, err)
+		response.Error(w, r, err)
 		return
 	}
 
@@ -113,7 +113,7 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 
 	result, err := h.useCase.ListCurrencies(r.Context(), f, pageReq)
 	if err != nil {
-		response.Error(w, err)
+		response.Error(w, r, err)
 		return
 	}
 
@@ -124,20 +124,20 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) CreateRate(w http.ResponseWriter, r *http.Request) {
 	id, err := parseCurrencyID(chi.URLParam(r, "id"))
 	if err != nil {
-		response.Error(w, platformerrors.BadRequest("invalid currency ID in path", err))
+		response.Error(w, r, platformerrors.BadRequest("invalid currency ID in path", err))
 		return
 	}
 
 	var req CreateRateRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		response.Error(w, platformerrors.BadRequest("invalid JSON request body", err))
+		response.Error(w, r, platformerrors.BadRequest("invalid JSON request body", err))
 		return
 	}
 	req.CurrencyID = id
 
 	created, err := h.useCase.CreateRate(r.Context(), req.ToRateInput())
 	if err != nil {
-		response.Error(w, err)
+		response.Error(w, r, err)
 		return
 	}
 
@@ -148,14 +148,14 @@ func (h *Handler) CreateRate(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) ListRates(w http.ResponseWriter, r *http.Request) {
 	id, err := parseCurrencyID(chi.URLParam(r, "id"))
 	if err != nil {
-		response.Error(w, platformerrors.BadRequest("invalid currency ID in path", err))
+		response.Error(w, r, platformerrors.BadRequest("invalid currency ID in path", err))
 		return
 	}
 
 	pageReq := pagination.Parse(r)
 	result, err := h.useCase.ListRates(r.Context(), id, pageReq)
 	if err != nil {
-		response.Error(w, err)
+		response.Error(w, r, err)
 		return
 	}
 
@@ -166,13 +166,13 @@ func (h *Handler) ListRates(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) Convert(w http.ResponseWriter, r *http.Request) {
 	var req ConvertRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		response.Error(w, platformerrors.BadRequest("invalid JSON request body", err))
+		response.Error(w, r, platformerrors.BadRequest("invalid JSON request body", err))
 		return
 	}
 
 	result, err := h.useCase.Convert(r.Context(), req.ToConvertInput())
 	if err != nil {
-		response.Error(w, err)
+		response.Error(w, r, err)
 		return
 	}
 

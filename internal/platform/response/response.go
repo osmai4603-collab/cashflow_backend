@@ -9,10 +9,10 @@ import (
 
 // Standard Response Envelopes
 type Envelope struct {
-	Success bool          `json:"success"`
-	Data    any           `json:"data,omitempty"`
-	Meta    any           `json:"meta,omitempty"`
-	Error   *ErrorPayload `json:"error,omitempty"`
+	Success bool              `json:"success"`
+	Data    any               `json:"data,omitempty"`
+	Meta    any               `json:"meta,omitempty"`
+	Error   *ErrorPayload     `json:"error,omitempty"`
 }
 
 type ErrorPayload struct {
@@ -53,7 +53,18 @@ func NoContent(w http.ResponseWriter) {
 }
 
 // Error responds with a standardized error envelope mapping AppError to appropriate HTTP status.
-func Error(w http.ResponseWriter, err error) {
+// The variadic form keeps compatibility with handlers that pass either (writer, err)
+// or (writer, request, err) while the response translation migration is completed.
+func Error(w http.ResponseWriter, args ...any) {
+	var err error
+	for _, arg := range args {
+		if candidate, ok := arg.(error); ok {
+			err = candidate
+		}
+	}
+	if err == nil {
+		err = platformerrors.Internal("internal server error", nil)
+	}
 	status := platformerrors.HTTPStatus(err)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)

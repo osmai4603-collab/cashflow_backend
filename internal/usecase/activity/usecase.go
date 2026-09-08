@@ -12,13 +12,15 @@ import (
 )
 
 type UseCase struct {
-	repo      activity.ActivityRepository
-	typeRepo  activity.ActivityTypeRepository
-	msgRepo   activity.MessageRepository
-	notifRepo activity.NotificationRepository
-	emailRepo activity.EmailQueueRepository
-	userRepo  activity.UserRepository
-	bus       activity.Bus
+	repo         activity.ActivityRepository
+	typeRepo     activity.ActivityTypeRepository
+	msgRepo      activity.MessageRepository
+	notifRepo    activity.NotificationRepository
+	emailRepo    activity.EmailQueueRepository
+	followerRepo activity.FollowerRepository
+	subtypeRepo  activity.SubtypeRepository
+	userRepo     activity.UserRepository
+	bus          activity.Bus
 }
 
 func NewUseCase(
@@ -27,17 +29,21 @@ func NewUseCase(
 	msgRepo activity.MessageRepository,
 	notifRepo activity.NotificationRepository,
 	emailRepo activity.EmailQueueRepository,
+	followerRepo activity.FollowerRepository,
+	subtypeRepo activity.SubtypeRepository,
 	bus activity.Bus,
 	userRepo activity.UserRepository,
 ) *UseCase {
 	return &UseCase{
-		repo:      repo,
-		typeRepo:  typeRepo,
-		msgRepo:   msgRepo,
-		notifRepo: notifRepo,
-		emailRepo: emailRepo,
-		userRepo:  userRepo,
-		bus:       bus,
+		repo:         repo,
+		typeRepo:     typeRepo,
+		msgRepo:      msgRepo,
+		notifRepo:    notifRepo,
+		emailRepo:    emailRepo,
+		followerRepo: followerRepo,
+		subtypeRepo:  subtypeRepo,
+		userRepo:     userRepo,
+		bus:          bus,
 	}
 }
 

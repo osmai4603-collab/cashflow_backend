@@ -5,12 +5,13 @@ import (
 	"time"
 
 	platformerrors "cashflow_backend/internal/platform/errors"
+	"cashflow_backend/internal/platform/i18n"
 )
 
 // Warehouse represents a physical logistics facility or building (stock.warehouse in Odoo).
 type Warehouse struct {
 	ID             int64     `json:"id"`
-	Name           string    `json:"name"`
+	Name           i18n.TranslationString `json:"name"`
 	Code           string    `json:"code"`
 	CompanyID      *int64    `json:"company_id,omitempty"`
 	PartnerID      *int64    `json:"partner_id,omitempty"`
@@ -25,15 +26,9 @@ type Warehouse struct {
 
 // Validate checks business invariants for Warehouse.
 func (w *Warehouse) Validate() error {
-	w.Name = strings.TrimSpace(w.Name)
-	if w.Name == "" {
+	if len(w.Name) == 0 {
 		return platformerrors.Validation("warehouse name is required", map[string]string{
 			"name": "cannot be empty",
-		})
-	}
-	if len(w.Name) > 128 {
-		return platformerrors.Validation("warehouse name exceeds maximum length", map[string]string{
-			"name": "must not exceed 128 characters",
 		})
 	}
 

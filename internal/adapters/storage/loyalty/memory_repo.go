@@ -460,7 +460,7 @@ func matchesProgram(ctx context.Context, p *loyalty.LoyaltyProgram, f *filter.Fi
 				return false
 			}
 		case "name":
-			if !strings.Contains(strings.ToLower(p.Name), strings.ToLower(fmt.Sprintf("%v", c.Value))) {
+			if !strings.Contains(strings.ToLower(p.Name.Get("en_US")), strings.ToLower(fmt.Sprintf("%v", c.Value))) {
 				return false
 			}
 		case "active":

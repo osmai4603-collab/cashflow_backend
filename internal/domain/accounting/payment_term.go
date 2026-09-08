@@ -2,10 +2,10 @@ package accounting
 
 import (
 	"fmt"
-	"strings"
 	"time"
 
 	platformerrors "cashflow_backend/internal/platform/errors"
+	"cashflow_backend/internal/platform/i18n"
 )
 
 // PaymentTermValueType specifies how payment installment is quantified.
@@ -30,8 +30,8 @@ type PaymentTermLine struct {
 // PaymentTerm represents customer or vendor credit terms (account.payment.term in Odoo).
 type PaymentTerm struct {
 	ID        int64             `json:"id"`
-	Name      string            `json:"name"`
-	Note      string            `json:"note,omitempty"`
+	Name      i18n.TranslationString            `json:"name"`
+	Note      i18n.TranslationString            `json:"note,omitempty"`
 	Active    bool              `json:"active"`
 	Lines     []PaymentTermLine `json:"lines,omitempty"`
 	CreatedAt time.Time         `json:"created_at"`
@@ -40,8 +40,7 @@ type PaymentTerm struct {
 
 // Validate checks PaymentTerm constraints.
 func (pt *PaymentTerm) Validate() error {
-	pt.Name = strings.TrimSpace(pt.Name)
-	if pt.Name == "" {
+	if len(pt.Name) == 0 {
 		return platformerrors.Validation("payment term name is required", map[string]string{
 			"name": "cannot be empty",
 		})

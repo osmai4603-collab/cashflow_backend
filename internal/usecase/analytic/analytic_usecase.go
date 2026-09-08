@@ -14,6 +14,7 @@ import (
 	"cashflow_backend/internal/domain/analytic"
 	platformerrors "cashflow_backend/internal/platform/errors"
 	"cashflow_backend/internal/platform/filter"
+	"cashflow_backend/internal/platform/i18n"
 	"cashflow_backend/internal/platform/pagination"
 )
 
@@ -168,7 +169,7 @@ func New(repo analytic.Repository, logger *slog.Logger) *UseCase {
 
 func (uc *UseCase) CreatePlan(ctx context.Context, in CreatePlanInput) (*analytic.AnalyticPlan, error) {
 	plan := &analytic.AnalyticPlan{
-		Name:                strings.TrimSpace(in.Name),
+		Name:                i18n.NewTranslation(strings.TrimSpace(in.Name)),
 		Description:         strings.TrimSpace(in.Description),
 		ParentID:            in.ParentID,
 		Sequence:            in.Sequence,
@@ -318,7 +319,7 @@ func (uc *UseCase) CreateAccount(ctx context.Context, in CreateAccountInput) (*a
 		return nil, err
 	}
 	acc := &analytic.AnalyticAccount{
-		Name:      strings.TrimSpace(in.Name),
+		Name:      i18n.NewTranslation(strings.TrimSpace(in.Name)),
 		Code:      strings.TrimSpace(in.Code),
 		PlanID:    in.PlanID,
 		PartnerID: in.PartnerID,
@@ -347,7 +348,7 @@ func (uc *UseCase) UpdateAccount(ctx context.Context, id int64, in UpdateAccount
 		return nil, err
 	}
 	if in.Name != nil {
-		acc.Name = strings.TrimSpace(*in.Name)
+		acc.Name = i18n.NewTranslation(strings.TrimSpace(*in.Name))
 	}
 	if in.Code != nil {
 		acc.Code = strings.TrimSpace(*in.Code)
@@ -559,7 +560,7 @@ func (uc *UseCase) RegisterManualLine(ctx context.Context, in CreateLineInput) (
 		in.Source = string(analytic.SourceManual)
 	}
 	line := &analytic.AnalyticLine{
-		Name:             strings.TrimSpace(in.Name),
+		Name:             i18n.NewTranslation(strings.TrimSpace(in.Name)),
 		Date:             in.Date,
 		Amount:           in.Amount,
 		UnitAmount:       in.UnitAmount,

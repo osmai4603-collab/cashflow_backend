@@ -1,84 +1,235 @@
 package accountingusecase
 
 import (
+	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/base64"
 	"fmt"
+	"text/template"
+	"time"
 
 	"cashflow_backend/internal/domain/accounting"
+	"cashflow_backend/internal/domain/company"
+	"cashflow_backend/internal/domain/partner"
 )
 
 // ZatcaProcessor implements the EDIProcessor interface for Saudi ZATCA requirements.
 type ZatcaProcessor struct {
-	// In a real implementation, we would inject XML templates,
-	// a signer service, and a validator here.
+	companyRepo company.Repository
+	partnerRepo partner.Repository
 }
 
 // NewZatcaProcessor creates an instance of the ZATCA EDI processor.
-func NewZatcaProcessor() *ZatcaProcessor {
-	return &ZatcaProcessor{}
+func NewZatcaProcessor(comp company.Repository, part partner.Repository) *ZatcaProcessor {
+	return &ZatcaProcessor{
+		companyRepo: comp,
+		partnerRepo: part,
+	}
 }
 
-// GenerateXML constructs the UBL 2.1 XML for ZATCA.
+// GenerateXML constructs the UBL 2.1 XML for ZATCA using templates.
 func (p *ZatcaProcessor) GenerateXML(ctx context.Context, move *accounting.AccountMove) ([]byte, error) {
-	// TODO: Use Go templates to generate UBL 2.1 compliant XML.
-	// This would handle standard/simplified/debit/credit logic.
-	xmlTemplate := `<?xml version="1.0" encoding="UTF-8"?>
-<Invoice xmlns="urn:oasis:names:specification:ubl:schema:xsd:Invoice-2"
-         xmlns:cac="urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2"
-         xmlns:cbc="urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2">
-    <cbc:ID>%s</cbc:ID>
-    <cbc:IssueDate>%s</cbc:IssueDate>
-    <cbc:InvoiceTypeCode name="%s">%s</cbc:InvoiceTypeCode>
-    <!-- ... More ZATCA specific UBL fields ... -->
-</Invoice>`
+	data, err := p.prepareTemplateData(ctx, move)
+	if err != nil {
+		return nil, err
+	}
 
-	invoiceType := "0100000" // Standard
+	tmpl, err := template.New("zatca").Parse(zatcaUBLTemplate)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse ZATCA template: %w", err)
+	}
+
+	var buf bytes.Buffer
+	if err := tmpl.Execute(&buf, data); err != nil {
+		return nil, fmt.Errorf("failed to execute ZATCA template: %w", err)
+	}
+
+	return buf.Bytes(), nil
+}
+
+type ZatcaTemplateData struct {
+	InvoiceNumber    string
+	UUID             string
+	IssueDate        string
+	IssueTime        string
+	InvoiceTypeName  string
+	InvoiceTypeCode  string
+	Currency         string
+	InvoiceCounter   string
+	PreviousHash     string
+	SellerCRN        string
+	SellerStreet     string
+	SellerBuildingNo string
+	SellerCity       string
+	SellerPostalCode string
+	SellerState      string
+	SellerVAT        string
+	SellerName       string
+	BuyerName        string
+	BuyerVAT         string
+	BuyerStreet      string
+	BuyerBuildingNo  string
+	BuyerCity        string
+	BuyerPostalCode  string
+	AmountUntaxed    string
+	AmountTotal      string
+	TaxTotals        []ZatcaTaxTotal
+	Lines            []ZatcaLine
+}
+
+type ZatcaTaxTotal struct {
+	Amount    string
+	Subtotals []ZatcaTaxSubtotal
+}
+
+type ZatcaTaxSubtotal struct {
+	TaxableAmount  string
+	TaxAmount      string
+	TaxCategoryCode string
+	TaxPercent     string
+}
+
+type ZatcaLine struct {
+	ID                  int64
+	Name                string
+	Quantity            string
+	LineExtensionAmount string
+	TaxAmount           string
+	TaxInclusiveAmount  string
+	TaxCategoryCode     string
+	TaxPercent          string
+	PriceUnit           string
+}
+
+func (p *ZatcaProcessor) prepareTemplateData(ctx context.Context, move *accounting.AccountMove) (*ZatcaTemplateData, error) {
+	// Fetch company (Seller)
+	// In a real multi-tenant app, move would have CompanyID. For now assume company 1.
+	comp, err := p.companyRepo.GetByID(ctx, 1)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get seller company: %w", err)
+	}
+
+	// Fetch partner (Buyer)
+	var buy partner.Partner
+	if move.PartnerID != nil {
+		b, err := p.partnerRepo.GetByID(ctx, *move.PartnerID)
+		if err == nil && b != nil {
+			buy = *b
+		}
+	}
+
+	data := &ZatcaTemplateData{
+		InvoiceNumber:   move.Name,
+		UUID:            fmt.Sprintf("%d", move.ID), // Should be real UUID
+		IssueDate:       move.Date.Format("2006-01-02"),
+		IssueTime:       move.Date.Format("15:04:05"),
+		Currency:        move.Currency,
+		InvoiceCounter:  "1",
+		PreviousHash:    "NWZlY2ViOTZmOTk1YTM1NzAzNzAxNzQyOWQ5MDljNzgzYzlkM2Q2NzkwMDNkZDVlMzcwOGlkZTZhMGNmYWQwZQ==",
+		SellerName:      comp.Name,
+		SellerVAT:       comp.VAT,
+		SellerStreet:    comp.Street,
+		SellerCity:      comp.City,
+		SellerPostalCode: comp.ZipCode,
+		SellerState:     comp.State,
+		BuyerName:       buy.Name,
+		BuyerVAT:        buy.VATNumber,
+		BuyerStreet:     buy.Street,
+		BuyerCity:       buy.City,
+		BuyerPostalCode: buy.ZipCode,
+		AmountUntaxed:   fmt.Sprintf("%.2f", move.AmountUntaxed),
+		AmountTotal:     fmt.Sprintf("%.2f", move.AmountTotal),
+	}
+
+	data.InvoiceTypeCode = "388"
+	data.InvoiceTypeName = "0100000"
 	if move.IsSimplified {
-		invoiceType = "0200000" // Simplified
+		data.InvoiceTypeName = "0200000"
 	}
-
-	typeName := "388" // Invoice
 	if move.MoveType == accounting.MoveTypeOutRefund {
-		typeName = "381" // Credit Note
+		data.InvoiceTypeCode = "381"
 	}
 
-	xml := fmt.Sprintf(xmlTemplate,
-		move.Name,
-		move.Date.Format("2006-01-02"),
-		typeName,
-		invoiceType,
-	)
+	// Simple mapping for lines
+	for i, l := range move.Lines {
+		if l.DisplayType != "" || (l.Debit == 0 && l.Credit == 0) {
+			continue
+		}
+		data.Lines = append(data.Lines, ZatcaLine{
+			ID:                  int64(i + 1),
+			Name:                l.Name,
+			Quantity:            fmt.Sprintf("%.2f", l.Quantity),
+			LineExtensionAmount: fmt.Sprintf("%.2f", l.AbsBalance()-l.TaxAmount),
+			TaxAmount:           fmt.Sprintf("%.2f", l.TaxAmount),
+			TaxInclusiveAmount:  fmt.Sprintf("%.2f", l.AbsBalance()),
+			TaxCategoryCode:     "S", // Standard
+			TaxPercent:          "15.00",
+			PriceUnit:           fmt.Sprintf("%.2f", l.PriceUnit),
+		})
+	}
 
-	return []byte(xml), nil
+	// Populate TaxTotals (Simplified for now)
+	data.TaxTotals = []ZatcaTaxTotal{
+		{
+			Amount: fmt.Sprintf("%.2f", move.AmountTax),
+			Subtotals: []ZatcaTaxSubtotal{
+				{
+					TaxableAmount:   fmt.Sprintf("%.2f", move.AmountUntaxed),
+					TaxAmount:       fmt.Sprintf("%.2f", move.AmountTax),
+					TaxCategoryCode: "S",
+					TaxPercent:      "15.00",
+				},
+			},
+		},
+	}
+
+	return data, nil
 }
 
 // ValidateXML performs XSD and Schematron validation.
 func (p *ZatcaProcessor) ValidateXML(ctx context.Context, xmlContent []byte) error {
 	// TODO: Integrate with a library that supports Schematron/XSLT validation.
+	// For now, simple check for root element
+	if !bytes.Contains(xmlContent, []byte("<Invoice")) && !bytes.Contains(xmlContent, []byte("<CreditNote")) {
+		return platformerrors.Validation("invalid ZATCA XML: root element not found", nil)
+	}
 	return nil
 }
 
 // SignXML performs digital signature (XAdES) for ZATCA Phase 2.
 func (p *ZatcaProcessor) SignXML(ctx context.Context, xmlContent []byte, cert *accounting.EDICertificate) ([]byte, error) {
 	// TODO: Implement XML canonicalization (C14N) and SHA-256 signing.
+	// This requires a full XAdES implementation. For now, returning as-is with a log.
+	fmt.Printf("Signing XML with certificate: %s\n", cert.Name)
 	return xmlContent, nil
 }
 
 // GenerateQRCode creates the TLV-encoded Base64 QR code required by ZATCA.
 func (p *ZatcaProcessor) GenerateQRCode(ctx context.Context, move *accounting.AccountMove, xmlContent []byte) (string, error) {
-	// TLV (Tag-Length-Value) implementation for ZATCA:
-	// Tag 1: Seller Name
-	// Tag 2: VAT Number
-	// Tag 3: Timestamp
-	// Tag 4: Total (with VAT)
-	// Tag 5: VAT Total
-	// Tag 6: XML Hash (Phase 2)
-	// Tag 7: Signature (Phase 2)
+	comp, err := p.companyRepo.GetByID(ctx, 1)
+	if err != nil {
+		return "", err
+	}
 
-	// Mock TLV for now
-	tlv := []byte{0x01, 0x04, 'T', 'e', 's', 't'}
-	return base64.StdEncoding.EncodeToString(tlv), nil
+	tlv := new(bytes.Buffer)
+	p.writeTLV(tlv, 1, comp.Name)
+	p.writeTLV(tlv, 2, comp.VAT)
+	p.writeTLV(tlv, 3, move.Date.Format(time.RFC3339))
+	p.writeTLV(tlv, 4, fmt.Sprintf("%.2f", move.AmountTotal))
+	p.writeTLV(tlv, 5, fmt.Sprintf("%.2f", move.AmountTax))
+
+	// Phase 2: Tag 6 (Hash), Tag 7 (Signature), Tag 8 (PublicKey), Tag 9 (Certificate Signature)
+	hash := sha256.Sum256(xmlContent)
+	p.writeTLV(tlv, 6, base64.StdEncoding.EncodeToString(hash[:]))
+
+	return base64.StdEncoding.EncodeToString(tlv.Bytes()), nil
+}
+
+func (p *ZatcaProcessor) writeTLV(buf *bytes.Buffer, tag byte, value string) {
+	buf.WriteByte(tag)
+	buf.WriteByte(byte(len(value)))
+	buf.WriteString(value)
 }
 
 // GetTransactionType determines the ZATCA transaction category.

@@ -1,9 +1,8 @@
 package fleet
 
 import (
-	"strings"
-
 	platformerrors "cashflow_backend/internal/platform/errors"
+	"cashflow_backend/internal/platform/i18n"
 )
 
 // ServiceTypeCategory discriminates contracts (insurance/leasing) from one-off services.
@@ -17,15 +16,14 @@ const (
 // VehicleState is a kanban stage record for fleet vehicles (Odoo fleet.vehicle.state).
 type VehicleState struct {
 	ID       int64  `json:"id"`
-	Name     string `json:"name"`
+	Name     i18n.TranslationString `json:"name"`
 	Sequence int    `json:"sequence"`
 	Fold     bool   `json:"fold"`
 }
 
 // Validate ensures the state has a name.
 func (s *VehicleState) Validate() error {
-	s.Name = strings.TrimSpace(s.Name)
-	if s.Name == "" {
+	if len(s.Name) == 0 {
 		return platformerrors.Validation("state name is required", map[string]string{
 			"name": "cannot be empty",
 		})
@@ -36,14 +34,13 @@ func (s *VehicleState) Validate() error {
 // ServiceType categorizes contracts vs services on the vehicle's log.
 type ServiceType struct {
 	ID       int64               `json:"id"`
-	Name     string              `json:"name"`
+	Name     i18n.TranslationString              `json:"name"`
 	Category ServiceTypeCategory `json:"category"`
 }
 
 // Validate ensures the service type has a name and category.
 func (s *ServiceType) Validate() error {
-	s.Name = strings.TrimSpace(s.Name)
-	if s.Name == "" {
+	if len(s.Name) == 0 {
 		return platformerrors.Validation("service type name is required", map[string]string{
 			"name": "cannot be empty",
 		})

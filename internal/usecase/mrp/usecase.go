@@ -366,6 +366,23 @@ func (u *Usecase) ConfirmProduction(ctx context.Context, userID int64, id int64)
 	if err := u.stockRepo.CreateMove(ctx, finishMove); err != nil {
 		return nil, err
 	}
+
+	// 5. Create Stock Moves for By-products
+	for _, bp := range bom.ByProducts {
+		bpMove := &stock.StockMove{
+			Name:           fmt.Sprintf("By-product: %s", mo.Name),
+			ProductID:      bp.ProductID,
+			ProductQty:     bp.Quantity * (mo.ProductQty / bom.ProductQty),
+			ProductUom:     &bp.UoMID,
+			LocationID:     prodLoc.ID,
+			LocationDestID: mo.LocationDestID,
+			State:          stock.MoveStateConfirmed,
+			ProductionID:   &mo.ID,
+			Date:           time.Now(),
+		}
+		_ = u.stockRepo.CreateMove(ctx, bpMove)
+	}
+
 	if allMaterialsReady {
 		mo.ReservationState = mrp.ReservationStateReady
 	} else {
@@ -385,6 +402,43 @@ func (u *Usecase) ConfirmProduction(ctx context.Context, userID int64, id int64)
 
 func (u *Usecase) GetProduction(ctx context.Context, id int64) (*mrp.ProductionOrder, error) {
 	return u.repo.GetProductionByID(ctx, id)
+}
+
+// CreateBackorder creates a new MO for the remaining quantity of a partially produced MO.
+func (u *Usecase) CreateBackorder(ctx context.Context, userID int64, moID int64) (*mrp.ProductionOrder, error) {
+	mo, err := u.repo.GetProductionByID(ctx, moID)
+	if err != nil {
+		return nil, err
+	}
+
+	remainingQty := mo.ProductQty - mo.QtyProduced
+	if remainingQty <= 0 {
+		return nil, fmt.Errorf("nothing left to produce for a backorder")
+	}
+
+	backorder, err := u.CreateProduction(ctx, userID, CreateProductionInput{
+		ProductID:      mo.ProductID,
+		ProductQty:     remainingQty,
+		BomID:          mo.BomID,
+		DateDeadline:   mo.DateDeadline,
+		DateStart:      time.Now(),
+		CompanyID:      mo.CompanyID,
+		PickingTypeID:  mo.PickingTypeID,
+		LocationSrcID:  mo.LocationSrcID,
+		LocationDestID: mo.LocationDestID,
+		Origin:         fmt.Sprintf("Backorder of %s", mo.Name),
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	backorder.BackorderID = &mo.ID
+	backorder.BackorderSeq = mo.BackorderSeq + 1
+	if err := u.repo.UpdateProduction(ctx, backorder); err != nil {
+		return nil, err
+	}
+
+	return backorder, nil
 }
 
 func (u *Usecase) ListProductions(ctx context.Context, f mrp.ProductionFilter) ([]*mrp.ProductionOrder, int64, error) {

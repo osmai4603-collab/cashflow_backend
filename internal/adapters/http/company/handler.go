@@ -37,13 +37,13 @@ func NewHandler(useCase companyusecase.UseCase, logger *slog.Logger) *Handler {
 func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	var req CreateCompanyRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		response.Error(w, platformerrors.BadRequest("invalid JSON request body", err))
+		response.Error(w, r, platformerrors.BadRequest("invalid JSON request body", err))
 		return
 	}
 
 	created, err := h.useCase.CreateCompany(r.Context(), req.ToInput())
 	if err != nil {
-		response.Error(w, err)
+		response.Error(w, r, err)
 		return
 	}
 
@@ -54,13 +54,13 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) GetByID(w http.ResponseWriter, r *http.Request) {
 	id, err := parseCompanyID(chi.URLParam(r, "id"))
 	if err != nil {
-		response.Error(w, platformerrors.BadRequest("invalid company ID in path", err))
+		response.Error(w, r, platformerrors.BadRequest("invalid company ID in path", err))
 		return
 	}
 
 	c, err := h.useCase.GetCompany(r.Context(), id)
 	if err != nil {
-		response.Error(w, err)
+		response.Error(w, r, err)
 		return
 	}
 
@@ -71,19 +71,19 @@ func (h *Handler) GetByID(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 	id, err := parseCompanyID(chi.URLParam(r, "id"))
 	if err != nil {
-		response.Error(w, platformerrors.BadRequest("invalid company ID in path", err))
+		response.Error(w, r, platformerrors.BadRequest("invalid company ID in path", err))
 		return
 	}
 
 	var req UpdateCompanyRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		response.Error(w, platformerrors.BadRequest("invalid JSON request body", err))
+		response.Error(w, r, platformerrors.BadRequest("invalid JSON request body", err))
 		return
 	}
 
 	updated, err := h.useCase.UpdateCompany(r.Context(), id, req.ToInput())
 	if err != nil {
-		response.Error(w, err)
+		response.Error(w, r, err)
 		return
 	}
 
@@ -94,12 +94,12 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 	id, err := parseCompanyID(chi.URLParam(r, "id"))
 	if err != nil {
-		response.Error(w, platformerrors.BadRequest("invalid company ID in path", err))
+		response.Error(w, r, platformerrors.BadRequest("invalid company ID in path", err))
 		return
 	}
 
 	if err := h.useCase.DeleteCompany(r.Context(), id); err != nil {
-		response.Error(w, err)
+		response.Error(w, r, err)
 		return
 	}
 
@@ -113,7 +113,7 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 
 	result, err := h.useCase.ListCompanies(r.Context(), f, pageReq)
 	if err != nil {
-		response.Error(w, err)
+		response.Error(w, r, err)
 		return
 	}
 
@@ -124,7 +124,7 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) GetDefault(w http.ResponseWriter, r *http.Request) {
 	c, err := h.useCase.GetDefaultCompany(r.Context())
 	if err != nil {
-		response.Error(w, err)
+		response.Error(w, r, err)
 		return
 	}
 

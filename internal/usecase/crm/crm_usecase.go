@@ -12,6 +12,7 @@ import (
 	"cashflow_backend/internal/domain/sale"
 	platformerrors "cashflow_backend/internal/platform/errors"
 	"cashflow_backend/internal/platform/filter"
+	"cashflow_backend/internal/platform/i18n"
 	"cashflow_backend/internal/platform/pagination"
 	partnerusecase "cashflow_backend/internal/usecase/partner"
 	saleusecase "cashflow_backend/internal/usecase/sale"
@@ -471,7 +472,7 @@ func (u *UseCase) GetCRMStats(ctx context.Context) (*crm.CRMStats, error) {
 
 func (u *UseCase) CreateStage(ctx context.Context, in CreateStageInput) (*crm.Stage, error) {
 	stage := &crm.Stage{
-		Name:         in.Name,
+		Name:         i18n.NewTranslation(in.Name),
 		Sequence:     in.Sequence,
 		IsWon:        in.IsWon,
 		IsClosed:     in.IsClosed,
@@ -499,7 +500,7 @@ func (u *UseCase) UpdateStage(ctx context.Context, id int64, in UpdateStageInput
 		return nil, err
 	}
 	if in.Name != nil {
-		stage.Name = *in.Name
+		stage.Name = i18n.NewTranslation(*in.Name)
 	}
 	if in.Sequence != nil {
 		stage.Sequence = *in.Sequence
@@ -546,7 +547,7 @@ func (u *UseCase) ListStages(ctx context.Context) ([]crm.Stage, error) {
 
 func (u *UseCase) CreateLostReason(ctx context.Context, in CreateLostReasonInput) (*crm.LostReason, error) {
 	reason := &crm.LostReason{
-		Name:   in.Name,
+		Name:   i18n.NewTranslation(in.Name),
 		Active: true,
 	}
 	if err := reason.Validate(); err != nil {
@@ -568,7 +569,7 @@ func (u *UseCase) UpdateLostReason(ctx context.Context, id int64, in UpdateLostR
 		return nil, err
 	}
 	if in.Name != nil {
-		reason.Name = *in.Name
+		reason.Name = i18n.NewTranslation(*in.Name)
 	}
 	if in.Active != nil {
 		reason.Active = *in.Active
@@ -596,7 +597,7 @@ func (u *UseCase) ListLostReasons(ctx context.Context) ([]crm.LostReason, error)
 
 func (u *UseCase) CreateTag(ctx context.Context, in CreateTagInput) (*crm.Tag, error) {
 	tag := &crm.Tag{
-		Name:   in.Name,
+		Name:   i18n.NewTranslation(in.Name),
 		Color:  in.Color,
 		Active: true,
 	}

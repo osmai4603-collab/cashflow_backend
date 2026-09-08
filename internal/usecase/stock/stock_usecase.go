@@ -783,6 +783,7 @@ func (uc *UseCase) ValidatePicking(ctx context.Context, id int64, in ValidatePic
 				}
 			}
 			if modified {
+				so.UpdateDeliveryStatus()
 				_ = uc.saleRepo.UpdateOrder(ctx, so)
 			}
 		}

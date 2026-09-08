@@ -8,6 +8,7 @@ import (
 
 	"cashflow_backend/internal/platform/audit"
 	platformerrors "cashflow_backend/internal/platform/errors"
+	"cashflow_backend/internal/platform/i18n"
 )
 
 // LeaveType constants
@@ -43,7 +44,7 @@ const (
 // LeaveAllocation represents allocated vacation days per employee and leave type (hr.leave.allocation in Odoo).
 type LeaveAllocation struct {
 	ID            int64           `json:"id"`
-	Name          string          `json:"name"`
+	Name          i18n.TranslationString          `json:"name"`
 	EmployeeID    int64           `json:"employee_id"`
 	LeaveType     string          `json:"leave_type"`
 	AllocatedDays float64         `json:"allocated_days"`
@@ -82,8 +83,8 @@ func (a *LeaveAllocation) Validate() error {
 	if a.State == "" {
 		a.State = AllocationStateApproved
 	}
-	if a.Name == "" {
-		a.Name = fmt.Sprintf("Allocation %s %d", strings.Title(a.LeaveType), a.Year)
+	if len(a.Name) == 0 {
+		a.Name = i18n.NewTranslation(fmt.Sprintf("Allocation %s %d", strings.Title(a.LeaveType), a.Year))
 	}
 	return nil
 }
@@ -91,7 +92,7 @@ func (a *LeaveAllocation) Validate() error {
 // LeaveRequest represents an employee's time-off request (hr.leave in Odoo).
 type LeaveRequest struct {
 	ID            int64        `json:"id"`
-	Name          string       `json:"name"`
+	Name          i18n.TranslationString       `json:"name"`
 	EmployeeID    int64        `json:"employee_id"`
 	LeaveType     string       `json:"leave_type"`
 	DateFrom      time.Time    `json:"date_from"`
@@ -149,8 +150,8 @@ func (r *LeaveRequest) Validate() error {
 	if r.State == "" {
 		r.State = LeaveStateDraft
 	}
-	if r.Name == "" {
-		r.Name = fmt.Sprintf("Leave: %s (%.1f days)", r.LeaveType, r.Days)
+	if len(r.Name) == 0 {
+		r.Name = i18n.NewTranslation(fmt.Sprintf("Leave: %s (%.1f days)", r.LeaveType, r.Days))
 	}
 	return nil
 }

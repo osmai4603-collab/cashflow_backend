@@ -37,13 +37,13 @@ func NewHandler(useCase userusecase.UseCase, logger *slog.Logger) *Handler {
 func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	var req CreateUserRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		response.Error(w, platformerrors.BadRequest("invalid JSON request body", err))
+		response.Error(w, r, platformerrors.BadRequest("invalid JSON request body", err))
 		return
 	}
 
 	created, err := h.useCase.CreateUser(r.Context(), req.ToInput())
 	if err != nil {
-		response.Error(w, err)
+		response.Error(w, r, err)
 		return
 	}
 
@@ -54,13 +54,13 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) GetByID(w http.ResponseWriter, r *http.Request) {
 	id, err := parseUserID(chi.URLParam(r, "id"))
 	if err != nil {
-		response.Error(w, platformerrors.BadRequest("invalid user ID in path", err))
+		response.Error(w, r, platformerrors.BadRequest("invalid user ID in path", err))
 		return
 	}
 
 	u, err := h.useCase.GetUser(r.Context(), id)
 	if err != nil {
-		response.Error(w, err)
+		response.Error(w, r, err)
 		return
 	}
 
@@ -71,19 +71,19 @@ func (h *Handler) GetByID(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 	id, err := parseUserID(chi.URLParam(r, "id"))
 	if err != nil {
-		response.Error(w, platformerrors.BadRequest("invalid user ID in path", err))
+		response.Error(w, r, platformerrors.BadRequest("invalid user ID in path", err))
 		return
 	}
 
 	var req UpdateUserRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		response.Error(w, platformerrors.BadRequest("invalid JSON request body", err))
+		response.Error(w, r, platformerrors.BadRequest("invalid JSON request body", err))
 		return
 	}
 
 	updated, err := h.useCase.UpdateUser(r.Context(), id, req.ToInput())
 	if err != nil {
-		response.Error(w, err)
+		response.Error(w, r, err)
 		return
 	}
 
@@ -94,12 +94,12 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 	id, err := parseUserID(chi.URLParam(r, "id"))
 	if err != nil {
-		response.Error(w, platformerrors.BadRequest("invalid user ID in path", err))
+		response.Error(w, r, platformerrors.BadRequest("invalid user ID in path", err))
 		return
 	}
 
 	if err := h.useCase.DeleteUser(r.Context(), id); err != nil {
-		response.Error(w, err)
+		response.Error(w, r, err)
 		return
 	}
 
@@ -113,7 +113,7 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 
 	result, err := h.useCase.ListUsers(r.Context(), f, pageReq)
 	if err != nil {
-		response.Error(w, err)
+		response.Error(w, r, err)
 		return
 	}
 
@@ -124,13 +124,13 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	var req LoginRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		response.Error(w, platformerrors.BadRequest("invalid JSON request body", err))
+		response.Error(w, r, platformerrors.BadRequest("invalid JSON request body", err))
 		return
 	}
 
 	result, err := h.useCase.Login(r.Context(), req.Login, req.Password)
 	if err != nil {
-		response.Error(w, err)
+		response.Error(w, r, err)
 		return
 	}
 

@@ -100,4 +100,18 @@ type Repository interface {
 	CreateProcurementGroup(ctx context.Context, pg *ProcurementGroup) error
 	GetProcurementGroupByID(ctx context.Context, id int64) (*ProcurementGroup, error)
 	GetProcurementGroupByName(ctx context.Context, name string) (*ProcurementGroup, error)
+
+	// Routes & Rules (Odoo 19 Parity)
+	CreateRoute(ctx context.Context, r *StockRoute) error
+	GetRouteByID(ctx context.Context, id int64) (*StockRoute, error)
+	ListRoutes(ctx context.Context, companyID *int64) ([]StockRoute, error)
+	CreateRule(ctx context.Context, r *StockRule) error
+	GetRuleByID(ctx context.Context, id int64) (*StockRule, error)
+	ListRulesByRoute(ctx context.Context, routeID int64) ([]StockRule, error)
+	FindRule(ctx context.Context, routeID int64, locationDestID int64) (*StockRule, error)
+
+	// Scrap
+	CreateScrap(ctx context.Context, s *StockScrap) error
+	GetScrapByID(ctx context.Context, id int64) (*StockScrap, error)
+	UpdateScrap(ctx context.Context, s *StockScrap) error
 }

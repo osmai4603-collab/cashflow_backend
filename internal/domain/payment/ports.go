@@ -22,4 +22,11 @@ type Repository interface {
 	GetReconciliationsByPaymentID(ctx context.Context, paymentID int64) ([]PaymentReconciliation, error)
 	GetReconciliationsByInvoiceID(ctx context.Context, invoiceID int64) ([]PaymentReconciliation, error)
 	DeleteReconciliationsByPaymentID(ctx context.Context, paymentID int64) error
+
+	// ─── External Transactions ────────────────────────────────────────────
+	CreateTransaction(ctx context.Context, t *PaymentTransaction) error
+	GetTransactionByID(ctx context.Context, id int64) (*PaymentTransaction, error)
+	GetTransactionByReference(ctx context.Context, ref string) (*PaymentTransaction, error)
+	UpdateTransaction(ctx context.Context, t *PaymentTransaction) error
+	GetProviderByCode(ctx context.Context, code string, companyID int64) (*PaymentProvider, error)
 }

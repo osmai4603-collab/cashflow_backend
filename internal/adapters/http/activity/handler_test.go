@@ -34,7 +34,7 @@ func setupTestServer() (*chi.Mux, *activitystorage.MemoryRepo) {
 	userRepo := userstorage.NewMemoryRepo()
 	bus := &mockBus{}
 
-	uc := activityusecase.NewUseCase(repo, repo, repo, repo, repo, bus, userRepo)
+	uc := activityusecase.NewUseCase(repo, repo, repo, repo, repo, repo, repo, bus, userRepo)
 	h := activityhttp.NewHandler(uc, logger)
 
 	r := chi.NewRouter()

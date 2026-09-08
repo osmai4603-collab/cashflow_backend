@@ -286,14 +286,14 @@ func (r *PostgresRepo) CreateMessage(ctx context.Context, m *activity.Message) e
 	query := `
 		INSERT INTO mail_messages (
 			subject, body, message_type, res_model, res_id, author_id,
-			activity_id, company_id
+			activity_id, subtype_id, parent_id, company_id
 		) VALUES (
-			$1, $2, $3, $4, $5, $6, $7, $8
+			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10
 		) RETURNING id, created_at
 	`
 	err := r.pool.QueryRow(ctx, query,
 		m.Subject, m.Body, m.MessageType, m.ResModel, m.ResID, m.AuthorID,
-		m.ActivityID, m.CompanyID,
+		m.ActivityID, m.SubtypeID, m.ParentID, m.CompanyID,
 	).Scan(&m.ID, &m.CreatedAt)
 
 	if err != nil {
@@ -305,13 +305,13 @@ func (r *PostgresRepo) CreateMessage(ctx context.Context, m *activity.Message) e
 func (r *PostgresRepo) GetMessageByID(ctx context.Context, id int64) (*activity.Message, error) {
 	query := `
 		SELECT id, subject, body, message_type, res_model, res_id, author_id,
-		       activity_id, company_id, created_at
+		       activity_id, subtype_id, parent_id, company_id, created_at
 		FROM mail_messages WHERE id = $1
 	`
 	var m activity.Message
 	err := r.pool.QueryRow(ctx, query, id).Scan(
 		&m.ID, &m.Subject, &m.Body, &m.MessageType, &m.ResModel, &m.ResID, &m.AuthorID,
-		&m.ActivityID, &m.CompanyID, &m.CreatedAt,
+		&m.ActivityID, &m.SubtypeID, &m.ParentID, &m.CompanyID, &m.CreatedAt,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -331,7 +331,7 @@ func (r *PostgresRepo) ListMessagesByResource(ctx context.Context, resModel stri
 
 	query := `
 		SELECT id, subject, body, message_type, res_model, res_id, author_id,
-		       activity_id, company_id, created_at
+		       activity_id, subtype_id, parent_id, company_id, created_at
 		FROM mail_messages
 		WHERE res_model = $1 AND res_id = $2
 		ORDER BY created_at DESC, id DESC
@@ -348,7 +348,7 @@ func (r *PostgresRepo) ListMessagesByResource(ctx context.Context, resModel stri
 		var m activity.Message
 		if err := rows.Scan(
 			&m.ID, &m.Subject, &m.Body, &m.MessageType, &m.ResModel, &m.ResID, &m.AuthorID,
-			&m.ActivityID, &m.CompanyID, &m.CreatedAt,
+			&m.ActivityID, &m.SubtypeID, &m.ParentID, &m.CompanyID, &m.CreatedAt,
 		); err != nil {
 			return pagination.PageResult[activity.Message]{}, platformerrors.Internal("failed to scan message", err)
 		}
@@ -530,23 +530,235 @@ func (r *PostgresRepo) PopEmails(ctx context.Context, limit int) ([]activity.Ema
 	return items, nil
 }
 
-func (r *PostgresRepo) UpdateEmail(ctx context.Context, e *activity.EmailQueueItem) error {
+func (r *PostgresRepo) CreateTrackingValues(ctx context.Context, values []activity.TrackingValue) error {
+	if len(values) == 0 {
+		return nil
+	}
+	batch := &pgx.Batch{}
 	query := `
-		UPDATE mail_email_queue SET
-			status = $1, attempts = $2, next_attempt_at = $3, last_error = $4,
-			sent_at = $5, updated_at = NOW()
-		WHERE id = $6
-		RETURNING updated_at
+		INSERT INTO mail_tracking_values (
+			message_id, field_name, field_desc, old_value_text, new_value_text
+		) VALUES ($1, $2, $3, $4, $5)
 	`
-	err := r.pool.QueryRow(ctx, query,
-		e.Status, e.Attempts, e.NextAttemptAt, e.LastError, e.SentAt, e.ID,
-	).Scan(&e.UpdatedAt)
-
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return platformerrors.NotFound(fmt.Sprintf("email queue item %d not found", e.ID))
+	for _, v := range values {
+		batch.Queue(query, v.MessageID, v.Field, v.FieldName, v.OldValueText, v.NewValueText)
+	}
+	br := r.pool.SendBatch(ctx, batch)
+	defer br.Close()
+	for range values {
+		if _, err := br.Exec(); err != nil {
+			return platformerrors.Internal("failed to create tracking value", err)
 		}
-		return platformerrors.Internal("failed to update email queue item", err)
 	}
 	return nil
+}
+
+func (r *PostgresRepo) ListTrackingValues(ctx context.Context, messageID int64) ([]activity.TrackingValue, error) {
+	query := `
+		SELECT id, message_id, field_name, field_desc, old_value_text, new_value_text
+		FROM mail_tracking_values WHERE message_id = $1
+	`
+	rows, err := r.pool.Query(ctx, query, messageID)
+	if err != nil {
+		return nil, platformerrors.Internal("failed to list tracking values", err)
+	}
+	defer rows.Close()
+
+	var items []activity.TrackingValue
+	for rows.Next() {
+		var v activity.TrackingValue
+		if err := rows.Scan(&v.ID, &v.MessageID, &v.Field, &v.FieldName, &v.OldValueText, &v.NewValueText); err != nil {
+			return nil, platformerrors.Internal("failed to scan tracking value", err)
+		}
+		items = append(items, v)
+	}
+	return items, nil
+}
+
+// --- FollowerRepository ---
+
+func (r *PostgresRepo) CreateFollower(ctx context.Context, f *activity.Follower) error {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return platformerrors.Internal("failed to start transaction", err)
+	}
+	defer tx.Rollback(ctx)
+
+	query := `
+		INSERT INTO mail_followers (res_model, res_id, partner_id, user_id, company_id)
+		VALUES ($1, $2, $3, $4, $5)
+		ON CONFLICT (res_model, res_id, partner_id) WHERE partner_id IS NOT NULL DO UPDATE SET company_id = EXCLUDED.company_id
+		ON CONFLICT (res_model, res_id, user_id) WHERE user_id IS NOT NULL DO UPDATE SET company_id = EXCLUDED.company_id
+		RETURNING id
+	`
+	// Note: PostgreSQL 9.5+ ON CONFLICT doesn't support multiple constraints easily.
+	// Simplified version:
+	if f.UserID != nil {
+		query = `
+			INSERT INTO mail_followers (res_model, res_id, user_id, company_id)
+			VALUES ($1, $2, $3, $4)
+			ON CONFLICT (res_model, res_id, user_id) DO UPDATE SET company_id = EXCLUDED.company_id
+			RETURNING id
+		`
+		err = tx.QueryRow(ctx, query, f.ResModel, f.ResID, f.UserID, f.CompanyID).Scan(&f.ID)
+	} else {
+		query = `
+			INSERT INTO mail_followers (res_model, res_id, partner_id, company_id)
+			VALUES ($1, $2, $3, $4)
+			ON CONFLICT (res_model, res_id, partner_id) DO UPDATE SET company_id = EXCLUDED.company_id
+			RETURNING id
+		`
+		err = tx.QueryRow(ctx, query, f.ResModel, f.ResID, f.PartnerID, f.CompanyID).Scan(&f.ID)
+	}
+
+	if err != nil {
+		return platformerrors.Internal("failed to create follower", err)
+	}
+
+	// Subtypes relation
+	if len(f.SubtypeIDs) > 0 {
+		_, err = tx.Exec(ctx, "DELETE FROM mail_followers_subtypes_rel WHERE follower_id = $1", f.ID)
+		if err != nil {
+			return platformerrors.Internal("failed to clear follower subtypes", err)
+		}
+		for _, sid := range f.SubtypeIDs {
+			_, err = tx.Exec(ctx, "INSERT INTO mail_followers_subtypes_rel (follower_id, subtype_id) VALUES ($1, $2)", f.ID, sid)
+			if err != nil {
+				return platformerrors.Internal("failed to link follower subtype", err)
+			}
+		}
+	}
+
+	return tx.Commit(ctx)
+}
+
+func (r *PostgresRepo) DeleteFollower(ctx context.Context, id int64) error {
+	_, err := r.pool.Exec(ctx, "DELETE FROM mail_followers WHERE id = $1", id)
+	if err != nil {
+		return platformerrors.Internal("failed to delete follower", err)
+	}
+	return nil
+}
+
+func (r *PostgresRepo) ListFollowers(ctx context.Context, resModel string, resID int64) ([]activity.Follower, error) {
+	query := `
+		SELECT f.id, f.res_model, f.res_id, f.partner_id, f.user_id, f.company_id,
+		       ARRAY_AGG(rel.subtype_id) FILTER (WHERE rel.subtype_id IS NOT NULL)
+		FROM mail_followers f
+		LEFT JOIN mail_followers_subtypes_rel rel ON f.id = rel.follower_id
+		WHERE f.res_model = $1 AND f.res_id = $2
+		GROUP BY f.id
+	`
+	rows, err := r.pool.Query(ctx, query, resModel, resID)
+	if err != nil {
+		return nil, platformerrors.Internal("failed to list followers", err)
+	}
+	defer rows.Close()
+
+	var items []activity.Follower
+	for rows.Next() {
+		var f activity.Follower
+		var subtypes []int64
+		if err := rows.Scan(&f.ID, &f.ResModel, &f.ResID, &f.PartnerID, &f.UserID, &f.CompanyID, &subtypes); err != nil {
+			return nil, platformerrors.Internal("failed to scan follower", err)
+		}
+		f.SubtypeIDs = subtypes
+		items = append(items, f)
+	}
+	return items, nil
+}
+
+func (r *PostgresRepo) GetFollowersForNotification(ctx context.Context, resModel string, resID int64, subtypeID int64) ([]activity.Follower, error) {
+	query := `
+		SELECT f.id, f.res_model, f.res_id, f.partner_id, f.user_id, f.company_id
+		FROM mail_followers f
+		JOIN mail_followers_subtypes_rel rel ON f.id = rel.follower_id
+		WHERE f.res_model = $1 AND f.res_id = $2 AND rel.subtype_id = $3
+	`
+	if subtypeID == 0 {
+		// If no subtype provided, maybe notify all? In Odoo it's specific.
+		// For now, let's assume if subtype is 0, we take all who have at least one subtype (or specifically default ones)
+		query = `
+			SELECT DISTINCT f.id, f.res_model, f.res_id, f.partner_id, f.user_id, f.company_id
+			FROM mail_followers f
+			WHERE f.res_model = $1 AND f.res_id = $2
+		`
+	}
+	rows, err := r.pool.Query(ctx, query, resModel, resID, subtypeID)
+	if err != nil {
+		if subtypeID == 0 {
+			rows, err = r.pool.Query(ctx, query, resModel, resID)
+		}
+		if err != nil {
+			return nil, platformerrors.Internal("failed to get followers for notification", err)
+		}
+	}
+	defer rows.Close()
+
+	var items []activity.Follower
+	for rows.Next() {
+		var f activity.Follower
+		if err := rows.Scan(&f.ID, &f.ResModel, &f.ResID, &f.PartnerID, &f.UserID, &f.CompanyID); err != nil {
+			return nil, platformerrors.Internal("failed to scan follower", err)
+		}
+		items = append(items, f)
+	}
+	return items, nil
+}
+
+// --- SubtypeRepository ---
+
+func (r *PostgresRepo) GetSubtypeByID(ctx context.Context, id int64) (*activity.MessageSubtype, error) {
+	query := `SELECT id, name, res_model, description, internal, default_subtype, sequence FROM mail_message_subtypes WHERE id = $1`
+	var s activity.MessageSubtype
+	err := r.pool.QueryRow(ctx, query, id).Scan(&s.ID, &s.Name, &s.ResModel, &s.Description, &s.Internal, &s.Default, &s.Sequence)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, platformerrors.NotFound("subtype not found")
+		}
+		return nil, platformerrors.Internal("failed to get subtype", err)
+	}
+	return &s, nil
+}
+
+func (r *PostgresRepo) GetSubtypeByName(ctx context.Context, resModel string, name string) (*activity.MessageSubtype, error) {
+	query := `
+		SELECT id, name, res_model, description, internal, default_subtype, sequence
+		FROM mail_message_subtypes
+		WHERE name = $1 AND (res_model IS NULL OR res_model = $2)
+		ORDER BY res_model DESC LIMIT 1
+	`
+	var s activity.MessageSubtype
+	err := r.pool.QueryRow(ctx, query, name, resModel).Scan(&s.ID, &s.Name, &s.ResModel, &s.Description, &s.Internal, &s.Default, &s.Sequence)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, platformerrors.NotFound(fmt.Sprintf("subtype %s for %s not found", name, resModel))
+		}
+		return nil, platformerrors.Internal("failed to get subtype by name", err)
+	}
+	return &s, nil
+}
+
+func (r *PostgresRepo) ListSubtypes(ctx context.Context, resModel string) ([]activity.MessageSubtype, error) {
+	query := `
+		SELECT id, name, res_model, description, internal, default_subtype, sequence
+		FROM mail_message_subtypes
+		WHERE res_model IS NULL OR res_model = $1
+		ORDER BY sequence, name
+	`
+	rows, err := r.pool.Query(ctx, query, resModel)
+	if err != nil {
+		return nil, platformerrors.Internal("failed to list subtypes", err)
+	}
+	defer rows.Close()
+
+	var items []activity.MessageSubtype
+	for rows.Next() {
+		var s activity.MessageSubtype
+		if err := rows.Scan(&s.ID, &s.Name, &s.ResModel, &s.Description, &s.Internal, &s.Default, &s.Sequence); err != nil {
+			return nil, platformerrors.Internal("failed to scan subtype", err)
+		}
+		items = append(items, s)
+	}
+	return items, nil
 }

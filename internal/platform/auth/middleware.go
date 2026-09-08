@@ -37,13 +37,13 @@ func Middleware(secret string) func(http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			tokenString := extractBearerToken(r)
 			if tokenString == "" {
-				response.Error(w, platformerrors.Unauthorized("missing authorization token"))
+				response.Error(w, r, platformerrors.Unauthorized("missing authorization token"))
 				return
 			}
 
 			claims, err := ValidateToken(tokenString, secret)
 			if err != nil {
-				response.Error(w, platformerrors.Unauthorized(err.Error()))
+				response.Error(w, r, platformerrors.Unauthorized(err.Error()))
 				return
 			}
 
@@ -83,7 +83,7 @@ func RequireRole(roles ...string) func(http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			claims := ClaimsFromContext(r.Context())
 			if claims == nil {
-				response.Error(w, platformerrors.Unauthorized("unauthenticated request"))
+				response.Error(w, r, platformerrors.Unauthorized("unauthenticated request"))
 				return
 			}
 
@@ -96,7 +96,7 @@ func RequireRole(roles ...string) func(http.Handler) http.Handler {
 			}
 
 			if !hasRequiredRole {
-				response.Error(w, platformerrors.Forbidden("insufficient permissions"))
+				response.Error(w, r, platformerrors.Forbidden("insufficient permissions"))
 				return
 			}
 

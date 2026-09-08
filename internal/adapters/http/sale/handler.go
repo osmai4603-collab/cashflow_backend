@@ -41,13 +41,13 @@ func parseID(param string) (int64, error) {
 func (h *Handler) CreateOrder(w http.ResponseWriter, r *http.Request) {
 	var req CreateSaleOrderRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		response.Error(w, platformerrors.BadRequest("invalid JSON request body", err))
+		response.Error(w, r, platformerrors.BadRequest("invalid JSON request body", err))
 		return
 	}
 
 	order, err := h.useCase.CreateOrder(r.Context(), req.ToInput())
 	if err != nil {
-		response.Error(w, err)
+		response.Error(w, r, err)
 		return
 	}
 
@@ -58,13 +58,13 @@ func (h *Handler) CreateOrder(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) GetOrder(w http.ResponseWriter, r *http.Request) {
 	id, err := parseID(chi.URLParam(r, "id"))
 	if err != nil {
-		response.Error(w, platformerrors.BadRequest("invalid sale order ID in path", err))
+		response.Error(w, r, platformerrors.BadRequest("invalid sale order ID in path", err))
 		return
 	}
 
 	order, err := h.useCase.GetOrderByID(r.Context(), id)
 	if err != nil {
-		response.Error(w, err)
+		response.Error(w, r, err)
 		return
 	}
 
@@ -92,7 +92,7 @@ func (h *Handler) ListOrders(w http.ResponseWriter, r *http.Request) {
 
 	pageRes, err := h.useCase.ListOrders(r.Context(), f, pageReq)
 	if err != nil {
-		response.Error(w, err)
+		response.Error(w, r, err)
 		return
 	}
 
@@ -105,19 +105,19 @@ func (h *Handler) ListOrders(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) UpdateOrder(w http.ResponseWriter, r *http.Request) {
 	id, err := parseID(chi.URLParam(r, "id"))
 	if err != nil {
-		response.Error(w, platformerrors.BadRequest("invalid sale order ID in path", err))
+		response.Error(w, r, platformerrors.BadRequest("invalid sale order ID in path", err))
 		return
 	}
 
 	var req UpdateSaleOrderRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		response.Error(w, platformerrors.BadRequest("invalid JSON request body", err))
+		response.Error(w, r, platformerrors.BadRequest("invalid JSON request body", err))
 		return
 	}
 
 	order, err := h.useCase.UpdateOrder(r.Context(), id, req.ToInput())
 	if err != nil {
-		response.Error(w, err)
+		response.Error(w, r, err)
 		return
 	}
 
@@ -128,12 +128,12 @@ func (h *Handler) UpdateOrder(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) DeleteOrder(w http.ResponseWriter, r *http.Request) {
 	id, err := parseID(chi.URLParam(r, "id"))
 	if err != nil {
-		response.Error(w, platformerrors.BadRequest("invalid sale order ID in path", err))
+		response.Error(w, r, platformerrors.BadRequest("invalid sale order ID in path", err))
 		return
 	}
 
 	if err := h.useCase.DeleteOrder(r.Context(), id); err != nil {
-		response.Error(w, err)
+		response.Error(w, r, err)
 		return
 	}
 
@@ -144,13 +144,13 @@ func (h *Handler) DeleteOrder(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) ActionSend(w http.ResponseWriter, r *http.Request) {
 	id, err := parseID(chi.URLParam(r, "id"))
 	if err != nil {
-		response.Error(w, platformerrors.BadRequest("invalid sale order ID in path", err))
+		response.Error(w, r, platformerrors.BadRequest("invalid sale order ID in path", err))
 		return
 	}
 
 	order, err := h.useCase.ActionSend(r.Context(), id)
 	if err != nil {
-		response.Error(w, err)
+		response.Error(w, r, err)
 		return
 	}
 
@@ -161,13 +161,13 @@ func (h *Handler) ActionSend(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) ConfirmOrder(w http.ResponseWriter, r *http.Request) {
 	id, err := parseID(chi.URLParam(r, "id"))
 	if err != nil {
-		response.Error(w, platformerrors.BadRequest("invalid sale order ID in path", err))
+		response.Error(w, r, platformerrors.BadRequest("invalid sale order ID in path", err))
 		return
 	}
 
 	order, err := h.useCase.ConfirmOrder(r.Context(), id)
 	if err != nil {
-		response.Error(w, err)
+		response.Error(w, r, err)
 		return
 	}
 
@@ -178,13 +178,13 @@ func (h *Handler) ConfirmOrder(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) CancelOrder(w http.ResponseWriter, r *http.Request) {
 	id, err := parseID(chi.URLParam(r, "id"))
 	if err != nil {
-		response.Error(w, platformerrors.BadRequest("invalid sale order ID in path", err))
+		response.Error(w, r, platformerrors.BadRequest("invalid sale order ID in path", err))
 		return
 	}
 
 	order, err := h.useCase.CancelOrder(r.Context(), id)
 	if err != nil {
-		response.Error(w, err)
+		response.Error(w, r, err)
 		return
 	}
 
@@ -195,13 +195,13 @@ func (h *Handler) CancelOrder(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) ResetToDraft(w http.ResponseWriter, r *http.Request) {
 	id, err := parseID(chi.URLParam(r, "id"))
 	if err != nil {
-		response.Error(w, platformerrors.BadRequest("invalid sale order ID in path", err))
+		response.Error(w, r, platformerrors.BadRequest("invalid sale order ID in path", err))
 		return
 	}
 
 	order, err := h.useCase.ResetToDraft(r.Context(), id)
 	if err != nil {
-		response.Error(w, err)
+		response.Error(w, r, err)
 		return
 	}
 
@@ -212,7 +212,7 @@ func (h *Handler) ResetToDraft(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) CreateInvoice(w http.ResponseWriter, r *http.Request) {
 	id, err := parseID(chi.URLParam(r, "id"))
 	if err != nil {
-		response.Error(w, platformerrors.BadRequest("invalid sale order ID in path", err))
+		response.Error(w, r, platformerrors.BadRequest("invalid sale order ID in path", err))
 		return
 	}
 
@@ -221,7 +221,7 @@ func (h *Handler) CreateInvoice(w http.ResponseWriter, r *http.Request) {
 		bodyBytes, err := io.ReadAll(r.Body)
 		if err == nil && len(bodyBytes) > 0 {
 			if err := json.Unmarshal(bodyBytes, &req); err != nil {
-				response.Error(w, platformerrors.BadRequest("invalid JSON request body", err))
+				response.Error(w, r, platformerrors.BadRequest("invalid JSON request body", err))
 				return
 			}
 		}
@@ -229,7 +229,7 @@ func (h *Handler) CreateInvoice(w http.ResponseWriter, r *http.Request) {
 
 	move, err := h.useCase.CreateInvoiceFromOrder(r.Context(), id, req.ToInput())
 	if err != nil {
-		response.Error(w, err)
+		response.Error(w, r, err)
 		return
 	}
 
@@ -240,13 +240,13 @@ func (h *Handler) CreateInvoice(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) GetOrderInvoices(w http.ResponseWriter, r *http.Request) {
 	id, err := parseID(chi.URLParam(r, "id"))
 	if err != nil {
-		response.Error(w, platformerrors.BadRequest("invalid sale order ID in path", err))
+		response.Error(w, r, platformerrors.BadRequest("invalid sale order ID in path", err))
 		return
 	}
 
 	invoices, err := h.useCase.GetOrderInvoices(r.Context(), id)
 	if err != nil {
-		response.Error(w, err)
+		response.Error(w, r, err)
 		return
 	}
 

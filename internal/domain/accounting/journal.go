@@ -6,6 +6,7 @@ import (
 	"time"
 
 	platformerrors "cashflow_backend/internal/platform/errors"
+	"cashflow_backend/internal/platform/i18n"
 )
 
 // JournalType defines the transaction nature of a journal.
@@ -23,7 +24,7 @@ const (
 // Journal represents a financial journal for organizing transactions (account.journal in Odoo).
 type Journal struct {
 	ID                int64       `json:"id"`
-	Name              string      `json:"name"`
+	Name              i18n.TranslationString      `json:"name"`
 	Code              string      `json:"code"`
 	Type              JournalType `json:"type"`
 	DefaultAccountID  *int64      `json:"default_account_id,omitempty"`
@@ -37,8 +38,7 @@ type Journal struct {
 
 // Validate checks Journal constraints.
 func (j *Journal) Validate() error {
-	j.Name = strings.TrimSpace(j.Name)
-	if j.Name == "" {
+	if len(j.Name) == 0 {
 		return platformerrors.Validation("journal name is required", map[string]string{
 			"name": "cannot be empty",
 		})

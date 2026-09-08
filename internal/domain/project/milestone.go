@@ -1,15 +1,15 @@
 package project
 
 import (
-	"strings"
 	"time"
 
 	platformerrors "cashflow_backend/internal/platform/errors"
+	"cashflow_backend/internal/platform/i18n"
 )
 
 type Milestone struct {
 	ID           int64      `json:"id"`
-	Name         string     `json:"name"`
+	Name         i18n.TranslationString     `json:"name"`
 	ProjectID    int64      `json:"project_id"`
 	DateDeadline *time.Time `json:"date_deadline,omitempty"`
 	IsReached    bool       `json:"is_reached"`
@@ -20,8 +20,7 @@ type Milestone struct {
 }
 
 func (m *Milestone) Validate() error {
-	m.Name = strings.TrimSpace(m.Name)
-	if m.Name == "" {
+	if len(m.Name) == 0 {
 		return platformerrors.Validation("milestone name is required", nil)
 	}
 	if m.ProjectID <= 0 {

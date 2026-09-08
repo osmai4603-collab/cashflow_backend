@@ -94,7 +94,7 @@ func parseOptionalInt64(formValue string) *int64 {
 func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
 	name, filename, mimetype, storagePath, size, err := h.saveUploadedFile(r)
 	if err != nil {
-		response.Error(w, err)
+		response.Error(w, r, err)
 		return
 	}
 
@@ -112,7 +112,7 @@ func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
 
 	created, err := h.useCase.CreateAttachment(r.Context(), in)
 	if err != nil {
-		response.Error(w, err)
+		response.Error(w, r, err)
 		return
 	}
 
@@ -123,13 +123,13 @@ func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) GetByID(w http.ResponseWriter, r *http.Request) {
 	id, err := parseAttachmentID(chi.URLParam(r, "id"))
 	if err != nil {
-		response.Error(w, platformerrors.BadRequest("invalid attachment ID in path", err))
+		response.Error(w, r, platformerrors.BadRequest("invalid attachment ID in path", err))
 		return
 	}
 
 	a, err := h.useCase.GetAttachment(r.Context(), id)
 	if err != nil {
-		response.Error(w, err)
+		response.Error(w, r, err)
 		return
 	}
 
@@ -140,7 +140,7 @@ func (h *Handler) GetByID(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) ListByModel(w http.ResponseWriter, r *http.Request) {
 	resModel := strings.TrimSpace(r.URL.Query().Get("res_model"))
 	if resModel == "" {
-		response.Error(w, platformerrors.BadRequest("res_model query parameter is required"))
+		response.Error(w, r, platformerrors.BadRequest("res_model query parameter is required"))
 		return
 	}
 
@@ -154,7 +154,7 @@ func (h *Handler) ListByModel(w http.ResponseWriter, r *http.Request) {
 	pageReq := pagination.Parse(r)
 	result, err := h.useCase.ListByModel(r.Context(), resModel, resID, pageReq)
 	if err != nil {
-		response.Error(w, err)
+		response.Error(w, r, err)
 		return
 	}
 
@@ -165,18 +165,18 @@ func (h *Handler) ListByModel(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) Download(w http.ResponseWriter, r *http.Request) {
 	id, err := parseAttachmentID(chi.URLParam(r, "id"))
 	if err != nil {
-		response.Error(w, platformerrors.BadRequest("invalid attachment ID in path", err))
+		response.Error(w, r, platformerrors.BadRequest("invalid attachment ID in path", err))
 		return
 	}
 
 	a, err := h.useCase.GetAttachment(r.Context(), id)
 	if err != nil {
-		response.Error(w, err)
+		response.Error(w, r, err)
 		return
 	}
 
 	if a.StoragePath == "" {
-		response.Error(w, platformerrors.NotFound("attachment has no stored file"))
+		response.Error(w, r, platformerrors.NotFound("attachment has no stored file"))
 		return
 	}
 
@@ -189,12 +189,12 @@ func (h *Handler) Download(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) Archive(w http.ResponseWriter, r *http.Request) {
 	id, err := parseAttachmentID(chi.URLParam(r, "id"))
 	if err != nil {
-		response.Error(w, platformerrors.BadRequest("invalid attachment ID in path", err))
+		response.Error(w, r, platformerrors.BadRequest("invalid attachment ID in path", err))
 		return
 	}
 
 	if err := h.useCase.ArchiveAttachment(r.Context(), id); err != nil {
-		response.Error(w, err)
+		response.Error(w, r, err)
 		return
 	}
 

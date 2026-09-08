@@ -23,6 +23,7 @@ import (
 	platformauth "cashflow_backend/internal/platform/auth"
 	"cashflow_backend/internal/platform/database"
 	"cashflow_backend/internal/platform/email"
+	"cashflow_backend/internal/platform/i18n"
 	"cashflow_backend/internal/platform/notificationbus"
 	usecases "cashflow_backend/internal/usecase"
 	"cashflow_backend/migrations"
@@ -64,7 +65,13 @@ func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
 		Level: slog.LevelInfo,
 	}))
-	logger.Info("initializing ERP backend service...")
+
+	// Load default translations
+	if err := i18n.LoadFromDirectory("i18n"); err != nil {
+		logger.Warn("could not load translations from directory", "error", err)
+	}
+
+	logger.Info(i18n.T(context.Background(), "initializing ERP backend service..."))
 
 	// 1b. Parse CLI flags (highest priority layer after runtime overrides)
 	cliFlags, err := config.ParseFlags(os.Args[1:])

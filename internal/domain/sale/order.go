@@ -3,11 +3,11 @@ package sale
 import (
 	"fmt"
 	"math"
-	"strings"
 	"time"
 
 	"cashflow_backend/internal/platform/audit"
 	platformerrors "cashflow_backend/internal/platform/errors"
+	"cashflow_backend/internal/platform/i18n"
 )
 
 // SaleOrderState represents the lifecycle status of a sales document (sale.order in Odoo).
@@ -30,13 +30,21 @@ const (
 	InvoiceStatusInvoiced  InvoiceStatus = "invoiced"   // Fully Invoiced
 )
 
+type DeliveryStatus string
+
+const (
+	DeliveryStatusNo      DeliveryStatus = "no"
+	DeliveryStatusStarted DeliveryStatus = "started"
+	DeliveryStatusFull    DeliveryStatus = "full"
+)
+
 // SaleOrderLine represents a single product line item in a sales order (sale.order.line in Odoo).
 type SaleOrderLine struct {
 	ID            int64     `json:"id"`
 	OrderID       int64     `json:"order_id"`
 	Sequence      int       `json:"sequence"`
 	ProductID     int64     `json:"product_id"`
-	Name          string    `json:"name"` // Description
+	Name          i18n.TranslationString    `json:"name"` // Description
 	ProductUomQty float64   `json:"product_uom_qty"`
 	ProductUom    *int64    `json:"product_uom,omitempty"`
 	UnitPrice     float64   `json:"price_unit"`
@@ -169,7 +177,7 @@ func (o *SaleOrder) Validate() error {
 				fmt.Sprintf("lines[%d].product_id", i): "must reference a valid product",
 			})
 		}
-		if strings.TrimSpace(l.Name) == "" {
+		if len(l.Name) == 0 {
 			return platformerrors.Validation("description is required for order line", map[string]string{
 				fmt.Sprintf("lines[%d].name", i): "cannot be empty",
 			})
@@ -293,6 +301,39 @@ func (o *SaleOrder) UpdateInvoiceStatus() {
 		o.InvoiceStatus = InvoiceStatusToInvoice
 	} else {
 		o.InvoiceStatus = InvoiceStatusNo
+	}
+}
+
+// UpdateDeliveryStatus re-evaluates the delivery status based on line quantities.
+func (o *SaleOrder) UpdateDeliveryStatus() {
+	if o.State != OrderStateSale && o.State != OrderStateDone {
+		o.DeliveryStatus = string(DeliveryStatusNo)
+		return
+	}
+
+	if len(o.Lines) == 0 {
+		o.DeliveryStatus = string(DeliveryStatusNo)
+		return
+	}
+
+	allDelivered := true
+	hasDelivered := false
+
+	for _, l := range o.Lines {
+		if l.QtyDelivered < l.ProductUomQty {
+			allDelivered = false
+		}
+		if l.QtyDelivered > 0 {
+			hasDelivered = true
+		}
+	}
+
+	if allDelivered {
+		o.DeliveryStatus = string(DeliveryStatusFull)
+	} else if hasDelivered {
+		o.DeliveryStatus = string(DeliveryStatusStarted)
+	} else {
+		o.DeliveryStatus = string(DeliveryStatusNo)
 	}
 }
 

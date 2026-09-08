@@ -8,6 +8,7 @@ import (
 	"cashflow_backend/internal/domain/stock"
 	"cashflow_backend/internal/platform/audit"
 	platformerrors "cashflow_backend/internal/platform/errors"
+	"cashflow_backend/internal/platform/i18n"
 )
 
 // ProductType represents the classification of a product.
@@ -22,7 +23,7 @@ const (
 // UnitOfMeasure represents a measurement unit (uom.uom in Odoo).
 type UnitOfMeasure struct {
 	ID        int64     `json:"id"`
-	Name      string    `json:"name"`
+	Name      i18n.TranslationString    `json:"name"`
 	Category  string    `json:"category"` // e.g. "unit", "weight", "volume", "length", "time"
 	Ratio     float64   `json:"ratio"`    // Ratio relative to base reference unit
 	Rounding  float64   `json:"rounding"`
@@ -33,8 +34,7 @@ type UnitOfMeasure struct {
 
 // Validate verifies UnitOfMeasure constraints.
 func (u *UnitOfMeasure) Validate() error {
-	u.Name = strings.TrimSpace(u.Name)
-	if u.Name == "" {
+	if len(u.Name) == 0 {
 		return platformerrors.Validation("unit of measure name is required", map[string]string{
 			"name": "cannot be empty",
 		})
@@ -59,9 +59,9 @@ func (u *UnitOfMeasure) Validate() error {
 // ProductCategory represents a hierarchical categorization (product.category in Odoo).
 type ProductCategory struct {
 	ID           int64  `json:"id"`
-	Name         string `json:"name"`
+	Name         i18n.TranslationString `json:"name"`
 	ParentID     *int64 `json:"parent_id,omitempty"`
-	CompleteName string `json:"complete_name"` // e.g. "All / Electronics / Laptops"
+	CompleteName i18n.TranslationString `json:"complete_name"` // e.g. "All / Electronics / Laptops"
 	// Valuation defaults (company_templates — inherited by products, Phase 12).
 	PropertyCostMethod               *stock.CostMethod    `json:"property_cost_method,omitempty"`
 	PropertyValuation                *stock.ValuationMode `json:"property_valuation,omitempty"`
@@ -76,8 +76,7 @@ type ProductCategory struct {
 
 // Validate verifies ProductCategory invariants.
 func (c *ProductCategory) Validate() error {
-	c.Name = strings.TrimSpace(c.Name)
-	if c.Name == "" {
+	if len(c.Name) == 0 {
 		return platformerrors.Validation("category name is required", map[string]string{
 			"name": "cannot be empty",
 		})
@@ -87,7 +86,7 @@ func (c *ProductCategory) Validate() error {
 			"parent_id": "category cannot be its own parent",
 		})
 	}
-	if c.CompleteName == "" {
+	if len(c.CompleteName) == 0 {
 		c.CompleteName = c.Name
 	}
 	return nil
@@ -96,7 +95,7 @@ func (c *ProductCategory) Validate() error {
 // ProductTemplate represents the master definition of a product (product.template in Odoo).
 type ProductTemplate struct {
 	ID          int64            `json:"id"`
-	Name        string           `json:"name"`
+	Name        i18n.TranslationString `json:"name"`
 	Type        ProductType      `json:"type"`
 	CategoryID  *int64           `json:"category_id,omitempty"`
 	Category    *ProductCategory `json:"category,omitempty"`
@@ -131,17 +130,14 @@ type ProductTemplate struct {
 
 // Validate ensures ProductTemplate invariants are strictly upheld.
 func (pt *ProductTemplate) Validate() error {
-	pt.Name = strings.TrimSpace(pt.Name)
-	if pt.Name == "" {
+	if len(pt.Name) == 0 {
 		return platformerrors.Validation("product name is required", map[string]string{
 			"name": "cannot be empty",
 		})
 	}
-	if len(pt.Name) > 255 {
-		return platformerrors.Validation("product name exceeds maximum length", map[string]string{
-			"name": "must not exceed 255 characters",
-		})
-	}
+	// Note: Length check for TranslationString depends on the default lang or specific logic.
+	// We'll skip the 255 char check here or apply it to the default value.
+
 
 	if pt.Type == "" {
 		pt.Type = ProductTypeGoods
@@ -197,7 +193,7 @@ func (pt *ProductTemplate) Validate() error {
 // ProductAttribute represents an attribute name like "Color" or "Size" (product.attribute).
 type ProductAttribute struct {
 	ID        int64     `json:"id"`
-	Name      string    `json:"name"`
+	Name      i18n.TranslationString    `json:"name"`
 	Sequence  int       `json:"sequence"`
 	Active    bool      `json:"active"`
 	CreatedAt time.Time `json:"created_at"`
@@ -208,7 +204,7 @@ type ProductAttribute struct {
 type ProductAttributeValue struct {
 	ID          int64     `json:"id"`
 	AttributeID int64     `json:"attribute_id"`
-	Name        string    `json:"name"`
+	Name        i18n.TranslationString    `json:"name"`
 	Sequence    int       `json:"sequence"`
 	ExtraPrice  float64   `json:"extra_price"`
 	Active      bool      `json:"active"`
@@ -219,9 +215,9 @@ type ProductAttributeValue struct {
 // VariantAttributeValue represents the value of an attribute assigned to a variant.
 type VariantAttributeValue struct {
 	AttributeID   int64   `json:"attribute_id"`
-	AttributeName string  `json:"attribute_name"`
+	AttributeName i18n.TranslationString  `json:"attribute_name"`
 	ValueID       int64   `json:"value_id"`
-	ValueName     string  `json:"value_name"`
+	ValueName     i18n.TranslationString  `json:"value_name"`
 	ExtraPrice    float64 `json:"extra_price"`
 }
 

@@ -19,18 +19,32 @@ type MemoryRepo struct {
 	mu              sync.RWMutex
 	payments        map[int64]*payment.Payment
 	reconciliations map[int64][]payment.PaymentReconciliation // paymentID -> []reconciliations
+	providers       map[int64]*payment.PaymentProvider
+	transactions    map[int64]*payment.PaymentTransaction
 	seqCounters     map[int]int64
 	lastPaymentID   int64
 	lastReconID     int64
+	lastProviderID  int64
+	lastTransID     int64
 }
 
 // NewMemoryRepo initializes an empty MemoryRepo.
 func NewMemoryRepo() *MemoryRepo {
-	return &MemoryRepo{
+	r := &MemoryRepo{
 		payments:        make(map[int64]*payment.Payment),
 		reconciliations: make(map[int64][]payment.PaymentReconciliation),
+		providers:       make(map[int64]*payment.PaymentProvider),
+		transactions:    make(map[int64]*payment.PaymentTransaction),
 		seqCounters:     make(map[int]int64),
 	}
+	r.seedProviders()
+	return r
+}
+
+func (r *MemoryRepo) seedProviders() {
+	r.providers[1] = &payment.PaymentProvider{ID: 1, Name: "Stripe", Code: "stripe", Active: true, CompanyID: 1}
+	r.providers[2] = &payment.PaymentProvider{ID: 2, Name: "PayPal", Code: "paypal", Active: true, CompanyID: 1}
+	r.lastProviderID = 2
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -245,4 +259,75 @@ func (r *MemoryRepo) DeleteReconciliationsByPaymentID(ctx context.Context, payme
 
 	delete(r.reconciliations, paymentID)
 	return nil
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// External Transactions
+// ─────────────────────────────────────────────────────────────────────────────
+
+func (r *MemoryRepo) CreateTransaction(ctx context.Context, t *payment.PaymentTransaction) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	r.lastTransID++
+	t.ID = r.lastTransID
+	now := time.Now().UTC()
+	t.CreatedAt = now
+	t.UpdatedAt = now
+
+	clone := *t
+	r.transactions[t.ID] = &clone
+	return nil
+}
+
+func (r *MemoryRepo) GetTransactionByID(ctx context.Context, id int64) (*payment.PaymentTransaction, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	t, ok := r.transactions[id]
+	if !ok {
+		return nil, platformerrors.NotFound("transaction not found")
+	}
+	clone := *t
+	return &clone, nil
+}
+
+func (r *MemoryRepo) GetTransactionByReference(ctx context.Context, ref string) (*payment.PaymentTransaction, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	for _, t := range r.transactions {
+		if t.Reference == ref {
+			clone := *t
+			return &clone, nil
+		}
+	}
+	return nil, platformerrors.NotFound("transaction not found")
+}
+
+func (r *MemoryRepo) UpdateTransaction(ctx context.Context, t *payment.PaymentTransaction) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if _, ok := r.transactions[t.ID]; !ok {
+		return platformerrors.NotFound("transaction not found")
+	}
+
+	t.UpdatedAt = time.Now().UTC()
+	clone := *t
+	r.transactions[t.ID] = &clone
+	return nil
+}
+
+func (r *MemoryRepo) GetProviderByCode(ctx context.Context, code string, companyID int64) (*payment.PaymentProvider, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	for _, p := range r.providers {
+		if p.Code == code && p.CompanyID == companyID {
+			clone := *p
+			return &clone, nil
+		}
+	}
+	return nil, platformerrors.NotFound("provider not found")
 }

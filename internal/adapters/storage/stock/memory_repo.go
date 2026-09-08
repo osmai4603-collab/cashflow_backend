@@ -34,6 +34,8 @@ type MemoryRepo struct {
 	seqIntCounters map[int]int64
 	opCounters     map[int]int64
 	lcCounters     map[int]int64
+	routes         map[int64]*stock.StockRoute
+	rules          map[int64]*stock.StockRule
 	lastLocID      int64
 	lastWhID       int64
 	lastPickingID  int64
@@ -46,6 +48,9 @@ type MemoryRepo struct {
 	lastOpID       int64
 	lastLCID       int64
 	lastPGID       int64
+	lastRouteID    int64
+	lastRuleID     int64
+	lastScrapID    int64
 }
 
 // NewMemoryRepo initializes a MemoryRepo pre-seeded with standard locations and warehouse.
@@ -63,6 +68,9 @@ func NewMemoryRepo() *MemoryRepo {
 		orderpoints:    make(map[int64]*stock.Orderpoint),
 		landedCosts:    make(map[int64]*stock.LandedCost),
 		procurements:   make(map[int64]*stock.ProcurementGroup),
+		routes:         make(map[int64]*stock.StockRoute),
+		rules:          make(map[int64]*stock.StockRule),
+		scraps:         make(map[int64]*stock.StockScrap),
 		seqInCounters:  make(map[int]int64),
 		seqOutCounters: make(map[int]int64),
 		seqIntCounters: make(map[int]int64),
@@ -1926,4 +1934,122 @@ func (r *MemoryRepo) GetProcurementGroupByName(ctx context.Context, name string)
 		}
 	}
 	return nil, platformerrors.NotFound(fmt.Sprintf("procurement group '%s' not found", name))
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Routes & Rules (Odoo 19 Parity)
+// ─────────────────────────────────────────────────────────────────────────────
+
+func (r *MemoryRepo) CreateRoute(ctx context.Context, route *stock.StockRoute) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.lastRouteID++
+	route.ID = r.lastRouteID
+	clone := *route
+	r.routes[route.ID] = &clone
+	return nil
+}
+
+func (r *MemoryRepo) GetRouteByID(ctx context.Context, id int64) (*stock.StockRoute, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	res, ok := r.routes[id]
+	if !ok || !res.Active {
+		return nil, platformerrors.NotFound("route not found")
+	}
+	clone := *res
+	return &clone, nil
+}
+
+func (r *MemoryRepo) ListRoutes(ctx context.Context, companyID *int64) ([]stock.StockRoute, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	var items []stock.StockRoute
+	for _, res := range r.routes {
+		if res.Active && (companyID == nil || res.CompanyID == nil || *res.CompanyID == *companyID) {
+			items = append(items, *res)
+		}
+	}
+	return items, nil
+}
+
+func (r *MemoryRepo) CreateRule(ctx context.Context, rule *stock.StockRule) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.lastRuleID++
+	rule.ID = r.lastRuleID
+	clone := *rule
+	r.rules[rule.ID] = &clone
+	return nil
+}
+
+func (r *MemoryRepo) GetRuleByID(ctx context.Context, id int64) (*stock.StockRule, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	res, ok := r.rules[id]
+	if !ok || !res.Active {
+		return nil, platformerrors.NotFound("rule not found")
+	}
+	clone := *res
+	return &clone, nil
+}
+
+func (r *MemoryRepo) ListRulesByRoute(ctx context.Context, routeID int64) ([]stock.StockRule, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	var items []stock.StockRule
+	for _, res := range r.rules {
+		if res.Active && res.RouteID == routeID {
+			items = append(items, *res)
+		}
+	}
+	return items, nil
+}
+
+func (r *MemoryRepo) FindRule(ctx context.Context, routeID int64, locationDestID int64) (*stock.StockRule, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	for _, res := range r.rules {
+		if res.Active && res.RouteID == routeID && res.LocationDestID == locationDestID {
+			clone := *res
+			return &clone, nil
+		}
+	}
+	return nil, platformerrors.NotFound("no rule found for this route and destination")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Scrap
+// ─────────────────────────────────────────────────────────────────────────────
+
+func (r *MemoryRepo) CreateScrap(ctx context.Context, s *stock.StockScrap) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.lastScrapID++
+	s.ID = r.lastScrapID
+	clone := *s
+	r.scraps[s.ID] = &clone
+	return nil
+}
+
+func (r *MemoryRepo) GetScrapByID(ctx context.Context, id int64) (*stock.StockScrap, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	s, ok := r.scraps[id]
+	if !ok {
+		return nil, platformerrors.NotFound("scrap not found")
+	}
+	clone := *s
+	return &clone, nil
+}
+
+func (r *MemoryRepo) UpdateScrap(ctx context.Context, s *stock.StockScrap) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if _, ok := r.scraps[s.ID]; !ok {
+		return platformerrors.NotFound("scrap not found")
+	}
+	clone := *s
+	r.scraps[s.ID] = &clone
+	return nil
 }

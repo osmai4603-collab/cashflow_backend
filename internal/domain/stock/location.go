@@ -6,6 +6,7 @@ import (
 	"time"
 
 	platformerrors "cashflow_backend/internal/platform/errors"
+	"cashflow_backend/internal/platform/i18n"
 )
 
 // LocationUsage defines the categorization of a stock location (stock.location usage in Odoo).
@@ -24,8 +25,8 @@ const (
 // StockLocation represents a storage location or virtual stock node (stock.location in Odoo).
 type StockLocation struct {
 	ID             int64         `json:"id"`
-	Name           string        `json:"name"`
-	CompleteName   string        `json:"complete_name"`
+	Name           i18n.TranslationString        `json:"name"`
+	CompleteName   i18n.TranslationString        `json:"complete_name"`
 	Usage          LocationUsage `json:"usage"`
 	ParentID       *int64        `json:"parent_id,omitempty"`
 	ScrapLocation  bool          `json:"scrap_location"`
@@ -42,15 +43,9 @@ type StockLocation struct {
 
 // Validate checks business invariants for StockLocation.
 func (l *StockLocation) Validate() error {
-	l.Name = strings.TrimSpace(l.Name)
-	if l.Name == "" {
+	if len(l.Name) == 0 {
 		return platformerrors.Validation("location name is required", map[string]string{
 			"name": "cannot be empty",
-		})
-	}
-	if len(l.Name) > 128 {
-		return platformerrors.Validation("location name exceeds maximum length", map[string]string{
-			"name": "must not exceed 128 characters",
 		})
 	}
 
@@ -76,7 +71,7 @@ func (l *StockLocation) Validate() error {
 		})
 	}
 
-	if l.CompleteName == "" {
+	if len(l.CompleteName) == 0 {
 		l.CompleteName = l.Name
 	}
 
@@ -87,7 +82,9 @@ func (l *StockLocation) Validate() error {
 func (l *StockLocation) ComputeCompleteName(parentCompleteName string) {
 	parentCompleteName = strings.TrimSpace(parentCompleteName)
 	if parentCompleteName != "" {
-		l.CompleteName = parentCompleteName + "/" + l.Name
+		l.CompleteName = i18n.TranslationString{
+			"en_US": parentCompleteName + "/" + l.Name.Get("en_US"),
+		}
 	} else {
 		l.CompleteName = l.Name
 	}

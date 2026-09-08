@@ -16,16 +16,19 @@ const (
 )
 
 type Message struct {
-	ID          int64       `json:"id"`
-	Subject     string      `json:"subject,omitempty"`
-	Body        string      `json:"body"`
-	MessageType MessageType `json:"message_type"`
-	ResModel    string      `json:"res_model,omitempty"`
-	ResID       *int64      `json:"res_id,omitempty"`
-	AuthorID    *int64      `json:"author_id,omitempty"`
-	ActivityID  *int64      `json:"activity_id,omitempty"`
-	CompanyID   int64       `json:"company_id"`
-	CreatedAt   time.Time   `json:"created_at"`
+	ID             int64           `json:"id"`
+	Subject        string          `json:"subject,omitempty"`
+	Body           string          `json:"body"`
+	MessageType    MessageType     `json:"message_type"`
+	ResModel       string          `json:"res_model,omitempty"`
+	ResID          *int64          `json:"res_id,omitempty"`
+	SubtypeID      *int64          `json:"subtype_id,omitempty"`
+	ParentID       *int64          `json:"parent_id,omitempty"`
+	AuthorID       *int64          `json:"author_id,omitempty"`
+	ActivityID     *int64          `json:"activity_id,omitempty"`
+	TrackingValues []TrackingValue `json:"tracking_values,omitempty"`
+	CompanyID      int64           `json:"company_id"`
+	CreatedAt      time.Time       `json:"created_at"`
 }
 
 func (m *Message) Validate() error {

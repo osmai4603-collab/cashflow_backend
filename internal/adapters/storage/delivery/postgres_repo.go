@@ -3,7 +3,6 @@ package delivery
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	"cashflow_backend/internal/domain/delivery"
 	platformerrors "cashflow_backend/internal/platform/errors"
@@ -170,7 +169,7 @@ func (r *PostgresRepository) CreateZipPrefix(ctx context.Context, name string) (
 }
 
 func (r *PostgresRepository) updateRelations(ctx context.Context, c *delivery.DeliveryCarrier) error {
-	return r.pool.BeginFunc(ctx, func(tx pgx.Tx) error {
+	return pgx.BeginFunc(ctx, r.pool, func(tx pgx.Tx) error {
 		// Countries
 		if _, err := tx.Exec(ctx, "DELETE FROM delivery_carrier_country_rel WHERE carrier_id = $1", c.ID); err != nil {
 			return err

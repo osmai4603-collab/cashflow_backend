@@ -10,6 +10,7 @@ import (
 	"cashflow_backend/internal/platform/audit"
 	platformerrors "cashflow_backend/internal/platform/errors"
 	"cashflow_backend/internal/platform/filter"
+	"cashflow_backend/internal/platform/i18n"
 	"cashflow_backend/internal/platform/pagination"
 )
 
@@ -198,7 +199,7 @@ func (uc *ProductUseCase) CreateProduct(ctx context.Context, in CreateProductInp
 	}
 
 	pt := &product.ProductTemplate{
-		Name:        in.Name,
+		Name:        i18n.NewTranslation(in.Name),
 		Type:        in.Type,
 		CategoryID:  in.CategoryID,
 		InternalRef: in.InternalRef,
@@ -260,7 +261,7 @@ func (uc *ProductUseCase) UpdateProduct(ctx context.Context, id int64, in Update
 	}
 
 	if in.Name != nil {
-		pt.Name = *in.Name
+		pt.Name = i18n.NewTranslation(*in.Name)
 	}
 	if in.Type != nil {
 		pt.Type = *in.Type
@@ -410,7 +411,8 @@ func (uc *ProductUseCase) DeleteVariant(ctx context.Context, id int64) error {
 // ─────────────────────────────────────────────────────────────────────────────
 
 func (uc *ProductUseCase) CreateCategory(ctx context.Context, in CreateCategoryInput) (*product.ProductCategory, error) {
-	completeName := in.Name
+	nameTS := i18n.NewTranslation(in.Name)
+	completeName := nameTS
 	if in.ParentID != nil && *in.ParentID > 0 {
 		parent, err := uc.repo.GetCategoryByID(ctx, *in.ParentID)
 		if err != nil {
@@ -418,11 +420,14 @@ func (uc *ProductUseCase) CreateCategory(ctx context.Context, in CreateCategoryI
 				"parent_id": fmt.Sprintf("category %d not found", *in.ParentID),
 			})
 		}
-		completeName = fmt.Sprintf("%s / %s", parent.CompleteName, in.Name)
+		completeName = make(i18n.TranslationString)
+		for lang, val := range parent.CompleteName {
+			completeName[lang] = fmt.Sprintf("%s / %s", val, in.Name)
+		}
 	}
 
 	cat := &product.ProductCategory{
-		Name:         in.Name,
+		Name:         nameTS,
 		ParentID:     in.ParentID,
 		CompleteName: completeName,
 		Active:       true,
@@ -459,7 +464,7 @@ func (uc *ProductUseCase) UpdateCategory(ctx context.Context, id int64, in Updat
 	}
 
 	if in.Name != nil {
-		cat.Name = *in.Name
+		cat.Name = i18n.NewTranslation(*in.Name)
 	}
 	if in.ParentID != nil {
 		if *in.ParentID == id {
@@ -474,7 +479,10 @@ func (uc *ProductUseCase) UpdateCategory(ctx context.Context, id int64, in Updat
 					"parent_id": fmt.Sprintf("category %d not found", *in.ParentID),
 				})
 			}
-			cat.CompleteName = fmt.Sprintf("%s / %s", parent.CompleteName, cat.Name)
+			cat.CompleteName = make(i18n.TranslationString)
+			for lang, val := range parent.CompleteName {
+				cat.CompleteName[lang] = fmt.Sprintf("%s / %s", val, cat.Name.Get(i18n.DefaultLang))
+			}
 		} else {
 			cat.CompleteName = cat.Name
 		}
@@ -483,7 +491,10 @@ func (uc *ProductUseCase) UpdateCategory(ctx context.Context, id int64, in Updat
 		// Update complete name if only name changed and has parent
 		if cat.ParentID != nil && *cat.ParentID > 0 {
 			if parent, err := uc.repo.GetCategoryByID(ctx, *cat.ParentID); err == nil {
-				cat.CompleteName = fmt.Sprintf("%s / %s", parent.CompleteName, cat.Name)
+				cat.CompleteName = make(i18n.TranslationString)
+				for lang, val := range parent.CompleteName {
+					cat.CompleteName[lang] = fmt.Sprintf("%s / %s", val, cat.Name.Get(i18n.DefaultLang))
+				}
 			}
 		} else {
 			cat.CompleteName = cat.Name
@@ -519,7 +530,7 @@ func (uc *ProductUseCase) ListCategories(ctx context.Context) ([]product.Product
 
 func (uc *ProductUseCase) CreateUoM(ctx context.Context, in CreateUoMInput) (*product.UnitOfMeasure, error) {
 	uom := &product.UnitOfMeasure{
-		Name:     in.Name,
+		Name:     i18n.NewTranslation(in.Name),
 		Category: in.Category,
 		Ratio:    in.Ratio,
 		Rounding: in.Rounding,
@@ -557,7 +568,7 @@ func (uc *ProductUseCase) UpdateUoM(ctx context.Context, id int64, in UpdateUoMI
 	}
 
 	if in.Name != nil {
-		uom.Name = *in.Name
+		uom.Name = i18n.NewTranslation(*in.Name)
 	}
 	if in.Category != nil {
 		uom.Category = *in.Category

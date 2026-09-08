@@ -1,16 +1,15 @@
 package maintenance
 
 import (
-	"strings"
-
 	"cashflow_backend/internal/platform/audit"
 	platformerrors "cashflow_backend/internal/platform/errors"
+	"cashflow_backend/internal/platform/i18n"
 )
 
 // Team groups technicians that own a set of equipment and requests.
 type Team struct {
 	ID        int64        `json:"id"`
-	Name      string       `json:"name"`
+	Name      i18n.TranslationString       `json:"name"`
 	Color     int          `json:"color"`
 	Active    bool         `json:"active"`
 	MemberIDs []int64      `json:"member_ids,omitempty"`
@@ -20,8 +19,7 @@ type Team struct {
 
 // Validate ensures a team has a name.
 func (t *Team) Validate() error {
-	t.Name = strings.TrimSpace(t.Name)
-	if t.Name == "" {
+	if len(t.Name) == 0 {
 		return platformerrors.Validation("team name is required", map[string]string{
 			"name": "cannot be empty",
 		})

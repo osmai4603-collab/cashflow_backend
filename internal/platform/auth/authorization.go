@@ -102,12 +102,12 @@ func RequireAccess(authorizer Authorizer, model string, action Action) func(http
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			claims := ClaimsFromContext(r.Context())
 			if claims == nil {
-				response.Error(w, platformerrors.Unauthorized("unauthenticated request"))
+				response.Error(w, r, platformerrors.Unauthorized("unauthenticated request"))
 				return
 			}
 			subject := Subject{UserID: claims.UserID, CompanyID: claims.CompanyID}
 			if err := authorizer.Check(r.Context(), subject, model, action); err != nil {
-				response.Error(w, err)
+				response.Error(w, r, err)
 				return
 			}
 			next.ServeHTTP(w, r)

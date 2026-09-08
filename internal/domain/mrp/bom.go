@@ -29,9 +29,19 @@ type BillOfMaterials struct {
 	CompanyID      int64              `json:"company_id"`
 
 	Lines          []BomLine          `json:"lines,omitempty"`
+	ByProducts     []BomByProduct     `json:"by_products,omitempty"`
 	Operations     []RoutingOperation `json:"operations,omitempty"`
 
 	Audit          audit.Fields       `json:"audit"`
+}
+
+// BomByProduct represents a byproduct of a manufacturing process (mrp.bom.byproduct).
+type BomByProduct struct {
+	ID        int64   `json:"id"`
+	BomID     int64   `json:"bom_id"`
+	ProductID int64   `json:"product_id"`
+	Quantity  float64 `json:"product_qty"`
+	UoMID     int64   `json:"uom_id"`
 }
 
 // Validate ensures BoM invariants.

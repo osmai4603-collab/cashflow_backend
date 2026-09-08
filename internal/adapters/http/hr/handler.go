@@ -47,13 +47,13 @@ func parseID(param string) (int64, error) {
 func (h *Handler) CreateDepartment(w http.ResponseWriter, r *http.Request) {
 	var req CreateDepartmentRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		response.Error(w, platformerrors.BadRequest("invalid JSON request body", err))
+		response.Error(w, r, platformerrors.BadRequest("invalid JSON request body", err))
 		return
 	}
 
 	dept, err := h.useCase.CreateDepartment(r.Context(), req.ToInput())
 	if err != nil {
-		response.Error(w, err)
+		response.Error(w, r, err)
 		return
 	}
 
@@ -63,13 +63,13 @@ func (h *Handler) CreateDepartment(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) GetDepartment(w http.ResponseWriter, r *http.Request) {
 	id, err := parseID(chi.URLParam(r, "id"))
 	if err != nil {
-		response.Error(w, platformerrors.BadRequest("invalid department ID", err))
+		response.Error(w, r, platformerrors.BadRequest("invalid department ID", err))
 		return
 	}
 
 	dept, err := h.useCase.GetDepartment(r.Context(), id)
 	if err != nil {
-		response.Error(w, err)
+		response.Error(w, r, err)
 		return
 	}
 
@@ -79,19 +79,19 @@ func (h *Handler) GetDepartment(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) UpdateDepartment(w http.ResponseWriter, r *http.Request) {
 	id, err := parseID(chi.URLParam(r, "id"))
 	if err != nil {
-		response.Error(w, platformerrors.BadRequest("invalid department ID", err))
+		response.Error(w, r, platformerrors.BadRequest("invalid department ID", err))
 		return
 	}
 
 	var req UpdateDepartmentRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		response.Error(w, platformerrors.BadRequest("invalid JSON request body", err))
+		response.Error(w, r, platformerrors.BadRequest("invalid JSON request body", err))
 		return
 	}
 
 	dept, err := h.useCase.UpdateDepartment(r.Context(), id, req.ToInput())
 	if err != nil {
-		response.Error(w, err)
+		response.Error(w, r, err)
 		return
 	}
 
@@ -101,12 +101,12 @@ func (h *Handler) UpdateDepartment(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) DeleteDepartment(w http.ResponseWriter, r *http.Request) {
 	id, err := parseID(chi.URLParam(r, "id"))
 	if err != nil {
-		response.Error(w, platformerrors.BadRequest("invalid department ID", err))
+		response.Error(w, r, platformerrors.BadRequest("invalid department ID", err))
 		return
 	}
 
 	if err := h.useCase.DeleteDepartment(r.Context(), id); err != nil {
-		response.Error(w, err)
+		response.Error(w, r, err)
 		return
 	}
 
@@ -127,7 +127,7 @@ func (h *Handler) ListDepartments(w http.ResponseWriter, r *http.Request) {
 
 	res, err := h.useCase.ListDepartments(r.Context(), f, page)
 	if err != nil {
-		response.Error(w, err)
+		response.Error(w, r, err)
 		return
 	}
 
@@ -155,7 +155,7 @@ func (h *Handler) GetDepartmentTree(w http.ResponseWriter, r *http.Request) {
 
 	tree, err := h.useCase.GetDepartmentTree(r.Context(), parentID)
 	if err != nil {
-		response.Error(w, err)
+		response.Error(w, r, err)
 		return
 	}
 
@@ -174,13 +174,13 @@ func (h *Handler) GetDepartmentTree(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) CreateJob(w http.ResponseWriter, r *http.Request) {
 	var req CreateJobRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		response.Error(w, platformerrors.BadRequest("invalid JSON request body", err))
+		response.Error(w, r, platformerrors.BadRequest("invalid JSON request body", err))
 		return
 	}
 
 	job, err := h.useCase.CreateJob(r.Context(), req.ToInput())
 	if err != nil {
-		response.Error(w, err)
+		response.Error(w, r, err)
 		return
 	}
 
@@ -190,13 +190,13 @@ func (h *Handler) CreateJob(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) GetJob(w http.ResponseWriter, r *http.Request) {
 	id, err := parseID(chi.URLParam(r, "id"))
 	if err != nil {
-		response.Error(w, platformerrors.BadRequest("invalid job ID", err))
+		response.Error(w, r, platformerrors.BadRequest("invalid job ID", err))
 		return
 	}
 
 	job, err := h.useCase.GetJob(r.Context(), id)
 	if err != nil {
-		response.Error(w, err)
+		response.Error(w, r, err)
 		return
 	}
 
@@ -206,19 +206,19 @@ func (h *Handler) GetJob(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) UpdateJob(w http.ResponseWriter, r *http.Request) {
 	id, err := parseID(chi.URLParam(r, "id"))
 	if err != nil {
-		response.Error(w, platformerrors.BadRequest("invalid job ID", err))
+		response.Error(w, r, platformerrors.BadRequest("invalid job ID", err))
 		return
 	}
 
 	var req UpdateJobRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		response.Error(w, platformerrors.BadRequest("invalid JSON request body", err))
+		response.Error(w, r, platformerrors.BadRequest("invalid JSON request body", err))
 		return
 	}
 
 	job, err := h.useCase.UpdateJob(r.Context(), id, req.ToInput())
 	if err != nil {
-		response.Error(w, err)
+		response.Error(w, r, err)
 		return
 	}
 
@@ -228,12 +228,12 @@ func (h *Handler) UpdateJob(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) DeleteJob(w http.ResponseWriter, r *http.Request) {
 	id, err := parseID(chi.URLParam(r, "id"))
 	if err != nil {
-		response.Error(w, platformerrors.BadRequest("invalid job ID", err))
+		response.Error(w, r, platformerrors.BadRequest("invalid job ID", err))
 		return
 	}
 
 	if err := h.useCase.DeleteJob(r.Context(), id); err != nil {
-		response.Error(w, err)
+		response.Error(w, r, err)
 		return
 	}
 
@@ -259,7 +259,7 @@ func (h *Handler) ListJobs(w http.ResponseWriter, r *http.Request) {
 
 	res, err := h.useCase.ListJobs(r.Context(), f, page)
 	if err != nil {
-		response.Error(w, err)
+		response.Error(w, r, err)
 		return
 	}
 
@@ -284,13 +284,13 @@ func (h *Handler) ListJobs(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) CreateEmployee(w http.ResponseWriter, r *http.Request) {
 	var req CreateEmployeeRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		response.Error(w, platformerrors.BadRequest("invalid JSON request body", err))
+		response.Error(w, r, platformerrors.BadRequest("invalid JSON request body", err))
 		return
 	}
 
 	emp, err := h.useCase.CreateEmployee(r.Context(), req.ToInput())
 	if err != nil {
-		response.Error(w, err)
+		response.Error(w, r, err)
 		return
 	}
 
@@ -300,13 +300,13 @@ func (h *Handler) CreateEmployee(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) GetEmployee(w http.ResponseWriter, r *http.Request) {
 	id, err := parseID(chi.URLParam(r, "id"))
 	if err != nil {
-		response.Error(w, platformerrors.BadRequest("invalid employee ID", err))
+		response.Error(w, r, platformerrors.BadRequest("invalid employee ID", err))
 		return
 	}
 
 	emp, err := h.useCase.GetEmployee(r.Context(), id)
 	if err != nil {
-		response.Error(w, err)
+		response.Error(w, r, err)
 		return
 	}
 
@@ -316,19 +316,19 @@ func (h *Handler) GetEmployee(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) UpdateEmployee(w http.ResponseWriter, r *http.Request) {
 	id, err := parseID(chi.URLParam(r, "id"))
 	if err != nil {
-		response.Error(w, platformerrors.BadRequest("invalid employee ID", err))
+		response.Error(w, r, platformerrors.BadRequest("invalid employee ID", err))
 		return
 	}
 
 	var req UpdateEmployeeRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		response.Error(w, platformerrors.BadRequest("invalid JSON request body", err))
+		response.Error(w, r, platformerrors.BadRequest("invalid JSON request body", err))
 		return
 	}
 
 	emp, err := h.useCase.UpdateEmployee(r.Context(), id, req.ToInput())
 	if err != nil {
-		response.Error(w, err)
+		response.Error(w, r, err)
 		return
 	}
 
@@ -338,12 +338,12 @@ func (h *Handler) UpdateEmployee(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) DeleteEmployee(w http.ResponseWriter, r *http.Request) {
 	id, err := parseID(chi.URLParam(r, "id"))
 	if err != nil {
-		response.Error(w, platformerrors.BadRequest("invalid employee ID", err))
+		response.Error(w, r, platformerrors.BadRequest("invalid employee ID", err))
 		return
 	}
 
 	if err := h.useCase.DeleteEmployee(r.Context(), id); err != nil {
-		response.Error(w, err)
+		response.Error(w, r, err)
 		return
 	}
 
@@ -379,7 +379,7 @@ func (h *Handler) ListEmployees(w http.ResponseWriter, r *http.Request) {
 
 	res, err := h.useCase.ListEmployees(r.Context(), f, page)
 	if err != nil {
-		response.Error(w, err)
+		response.Error(w, r, err)
 		return
 	}
 
@@ -400,7 +400,7 @@ func (h *Handler) ListEmployees(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) GetEmployeeLeaveBalance(w http.ResponseWriter, r *http.Request) {
 	id, err := parseID(chi.URLParam(r, "id"))
 	if err != nil {
-		response.Error(w, platformerrors.BadRequest("invalid employee ID", err))
+		response.Error(w, r, platformerrors.BadRequest("invalid employee ID", err))
 		return
 	}
 
@@ -413,7 +413,7 @@ func (h *Handler) GetEmployeeLeaveBalance(w http.ResponseWriter, r *http.Request
 
 	summary, err := h.useCase.GetEmployeeLeaveBalance(r.Context(), id, year)
 	if err != nil {
-		response.Error(w, err)
+		response.Error(w, r, err)
 		return
 	}
 
@@ -427,13 +427,13 @@ func (h *Handler) GetEmployeeLeaveBalance(w http.ResponseWriter, r *http.Request
 func (h *Handler) CreateAllocation(w http.ResponseWriter, r *http.Request) {
 	var req CreateAllocationRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		response.Error(w, platformerrors.BadRequest("invalid JSON request body", err))
+		response.Error(w, r, platformerrors.BadRequest("invalid JSON request body", err))
 		return
 	}
 
 	alloc, err := h.useCase.CreateAllocation(r.Context(), req.ToInput())
 	if err != nil {
-		response.Error(w, err)
+		response.Error(w, r, err)
 		return
 	}
 
@@ -443,13 +443,13 @@ func (h *Handler) CreateAllocation(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) GetAllocation(w http.ResponseWriter, r *http.Request) {
 	id, err := parseID(chi.URLParam(r, "id"))
 	if err != nil {
-		response.Error(w, platformerrors.BadRequest("invalid allocation ID", err))
+		response.Error(w, r, platformerrors.BadRequest("invalid allocation ID", err))
 		return
 	}
 
 	alloc, err := h.useCase.GetAllocation(r.Context(), id)
 	if err != nil {
-		response.Error(w, err)
+		response.Error(w, r, err)
 		return
 	}
 
@@ -475,7 +475,7 @@ func (h *Handler) ListAllocations(w http.ResponseWriter, r *http.Request) {
 
 	res, err := h.useCase.ListAllocations(r.Context(), f, page)
 	if err != nil {
-		response.Error(w, err)
+		response.Error(w, r, err)
 		return
 	}
 
@@ -500,13 +500,13 @@ func (h *Handler) ListAllocations(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) CreateLeaveRequest(w http.ResponseWriter, r *http.Request) {
 	var req CreateLeaveRequestRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		response.Error(w, platformerrors.BadRequest("invalid JSON request body", err))
+		response.Error(w, r, platformerrors.BadRequest("invalid JSON request body", err))
 		return
 	}
 
 	leaveReq, err := h.useCase.CreateLeaveRequest(r.Context(), req.ToInput())
 	if err != nil {
-		response.Error(w, err)
+		response.Error(w, r, err)
 		return
 	}
 
@@ -516,13 +516,13 @@ func (h *Handler) CreateLeaveRequest(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) GetLeaveRequest(w http.ResponseWriter, r *http.Request) {
 	id, err := parseID(chi.URLParam(r, "id"))
 	if err != nil {
-		response.Error(w, platformerrors.BadRequest("invalid leave request ID", err))
+		response.Error(w, r, platformerrors.BadRequest("invalid leave request ID", err))
 		return
 	}
 
 	leaveReq, err := h.useCase.GetLeaveRequest(r.Context(), id)
 	if err != nil {
-		response.Error(w, err)
+		response.Error(w, r, err)
 		return
 	}
 
@@ -532,19 +532,19 @@ func (h *Handler) GetLeaveRequest(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) UpdateLeaveRequest(w http.ResponseWriter, r *http.Request) {
 	id, err := parseID(chi.URLParam(r, "id"))
 	if err != nil {
-		response.Error(w, platformerrors.BadRequest("invalid leave request ID", err))
+		response.Error(w, r, platformerrors.BadRequest("invalid leave request ID", err))
 		return
 	}
 
 	var req UpdateLeaveRequestRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		response.Error(w, platformerrors.BadRequest("invalid JSON request body", err))
+		response.Error(w, r, platformerrors.BadRequest("invalid JSON request body", err))
 		return
 	}
 
 	leaveReq, err := h.useCase.UpdateLeaveRequest(r.Context(), id, req.ToInput())
 	if err != nil {
-		response.Error(w, err)
+		response.Error(w, r, err)
 		return
 	}
 
@@ -554,12 +554,12 @@ func (h *Handler) UpdateLeaveRequest(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) DeleteLeaveRequest(w http.ResponseWriter, r *http.Request) {
 	id, err := parseID(chi.URLParam(r, "id"))
 	if err != nil {
-		response.Error(w, platformerrors.BadRequest("invalid leave request ID", err))
+		response.Error(w, r, platformerrors.BadRequest("invalid leave request ID", err))
 		return
 	}
 
 	if err := h.useCase.DeleteLeaveRequest(r.Context(), id); err != nil {
-		response.Error(w, err)
+		response.Error(w, r, err)
 		return
 	}
 
@@ -583,7 +583,7 @@ func (h *Handler) ListLeaveRequests(w http.ResponseWriter, r *http.Request) {
 
 	res, err := h.useCase.ListLeaveRequests(r.Context(), f, page)
 	if err != nil {
-		response.Error(w, err)
+		response.Error(w, r, err)
 		return
 	}
 
@@ -604,13 +604,13 @@ func (h *Handler) ListLeaveRequests(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) ConfirmLeaveRequest(w http.ResponseWriter, r *http.Request) {
 	id, err := parseID(chi.URLParam(r, "id"))
 	if err != nil {
-		response.Error(w, platformerrors.BadRequest("invalid leave request ID", err))
+		response.Error(w, r, platformerrors.BadRequest("invalid leave request ID", err))
 		return
 	}
 
 	leaveReq, err := h.useCase.ConfirmLeaveRequest(r.Context(), id)
 	if err != nil {
-		response.Error(w, err)
+		response.Error(w, r, err)
 		return
 	}
 
@@ -620,7 +620,7 @@ func (h *Handler) ConfirmLeaveRequest(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) ApproveLeaveRequest(w http.ResponseWriter, r *http.Request) {
 	id, err := parseID(chi.URLParam(r, "id"))
 	if err != nil {
-		response.Error(w, platformerrors.BadRequest("invalid leave request ID", err))
+		response.Error(w, r, platformerrors.BadRequest("invalid leave request ID", err))
 		return
 	}
 
@@ -629,7 +629,7 @@ func (h *Handler) ApproveLeaveRequest(w http.ResponseWriter, r *http.Request) {
 
 	leaveReq, err := h.useCase.ApproveLeaveRequest(r.Context(), id, req.ApproverID)
 	if err != nil {
-		response.Error(w, err)
+		response.Error(w, r, err)
 		return
 	}
 
@@ -639,19 +639,19 @@ func (h *Handler) ApproveLeaveRequest(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) RefuseLeaveRequest(w http.ResponseWriter, r *http.Request) {
 	id, err := parseID(chi.URLParam(r, "id"))
 	if err != nil {
-		response.Error(w, platformerrors.BadRequest("invalid leave request ID", err))
+		response.Error(w, r, platformerrors.BadRequest("invalid leave request ID", err))
 		return
 	}
 
 	var req RefuseLeaveRequestRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		response.Error(w, platformerrors.BadRequest("invalid JSON request body", err))
+		response.Error(w, r, platformerrors.BadRequest("invalid JSON request body", err))
 		return
 	}
 
 	leaveReq, err := h.useCase.RefuseLeaveRequest(r.Context(), id, req.ApproverID, req.Reason)
 	if err != nil {
-		response.Error(w, err)
+		response.Error(w, r, err)
 		return
 	}
 
@@ -661,13 +661,13 @@ func (h *Handler) RefuseLeaveRequest(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) CancelLeaveRequest(w http.ResponseWriter, r *http.Request) {
 	id, err := parseID(chi.URLParam(r, "id"))
 	if err != nil {
-		response.Error(w, platformerrors.BadRequest("invalid leave request ID", err))
+		response.Error(w, r, platformerrors.BadRequest("invalid leave request ID", err))
 		return
 	}
 
 	leaveReq, err := h.useCase.CancelLeaveRequest(r.Context(), id)
 	if err != nil {
-		response.Error(w, err)
+		response.Error(w, r, err)
 		return
 	}
 

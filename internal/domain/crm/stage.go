@@ -1,16 +1,16 @@
 package crm
 
 import (
-	"strings"
 	"time"
 
 	platformerrors "cashflow_backend/internal/platform/errors"
+	"cashflow_backend/internal/platform/i18n"
 )
 
 // Stage represents a pipeline progression milestone (crm.stage in Odoo).
 type Stage struct {
 	ID           int64     `json:"id"`
-	Name         string    `json:"name"`
+	Name         i18n.TranslationString    `json:"name"`
 	Sequence     int       `json:"sequence"`
 	IsWon        bool      `json:"is_won"`
 	IsClosed     bool      `json:"is_closed"`
@@ -26,12 +26,8 @@ type Stage struct {
 
 // Validate checks whether stage definition meets system requirements.
 func (s *Stage) Validate() error {
-	s.Name = strings.TrimSpace(s.Name)
-	if s.Name == "" {
+	if len(s.Name) == 0 {
 		return platformerrors.Validation("stage name is required", nil)
-	}
-	if len(s.Name) > 128 {
-		return platformerrors.Validation("stage name cannot exceed 128 characters", nil)
 	}
 	return nil
 }

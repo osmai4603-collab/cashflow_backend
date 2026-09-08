@@ -19,10 +19,11 @@ const (
 
 // AppError represents a structured, domain-level application error.
 type AppError struct {
-	Code    string `json:"code"`
-	Message string `json:"message"`
-	Details any    `json:"details,omitempty"`
-	Err     error  `json:"-"`
+	Code           string `json:"code"`
+	Message        string `json:"message"`
+	TranslationKey string `json:"-"`
+	Details        any    `json:"details,omitempty"`
+	Err            error  `json:"-"`
 }
 
 func (e *AppError) Error() string {
@@ -39,9 +40,10 @@ func (e *AppError) Unwrap() error {
 // Helper Constructors
 func New(code, message string, err error) *AppError {
 	return &AppError{
-		Code:    code,
-		Message: message,
-		Err:     err,
+		Code:           code,
+		Message:        message,
+		TranslationKey: message,
+		Err:            err,
 	}
 }
 
@@ -51,17 +53,19 @@ func NotFound(message string, err ...error) *AppError {
 		original = err[0]
 	}
 	return &AppError{
-		Code:    CodeNotFound,
-		Message: message,
-		Err:     original,
+		Code:           CodeNotFound,
+		Message:        message,
+		TranslationKey: message,
+		Err:            original,
 	}
 }
 
 func Validation(message string, details any) *AppError {
 	return &AppError{
-		Code:    CodeValidation,
-		Message: message,
-		Details: details,
+		Code:           CodeValidation,
+		Message:        message,
+		TranslationKey: message,
+		Details:        details,
 	}
 }
 

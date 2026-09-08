@@ -10,6 +10,7 @@ import (
 
 	"cashflow_backend/internal/domain/activity"
 	"cashflow_backend/internal/domain/fleet"
+	"cashflow_backend/internal/platform/i18n"
 	platformerrors "cashflow_backend/internal/platform/errors"
 	"cashflow_backend/internal/platform/filter"
 	"cashflow_backend/internal/platform/pagination"
@@ -60,10 +61,11 @@ func New(repo fleet.Repository, reminders ReminderScheduler, logger *slog.Logger
 // --- Brands ---
 
 func (s *Service) CreateBrand(ctx context.Context, brand *fleet.VehicleBrand) error {
-	brand.Name = strings.TrimSpace(brand.Name)
-	if brand.Name == "" {
+	name := strings.TrimSpace(brand.Name.GetLocalized(ctx))
+	if name == "" {
 		return platformerrors.Validation("brand name is required", map[string]string{"name": "cannot be empty"})
 	}
+	brand.Name = i18n.NewTranslation(name)
 	return s.repo.CreateBrand(ctx, brand)
 }
 
@@ -72,9 +74,11 @@ func (s *Service) GetBrand(ctx context.Context, id int64) (*fleet.VehicleBrand, 
 }
 
 func (s *Service) UpdateBrand(ctx context.Context, brand *fleet.VehicleBrand) error {
-	if brand.Name == "" {
+	name := strings.TrimSpace(brand.Name.GetLocalized(ctx))
+	if name == "" {
 		return platformerrors.Validation("brand name is required", map[string]string{"name": "cannot be empty"})
 	}
+	brand.Name = i18n.NewTranslation(name)
 	return s.repo.UpdateBrand(ctx, brand)
 }
 
@@ -89,10 +93,11 @@ func (s *Service) ListBrands(ctx context.Context) ([]fleet.VehicleBrand, error) 
 // --- Model categories ---
 
 func (s *Service) CreateModelCategory(ctx context.Context, category *fleet.VehicleModelCategory) error {
-	category.Name = strings.TrimSpace(category.Name)
-	if category.Name == "" {
+	name := strings.TrimSpace(category.Name.GetLocalized(ctx))
+	if name == "" {
 		return platformerrors.Validation("model category name is required", map[string]string{"name": "cannot be empty"})
 	}
+	category.Name = i18n.NewTranslation(name)
 	return s.repo.CreateModelCategory(ctx, category)
 }
 
@@ -101,9 +106,11 @@ func (s *Service) GetModelCategory(ctx context.Context, id int64) (*fleet.Vehicl
 }
 
 func (s *Service) UpdateModelCategory(ctx context.Context, category *fleet.VehicleModelCategory) error {
-	if category.Name == "" {
+	name := strings.TrimSpace(category.Name.GetLocalized(ctx))
+	if name == "" {
 		return platformerrors.Validation("model category name is required", map[string]string{"name": "cannot be empty"})
 	}
+	category.Name = i18n.NewTranslation(name)
 	return s.repo.UpdateModelCategory(ctx, category)
 }
 
@@ -118,10 +125,11 @@ func (s *Service) ListModelCategories(ctx context.Context) ([]fleet.VehicleModel
 // --- Models ---
 
 func (s *Service) CreateModel(ctx context.Context, model *fleet.VehicleModel) error {
-	model.Name = strings.TrimSpace(model.Name)
-	if model.Name == "" {
+	name := strings.TrimSpace(model.Name.GetLocalized(ctx))
+	if name == "" {
 		return platformerrors.Validation("model name is required", map[string]string{"name": "cannot be empty"})
 	}
+	model.Name = i18n.NewTranslation(name)
 	if model.BrandID <= 0 {
 		return platformerrors.Validation("model brand is required", map[string]string{"brand_id": "must be positive"})
 	}
@@ -133,9 +141,11 @@ func (s *Service) GetModel(ctx context.Context, id int64) (*fleet.VehicleModel, 
 }
 
 func (s *Service) UpdateModel(ctx context.Context, model *fleet.VehicleModel) error {
-	if model.Name == "" || model.BrandID <= 0 {
+	name := strings.TrimSpace(model.Name.GetLocalized(ctx))
+	if name == "" || model.BrandID <= 0 {
 		return platformerrors.Validation("model name and brand are required", nil)
 	}
+	model.Name = i18n.NewTranslation(name)
 	return s.repo.UpdateModel(ctx, model)
 }
 
@@ -150,10 +160,11 @@ func (s *Service) ListModels(ctx context.Context, brandID *int64) ([]fleet.Vehic
 // --- Tags ---
 
 func (s *Service) CreateTag(ctx context.Context, tag *fleet.VehicleTag) error {
-	tag.Name = strings.TrimSpace(tag.Name)
-	if tag.Name == "" {
+	name := strings.TrimSpace(tag.Name.GetLocalized(ctx))
+	if name == "" {
 		return platformerrors.Validation("tag name is required", map[string]string{"name": "cannot be empty"})
 	}
+	tag.Name = i18n.NewTranslation(name)
 	return s.repo.CreateTag(ctx, tag)
 }
 
@@ -162,9 +173,11 @@ func (s *Service) GetTag(ctx context.Context, id int64) (*fleet.VehicleTag, erro
 }
 
 func (s *Service) UpdateTag(ctx context.Context, tag *fleet.VehicleTag) error {
-	if tag.Name == "" {
+	name := strings.TrimSpace(tag.Name.GetLocalized(ctx))
+	if name == "" {
 		return platformerrors.Validation("tag name is required", map[string]string{"name": "cannot be empty"})
 	}
+	tag.Name = i18n.NewTranslation(name)
 	return s.repo.UpdateTag(ctx, tag)
 }
 
@@ -179,6 +192,11 @@ func (s *Service) ListTags(ctx context.Context) ([]fleet.VehicleTag, error) {
 // --- States ---
 
 func (s *Service) CreateState(ctx context.Context, state *fleet.VehicleState) error {
+	name := strings.TrimSpace(state.Name.GetLocalized(ctx))
+	if name == "" {
+		return platformerrors.Validation("state name is required", map[string]string{"name": "cannot be empty"})
+	}
+	state.Name = i18n.NewTranslation(name)
 	if err := state.Validate(); err != nil {
 		return err
 	}
@@ -190,6 +208,11 @@ func (s *Service) GetState(ctx context.Context, id int64) (*fleet.VehicleState, 
 }
 
 func (s *Service) UpdateState(ctx context.Context, state *fleet.VehicleState) error {
+	name := strings.TrimSpace(state.Name.GetLocalized(ctx))
+	if name == "" {
+		return platformerrors.Validation("state name is required", map[string]string{"name": "cannot be empty"})
+	}
+	state.Name = i18n.NewTranslation(name)
 	if err := state.Validate(); err != nil {
 		return err
 	}
@@ -207,6 +230,11 @@ func (s *Service) ListStates(ctx context.Context) ([]fleet.VehicleState, error) 
 // --- Service types ---
 
 func (s *Service) CreateServiceType(ctx context.Context, serviceType *fleet.ServiceType) error {
+	name := strings.TrimSpace(serviceType.Name.GetLocalized(ctx))
+	if name == "" {
+		return platformerrors.Validation("service type name is required", map[string]string{"name": "cannot be empty"})
+	}
+	serviceType.Name = i18n.NewTranslation(name)
 	if err := serviceType.Validate(); err != nil {
 		return err
 	}
@@ -218,6 +246,11 @@ func (s *Service) GetServiceType(ctx context.Context, id int64) (*fleet.ServiceT
 }
 
 func (s *Service) UpdateServiceType(ctx context.Context, serviceType *fleet.ServiceType) error {
+	name := strings.TrimSpace(serviceType.Name.GetLocalized(ctx))
+	if name == "" {
+		return platformerrors.Validation("service type name is required", map[string]string{"name": "cannot be empty"})
+	}
+	serviceType.Name = i18n.NewTranslation(name)
 	if err := serviceType.Validate(); err != nil {
 		return err
 	}

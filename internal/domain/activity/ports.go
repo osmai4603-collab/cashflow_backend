@@ -37,6 +37,21 @@ type MessageRepository interface {
 	CreateMessage(ctx context.Context, value *Message) error
 	GetMessageByID(ctx context.Context, id int64) (*Message, error)
 	ListMessagesByResource(ctx context.Context, resModel string, resID int64, page pagination.PageRequest) (pagination.PageResult[Message], error)
+	CreateTrackingValues(ctx context.Context, values []TrackingValue) error
+	ListTrackingValues(ctx context.Context, messageID int64) ([]TrackingValue, error)
+}
+
+type FollowerRepository interface {
+	CreateFollower(ctx context.Context, value *Follower) error
+	DeleteFollower(ctx context.Context, id int64) error
+	ListFollowers(ctx context.Context, resModel string, resID int64) ([]Follower, error)
+	GetFollowersForNotification(ctx context.Context, resModel string, resID int64, subtypeID int64) ([]Follower, error)
+}
+
+type SubtypeRepository interface {
+	GetSubtypeByID(ctx context.Context, id int64) (*MessageSubtype, error)
+	GetSubtypeByName(ctx context.Context, resModel string, name string) (*MessageSubtype, error)
+	ListSubtypes(ctx context.Context, resModel string) ([]MessageSubtype, error)
 }
 
 type NotificationRepository interface {

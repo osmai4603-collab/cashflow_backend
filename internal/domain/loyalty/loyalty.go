@@ -13,6 +13,7 @@ import (
 
 	"cashflow_backend/internal/platform/audit"
 	platformerrors "cashflow_backend/internal/platform/errors"
+	"cashflow_backend/internal/platform/i18n"
 )
 
 // ProgramType enumerates the supported loyalty program kinds (loyalty.program.program_type).
@@ -120,7 +121,7 @@ var ProgramTypes = []ProgramType{
 // LoyaltyProgram is a loyalty program (loyalty.program).
 type LoyaltyProgram struct {
 	ID                int64              `json:"id"`
-	Name              string             `json:"name"`
+	Name              i18n.TranslationString             `json:"name"`
 	Active            bool               `json:"active"`
 	Sequence          int                `json:"sequence"`
 	CompanyID         *int64             `json:"company_id,omitempty"`
@@ -148,8 +149,7 @@ type LoyaltyProgram struct {
 
 // Validate verifies program invariants.
 func (p *LoyaltyProgram) Validate() error {
-	p.Name = strings.TrimSpace(p.Name)
-	if p.Name == "" {
+	if len(p.Name) == 0 {
 		return platformerrors.Validation("program name is required", map[string]string{
 			"name": "cannot be empty",
 		})
@@ -285,7 +285,7 @@ func (p *LoyaltyProgram) ApplyProgramTypeDefaults(allowDefaults bool) {
 			Discount:            1,
 			DiscountApplicability: DiscountApplicabilityOrder,
 			RequiredPoints:      1,
-			Description:         "eWallet",
+			Description:         i18n.NewTranslation("eWallet"),
 		}}
 		p.Mails = nil
 	case ProgramTypeGiftCard:
@@ -308,7 +308,7 @@ func (p *LoyaltyProgram) ApplyProgramTypeDefaults(allowDefaults bool) {
 			Discount:            1,
 			DiscountApplicability: DiscountApplicabilityOrder,
 			RequiredPoints:      1,
-			Description:         "Gift Card",
+			Description:         i18n.NewTranslation("Gift Card"),
 		}}
 		p.Mails = nil
 	case ProgramTypePromoCode:
@@ -517,7 +517,7 @@ type LoyaltyReward struct {
 	Active                      bool                   `json:"active"`
 	ProgramID                   int64                  `json:"program_id"`
 	ProgramType                 ProgramType            `json:"program_type,omitempty"`
-	Description                 string                 `json:"description"`
+	Description                 i18n.TranslationString                 `json:"description"`
 	RewardType                  RewardType             `json:"reward_type"`
 	Discount                    float64                `json:"discount"`
 	DiscountMode                DiscountMode           `json:"discount_mode"`
@@ -539,6 +539,10 @@ type LoyaltyReward struct {
 
 // Validate verifies reward invariants.
 func (r *LoyaltyReward) Validate() error {
+	if len(r.Description) == 0 {
+		// Description might be optional in some cases, but if we want it required:
+		// return platformerrors.Validation("reward description is required", nil)
+	}
 	if r.ProgramID <= 0 {
 		return platformerrors.Validation("program is required for reward", map[string]string{
 			"program_id": "must reference a valid program",

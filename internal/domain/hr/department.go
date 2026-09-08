@@ -1,18 +1,18 @@
 package hr
 
 import (
-	"strings"
 	"time"
 
 	"cashflow_backend/internal/platform/audit"
 	platformerrors "cashflow_backend/internal/platform/errors"
+	"cashflow_backend/internal/platform/i18n"
 )
 
 // Department represents an organizational unit or division (hr.department in Odoo).
 type Department struct {
 	ID           int64        `json:"id"`
-	Name         string       `json:"name"`
-	CompleteName string       `json:"complete_name"` // Hierarchical path e.g. "Management / Sales"
+	Name         i18n.TranslationString       `json:"name"`
+	CompleteName i18n.TranslationString       `json:"complete_name"` // Hierarchical path e.g. "Management / Sales"
 	ParentID     *int64       `json:"parent_id,omitempty"`
 	ManagerID    *int64       `json:"manager_id,omitempty"`
 	CompanyID    *int64       `json:"company_id,omitempty"`
@@ -34,8 +34,7 @@ type DepartmentNode struct {
 
 // Validate checks business invariants on the Department entity.
 func (d *Department) Validate() error {
-	d.Name = strings.TrimSpace(d.Name)
-	if d.Name == "" {
+	if len(d.Name) == 0 {
 		return platformerrors.Validation("department name is required", map[string]string{
 			"name": "cannot be empty",
 		})
@@ -47,7 +46,7 @@ func (d *Department) Validate() error {
 		})
 	}
 
-	if d.CompleteName == "" {
+	if len(d.CompleteName) == 0 {
 		d.CompleteName = d.Name
 	}
 

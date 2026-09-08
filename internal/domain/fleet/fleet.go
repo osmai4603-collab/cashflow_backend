@@ -6,6 +6,7 @@ import (
 
 	"cashflow_backend/internal/platform/audit"
 	platformerrors "cashflow_backend/internal/platform/errors"
+	"cashflow_backend/internal/platform/i18n"
 )
 
 // Fuel types
@@ -59,7 +60,7 @@ const (
 // VehicleBrand represents a car brand (e.g., Toyota, Ford).
 type VehicleBrand struct {
 	ID        int64        `json:"id"`
-	Name      string       `json:"name"`
+	Name      i18n.TranslationString       `json:"name"`
 	Image128  []byte       `json:"image_128,omitempty"`
 	CreatedAt time.Time    `json:"created_at"`
 }
@@ -67,14 +68,14 @@ type VehicleBrand struct {
 // VehicleModelCategory represents a category for vehicle models (e.g., Sedan, SUV).
 type VehicleModelCategory struct {
 	ID        int64        `json:"id"`
-	Name      string       `json:"name"`
+	Name      i18n.TranslationString       `json:"name"`
 	CreatedAt time.Time    `json:"created_at"`
 }
 
 // VehicleModel represents a specific car model (e.g., Camry, F-150).
 type VehicleModel struct {
 	ID         int64     `json:"id"`
-	Name       string    `json:"name"`
+	Name       i18n.TranslationString    `json:"name"`
 	BrandID    int64     `json:"brand_id"`
 	CategoryID *int64    `json:"category_id,omitempty"`
 	CreatedAt  time.Time `json:"created_at"`
@@ -83,7 +84,7 @@ type VehicleModel struct {
 // VehicleTag represents a tag for vehicles.
 type VehicleTag struct {
 	ID        int64     `json:"id"`
-	Name      string    `json:"name"`
+	Name      i18n.TranslationString    `json:"name"`
 	Color     int       `json:"color"`
 	CreatedAt time.Time `json:"created_at"`
 }

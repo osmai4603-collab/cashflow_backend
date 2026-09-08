@@ -1,10 +1,10 @@
 package project
 
 import (
-	"strings"
 	"time"
 
 	platformerrors "cashflow_backend/internal/platform/errors"
+	"cashflow_backend/internal/platform/i18n"
 )
 
 type TaskState string
@@ -29,7 +29,7 @@ const (
 
 type Task struct {
 	ID             int64        `json:"id"`
-	Name           string       `json:"name"`
+	Name           i18n.TranslationString       `json:"name"`
 	ProjectID      int64        `json:"project_id"`
 	StageID        int64        `json:"stage_id"`
 	AssigneeIDs    []int64      `json:"assignee_ids,omitempty"`
@@ -50,12 +50,8 @@ type Task struct {
 }
 
 func (t *Task) Validate() error {
-	t.Name = strings.TrimSpace(t.Name)
-	if t.Name == "" {
+	if len(t.Name) == 0 {
 		return platformerrors.Validation("task name is required", nil)
-	}
-	if len(t.Name) > 255 {
-		return platformerrors.Validation("task name cannot exceed 255 characters", nil)
 	}
 	if t.ProjectID <= 0 {
 		return platformerrors.Validation("project_id is required", nil)

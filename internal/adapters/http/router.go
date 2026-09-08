@@ -32,6 +32,7 @@ import (
 	userhttp "cashflow_backend/internal/adapters/http/user"
 	"cashflow_backend/internal/platform/auth"
 	platconfig "cashflow_backend/internal/platform/config"
+	"cashflow_backend/internal/platform/i18n"
 	"cashflow_backend/internal/platform/response"
 )
 
@@ -82,6 +83,7 @@ func NewRouterWithHandlers(
 	}
 	r.Use(structuredLogger(logger))
 	r.Use(middleware.Recoverer)
+	r.Use(i18n.Middleware)
 	r.Use(middleware.Timeout(requestTimeout))
 
 	// Health Endpoints (/livez and /readyz)

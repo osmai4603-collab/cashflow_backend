@@ -1,11 +1,11 @@
 package maintenance
 
 import (
-	"strings"
 	"time"
 
 	"cashflow_backend/internal/platform/audit"
 	platformerrors "cashflow_backend/internal/platform/errors"
+	"cashflow_backend/internal/platform/i18n"
 )
 
 // Maintenance types
@@ -57,7 +57,7 @@ const (
 // EquipmentCategory represents a category for maintenance equipment.
 type EquipmentCategory struct {
 	ID        int64        `json:"id"`
-	Name      string       `json:"name"`
+	Name      i18n.TranslationString       `json:"name"`
 	Color     int          `json:"color"`
 	Active    bool         `json:"active"`
 	CompanyID int64        `json:"company_id"`
@@ -67,7 +67,7 @@ type EquipmentCategory struct {
 // EquipmentStage represents a stage in the maintenance process.
 type EquipmentStage struct {
 	ID       int64  `json:"id"`
-	Name     string `json:"name"`
+	Name     i18n.TranslationString `json:"name"`
 	Sequence int    `json:"sequence"`
 	Fold     bool   `json:"fold"`
 	Done     bool   `json:"done"`
@@ -76,7 +76,7 @@ type EquipmentStage struct {
 // Equipment represents a piece of equipment that requires maintenance.
 type Equipment struct {
 	ID               int64        `json:"id"`
-	Name             string       `json:"name"`
+	Name             i18n.TranslationString       `json:"name"`
 	CategoryID       *int64       `json:"category_id,omitempty"`
 	TeamID           *int64       `json:"team_id,omitempty"`
 	TechnicianUserID *int64       `json:"technician_user_id,omitempty"`
@@ -105,7 +105,7 @@ type Equipment struct {
 // MaintenanceRequest represents a request for maintenance on a piece of equipment.
 type MaintenanceRequest struct {
 	ID                   int64        `json:"id"`
-	Name                 string       `json:"name"`
+	Name                 i18n.TranslationString       `json:"name"`
 	EquipmentID          *int64       `json:"equipment_id,omitempty"`
 	TeamID               *int64       `json:"team_id,omitempty"`
 	RequestDate          time.Time    `json:"request_date"`
@@ -133,8 +133,7 @@ type MaintenanceRequest struct {
 }
 
 func (e *Equipment) Validate() error {
-	e.Name = strings.TrimSpace(e.Name)
-	if e.Name == "" {
+	if len(e.Name) == 0 {
 		return platformerrors.Validation("equipment name is required", map[string]string{
 			"name": "cannot be empty",
 		})
@@ -146,8 +145,7 @@ func (e *Equipment) Validate() error {
 }
 
 func (r *MaintenanceRequest) Validate() error {
-	r.Name = strings.TrimSpace(r.Name)
-	if r.Name == "" {
+	if len(r.Name) == 0 {
 		return platformerrors.Validation("request name is required", map[string]string{
 			"name": "cannot be empty",
 		})

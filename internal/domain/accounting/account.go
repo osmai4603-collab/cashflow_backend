@@ -6,6 +6,7 @@ import (
 
 	"cashflow_backend/internal/platform/audit"
 	platformerrors "cashflow_backend/internal/platform/errors"
+	"cashflow_backend/internal/platform/i18n"
 )
 
 // AccountType classifies the role of an account in financial statements.
@@ -97,7 +98,7 @@ func (t AccountType) NormalBalance() string {
 type Account struct {
 	ID        int64        `json:"id"`
 	Code      string       `json:"code"`
-	Name      string       `json:"name"`
+	Name      i18n.TranslationString `json:"name"`
 	Type      AccountType  `json:"type"`
 	Reconcile bool         `json:"reconcile"`
 	Currency  string       `json:"currency"`
@@ -121,15 +122,9 @@ func (a *Account) Validate() error {
 		})
 	}
 
-	a.Name = strings.TrimSpace(a.Name)
-	if a.Name == "" {
+	if len(a.Name) == 0 {
 		return platformerrors.Validation("account name is required", map[string]string{
 			"name": "cannot be empty",
-		})
-	}
-	if len(a.Name) > 255 {
-		return platformerrors.Validation("account name exceeds maximum length", map[string]string{
-			"name": "must not exceed 255 characters",
 		})
 	}
 

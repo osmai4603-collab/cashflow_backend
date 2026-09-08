@@ -1,16 +1,16 @@
 package project
 
 import (
-	"strings"
 	"time"
 
 	platformerrors "cashflow_backend/internal/platform/errors"
+	"cashflow_backend/internal/platform/i18n"
 )
 
 // Project is an operational project linked optionally to an analytic account.
 type Project struct {
 	ID                 int64      `json:"id"`
-	Name               string     `json:"name"`
+	Name               i18n.TranslationString     `json:"name"`
 	Description        string     `json:"description,omitempty"`
 	PartnerID          *int64     `json:"partner_id,omitempty"`
 	ManagerID          *int64     `json:"manager_id,omitempty"`
@@ -28,12 +28,8 @@ type Project struct {
 }
 
 func (p *Project) Validate() error {
-	p.Name = strings.TrimSpace(p.Name)
-	if p.Name == "" {
+	if len(p.Name) == 0 {
 		return platformerrors.Validation("project name is required", nil)
-	}
-	if len(p.Name) > 255 {
-		return platformerrors.Validation("project name cannot exceed 255 characters", nil)
 	}
 	if p.CompanyID <= 0 {
 		return platformerrors.Validation("company_id is required", nil)

@@ -44,13 +44,13 @@ func parseID(param string) (int64, error) {
 func (h *Handler) CreateLead(w http.ResponseWriter, r *http.Request) {
 	var req CreateLeadRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		response.Error(w, platformerrors.BadRequest("invalid JSON request body", err))
+		response.Error(w, r, platformerrors.BadRequest("invalid JSON request body", err))
 		return
 	}
 
 	lead, err := h.useCase.CreateLead(r.Context(), req.ToInput())
 	if err != nil {
-		response.Error(w, err)
+		response.Error(w, r, err)
 		return
 	}
 
@@ -61,13 +61,13 @@ func (h *Handler) CreateLead(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) GetLead(w http.ResponseWriter, r *http.Request) {
 	id, err := parseID(chi.URLParam(r, "id"))
 	if err != nil {
-		response.Error(w, platformerrors.BadRequest("invalid lead ID in path", err))
+		response.Error(w, r, platformerrors.BadRequest("invalid lead ID in path", err))
 		return
 	}
 
 	lead, err := h.useCase.GetLead(r.Context(), id)
 	if err != nil {
-		response.Error(w, err)
+		response.Error(w, r, err)
 		return
 	}
 
@@ -78,19 +78,19 @@ func (h *Handler) GetLead(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) UpdateLead(w http.ResponseWriter, r *http.Request) {
 	id, err := parseID(chi.URLParam(r, "id"))
 	if err != nil {
-		response.Error(w, platformerrors.BadRequest("invalid lead ID in path", err))
+		response.Error(w, r, platformerrors.BadRequest("invalid lead ID in path", err))
 		return
 	}
 
 	var req UpdateLeadRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		response.Error(w, platformerrors.BadRequest("invalid JSON request body", err))
+		response.Error(w, r, platformerrors.BadRequest("invalid JSON request body", err))
 		return
 	}
 
 	lead, err := h.useCase.UpdateLead(r.Context(), id, req.ToInput())
 	if err != nil {
-		response.Error(w, err)
+		response.Error(w, r, err)
 		return
 	}
 
@@ -101,12 +101,12 @@ func (h *Handler) UpdateLead(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) DeleteLead(w http.ResponseWriter, r *http.Request) {
 	id, err := parseID(chi.URLParam(r, "id"))
 	if err != nil {
-		response.Error(w, platformerrors.BadRequest("invalid lead ID in path", err))
+		response.Error(w, r, platformerrors.BadRequest("invalid lead ID in path", err))
 		return
 	}
 
 	if err := h.useCase.DeleteLead(r.Context(), id); err != nil {
-		response.Error(w, err)
+		response.Error(w, r, err)
 		return
 	}
 
@@ -143,7 +143,7 @@ func (h *Handler) ListLeads(w http.ResponseWriter, r *http.Request) {
 
 	pageRes, err := h.useCase.ListLeads(r.Context(), f, pageReq)
 	if err != nil {
-		response.Error(w, err)
+		response.Error(w, r, err)
 		return
 	}
 
@@ -160,7 +160,7 @@ func (h *Handler) ListLeads(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) ConvertLead(w http.ResponseWriter, r *http.Request) {
 	id, err := parseID(chi.URLParam(r, "id"))
 	if err != nil {
-		response.Error(w, platformerrors.BadRequest("invalid lead ID in path", err))
+		response.Error(w, r, platformerrors.BadRequest("invalid lead ID in path", err))
 		return
 	}
 
@@ -171,7 +171,7 @@ func (h *Handler) ConvertLead(w http.ResponseWriter, r *http.Request) {
 
 	lead, err := h.useCase.ConvertLead(r.Context(), id, req.ToInput())
 	if err != nil {
-		response.Error(w, err)
+		response.Error(w, r, err)
 		return
 	}
 
@@ -182,7 +182,7 @@ func (h *Handler) ConvertLead(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) MarkWon(w http.ResponseWriter, r *http.Request) {
 	id, err := parseID(chi.URLParam(r, "id"))
 	if err != nil {
-		response.Error(w, platformerrors.BadRequest("invalid lead ID in path", err))
+		response.Error(w, r, platformerrors.BadRequest("invalid lead ID in path", err))
 		return
 	}
 
@@ -193,7 +193,7 @@ func (h *Handler) MarkWon(w http.ResponseWriter, r *http.Request) {
 
 	lead, order, err := h.useCase.MarkLeadWon(r.Context(), id, req.ToInput())
 	if err != nil {
-		response.Error(w, err)
+		response.Error(w, r, err)
 		return
 	}
 
@@ -207,19 +207,19 @@ func (h *Handler) MarkWon(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) MarkLost(w http.ResponseWriter, r *http.Request) {
 	id, err := parseID(chi.URLParam(r, "id"))
 	if err != nil {
-		response.Error(w, platformerrors.BadRequest("invalid lead ID in path", err))
+		response.Error(w, r, platformerrors.BadRequest("invalid lead ID in path", err))
 		return
 	}
 
 	var req MarkLostRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		response.Error(w, platformerrors.BadRequest("invalid JSON request body", err))
+		response.Error(w, r, platformerrors.BadRequest("invalid JSON request body", err))
 		return
 	}
 
 	lead, err := h.useCase.MarkLeadLost(r.Context(), id, req.ToInput())
 	if err != nil {
-		response.Error(w, err)
+		response.Error(w, r, err)
 		return
 	}
 
@@ -241,7 +241,7 @@ func (h *Handler) GetPipeline(w http.ResponseWriter, r *http.Request) {
 
 	pipelineData, err := h.useCase.GetPipelineView(r.Context(), salespersonID)
 	if err != nil {
-		response.Error(w, err)
+		response.Error(w, r, err)
 		return
 	}
 
@@ -252,7 +252,7 @@ func (h *Handler) GetPipeline(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) GetStats(w http.ResponseWriter, r *http.Request) {
 	stats, err := h.useCase.GetCRMStats(r.Context())
 	if err != nil {
-		response.Error(w, err)
+		response.Error(w, r, err)
 		return
 	}
 
@@ -267,7 +267,7 @@ func (h *Handler) GetStats(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) CreateStage(w http.ResponseWriter, r *http.Request) {
 	var req CreateStageRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		response.Error(w, platformerrors.BadRequest("invalid JSON request body", err))
+		response.Error(w, r, platformerrors.BadRequest("invalid JSON request body", err))
 		return
 	}
 
@@ -281,7 +281,7 @@ func (h *Handler) CreateStage(w http.ResponseWriter, r *http.Request) {
 		CompanyID:    req.CompanyID,
 	})
 	if err != nil {
-		response.Error(w, err)
+		response.Error(w, r, err)
 		return
 	}
 
@@ -292,13 +292,13 @@ func (h *Handler) CreateStage(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) GetStage(w http.ResponseWriter, r *http.Request) {
 	id, err := parseID(chi.URLParam(r, "id"))
 	if err != nil {
-		response.Error(w, platformerrors.BadRequest("invalid stage ID in path", err))
+		response.Error(w, r, platformerrors.BadRequest("invalid stage ID in path", err))
 		return
 	}
 
 	stage, err := h.useCase.GetStage(r.Context(), id)
 	if err != nil {
-		response.Error(w, err)
+		response.Error(w, r, err)
 		return
 	}
 
@@ -309,13 +309,13 @@ func (h *Handler) GetStage(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) UpdateStage(w http.ResponseWriter, r *http.Request) {
 	id, err := parseID(chi.URLParam(r, "id"))
 	if err != nil {
-		response.Error(w, platformerrors.BadRequest("invalid stage ID in path", err))
+		response.Error(w, r, platformerrors.BadRequest("invalid stage ID in path", err))
 		return
 	}
 
 	var req UpdateStageRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		response.Error(w, platformerrors.BadRequest("invalid JSON request body", err))
+		response.Error(w, r, platformerrors.BadRequest("invalid JSON request body", err))
 		return
 	}
 
@@ -330,7 +330,7 @@ func (h *Handler) UpdateStage(w http.ResponseWriter, r *http.Request) {
 		Active:       req.Active,
 	})
 	if err != nil {
-		response.Error(w, err)
+		response.Error(w, r, err)
 		return
 	}
 
@@ -341,12 +341,12 @@ func (h *Handler) UpdateStage(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) DeleteStage(w http.ResponseWriter, r *http.Request) {
 	id, err := parseID(chi.URLParam(r, "id"))
 	if err != nil {
-		response.Error(w, platformerrors.BadRequest("invalid stage ID in path", err))
+		response.Error(w, r, platformerrors.BadRequest("invalid stage ID in path", err))
 		return
 	}
 
 	if err := h.useCase.DeleteStage(r.Context(), id); err != nil {
-		response.Error(w, err)
+		response.Error(w, r, err)
 		return
 	}
 
@@ -357,7 +357,7 @@ func (h *Handler) DeleteStage(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) ListStages(w http.ResponseWriter, r *http.Request) {
 	stages, err := h.useCase.ListStages(r.Context())
 	if err != nil {
-		response.Error(w, err)
+		response.Error(w, r, err)
 		return
 	}
 
@@ -377,13 +377,13 @@ func (h *Handler) ListStages(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) CreateLostReason(w http.ResponseWriter, r *http.Request) {
 	var req CreateLostReasonRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		response.Error(w, platformerrors.BadRequest("invalid JSON request body", err))
+		response.Error(w, r, platformerrors.BadRequest("invalid JSON request body", err))
 		return
 	}
 
 	reason, err := h.useCase.CreateLostReason(r.Context(), crmusecase.CreateLostReasonInput{Name: req.Name})
 	if err != nil {
-		response.Error(w, err)
+		response.Error(w, r, err)
 		return
 	}
 
@@ -394,13 +394,13 @@ func (h *Handler) CreateLostReason(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) GetLostReason(w http.ResponseWriter, r *http.Request) {
 	id, err := parseID(chi.URLParam(r, "id"))
 	if err != nil {
-		response.Error(w, platformerrors.BadRequest("invalid lost reason ID in path", err))
+		response.Error(w, r, platformerrors.BadRequest("invalid lost reason ID in path", err))
 		return
 	}
 
 	reason, err := h.useCase.GetLostReason(r.Context(), id)
 	if err != nil {
-		response.Error(w, err)
+		response.Error(w, r, err)
 		return
 	}
 
@@ -411,13 +411,13 @@ func (h *Handler) GetLostReason(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) UpdateLostReason(w http.ResponseWriter, r *http.Request) {
 	id, err := parseID(chi.URLParam(r, "id"))
 	if err != nil {
-		response.Error(w, platformerrors.BadRequest("invalid lost reason ID in path", err))
+		response.Error(w, r, platformerrors.BadRequest("invalid lost reason ID in path", err))
 		return
 	}
 
 	var req UpdateLostReasonRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		response.Error(w, platformerrors.BadRequest("invalid JSON request body", err))
+		response.Error(w, r, platformerrors.BadRequest("invalid JSON request body", err))
 		return
 	}
 
@@ -426,7 +426,7 @@ func (h *Handler) UpdateLostReason(w http.ResponseWriter, r *http.Request) {
 		Active: req.Active,
 	})
 	if err != nil {
-		response.Error(w, err)
+		response.Error(w, r, err)
 		return
 	}
 
@@ -437,12 +437,12 @@ func (h *Handler) UpdateLostReason(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) DeleteLostReason(w http.ResponseWriter, r *http.Request) {
 	id, err := parseID(chi.URLParam(r, "id"))
 	if err != nil {
-		response.Error(w, platformerrors.BadRequest("invalid lost reason ID in path", err))
+		response.Error(w, r, platformerrors.BadRequest("invalid lost reason ID in path", err))
 		return
 	}
 
 	if err := h.useCase.DeleteLostReason(r.Context(), id); err != nil {
-		response.Error(w, err)
+		response.Error(w, r, err)
 		return
 	}
 
@@ -453,7 +453,7 @@ func (h *Handler) DeleteLostReason(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) ListLostReasons(w http.ResponseWriter, r *http.Request) {
 	reasons, err := h.useCase.ListLostReasons(r.Context())
 	if err != nil {
-		response.Error(w, err)
+		response.Error(w, r, err)
 		return
 	}
 
@@ -473,7 +473,7 @@ func (h *Handler) ListLostReasons(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) CreateTag(w http.ResponseWriter, r *http.Request) {
 	var req CreateTagRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		response.Error(w, platformerrors.BadRequest("invalid JSON request body", err))
+		response.Error(w, r, platformerrors.BadRequest("invalid JSON request body", err))
 		return
 	}
 
@@ -482,7 +482,7 @@ func (h *Handler) CreateTag(w http.ResponseWriter, r *http.Request) {
 		Color: req.Color,
 	})
 	if err != nil {
-		response.Error(w, err)
+		response.Error(w, r, err)
 		return
 	}
 
@@ -493,7 +493,7 @@ func (h *Handler) CreateTag(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) ListTags(w http.ResponseWriter, r *http.Request) {
 	tags, err := h.useCase.ListTags(r.Context())
 	if err != nil {
-		response.Error(w, err)
+		response.Error(w, r, err)
 		return
 	}
 

@@ -33,6 +33,7 @@ type ProductionOrder struct {
 	ID           int64  `json:"id"`
 	Name         string `json:"name"` // Reference like MO/2026/0001
 	Priority     int    `json:"priority"`
+	BackorderID  *int64 `json:"backorder_id,omitempty"`
 	BackorderSeq int    `json:"backorder_sequence"`
 	Origin       string `json:"origin,omitempty"`
 

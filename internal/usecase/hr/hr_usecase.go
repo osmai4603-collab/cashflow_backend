@@ -11,6 +11,7 @@ import (
 	"cashflow_backend/internal/domain/partner"
 	platformerrors "cashflow_backend/internal/platform/errors"
 	"cashflow_backend/internal/platform/filter"
+	"cashflow_backend/internal/platform/i18n"
 	"cashflow_backend/internal/platform/pagination"
 )
 
@@ -62,7 +63,7 @@ type UpdateDepartmentInput struct {
 
 func (u *UseCase) CreateDepartment(ctx context.Context, in CreateDepartmentInput) (*hr.Department, error) {
 	dept := &hr.Department{
-		Name:      strings.TrimSpace(in.Name),
+		Name:      i18n.NewTranslation(strings.TrimSpace(in.Name)),
 		ParentID:  in.ParentID,
 		ManagerID: in.ManagerID,
 		CompanyID: in.CompanyID,
@@ -81,7 +82,11 @@ func (u *UseCase) CreateDepartment(ctx context.Context, in CreateDepartmentInput
 				"parent_id": fmt.Sprintf("department %d not found", *dept.ParentID),
 			})
 		}
-		dept.CompleteName = fmt.Sprintf("%s / %s", parent.CompleteName, dept.Name)
+		// Merge translations for complete name
+		dept.CompleteName = make(i18n.TranslationString)
+		for lang, parentComp := range parent.CompleteName {
+			dept.CompleteName[lang] = fmt.Sprintf("%s / %s", parentComp, dept.Name.Get(lang))
+		}
 	} else {
 		dept.CompleteName = dept.Name
 	}
@@ -114,7 +119,7 @@ func (u *UseCase) UpdateDepartment(ctx context.Context, id int64, in UpdateDepar
 	}
 
 	if in.Name != nil {
-		dept.Name = strings.TrimSpace(*in.Name)
+		dept.Name = i18n.NewTranslation(strings.TrimSpace(*in.Name))
 	}
 	if in.ParentID != nil {
 		if *in.ParentID == id {
@@ -148,7 +153,11 @@ func (u *UseCase) UpdateDepartment(ctx context.Context, id int64, in UpdateDepar
 				"parent_id": fmt.Sprintf("department %d not found", *dept.ParentID),
 			})
 		}
-		dept.CompleteName = fmt.Sprintf("%s / %s", parent.CompleteName, dept.Name)
+		// Merge translations for complete name
+		dept.CompleteName = make(i18n.TranslationString)
+		for lang, parentComp := range parent.CompleteName {
+			dept.CompleteName[lang] = fmt.Sprintf("%s / %s", parentComp, dept.Name.Get(lang))
+		}
 	} else {
 		dept.CompleteName = dept.Name
 	}
@@ -230,7 +239,7 @@ type UpdateJobInput struct {
 
 func (u *UseCase) CreateJob(ctx context.Context, in CreateJobInput) (*hr.Job, error) {
 	job := &hr.Job{
-		Name:              strings.TrimSpace(in.Name),
+		Name:              i18n.NewTranslation(strings.TrimSpace(in.Name)),
 		DepartmentID:      in.DepartmentID,
 		Description:       strings.TrimSpace(in.Description),
 		ExpectedEmployees: in.ExpectedEmployees,
@@ -274,7 +283,7 @@ func (u *UseCase) UpdateJob(ctx context.Context, id int64, in UpdateJobInput) (*
 	}
 
 	if in.Name != nil {
-		job.Name = strings.TrimSpace(*in.Name)
+		job.Name = i18n.NewTranslation(strings.TrimSpace(*in.Name))
 	}
 	if in.DepartmentID != nil {
 		job.DepartmentID = in.DepartmentID
@@ -606,7 +615,7 @@ func (u *UseCase) CreateAllocation(ctx context.Context, in CreateAllocationInput
 	}
 
 	alloc := &hr.LeaveAllocation{
-		Name:          strings.TrimSpace(in.Name),
+		Name:          i18n.NewTranslation(strings.TrimSpace(in.Name)),
 		EmployeeID:    in.EmployeeID,
 		LeaveType:     strings.TrimSpace(in.LeaveType),
 		AllocatedDays: in.AllocatedDays,
@@ -641,6 +650,7 @@ func (u *UseCase) ListAllocations(ctx context.Context, f *filter.Filter, page pa
 // ─────────────────────────────────────────────────────────────────────────────
 
 type CreateLeaveRequestInput struct {
+	Name        string    `json:"name"`
 	EmployeeID  int64     `json:"employee_id"`
 	LeaveType   string    `json:"leave_type"`
 	DateFrom    time.Time `json:"date_from"`
@@ -673,6 +683,7 @@ func (u *UseCase) CreateLeaveRequest(ctx context.Context, in CreateLeaveRequestI
 	}
 
 	req := &hr.LeaveRequest{
+		Name:        i18n.NewTranslation(strings.TrimSpace(in.Name)),
 		EmployeeID:  in.EmployeeID,
 		LeaveType:   strings.TrimSpace(in.LeaveType),
 		DateFrom:    in.DateFrom,

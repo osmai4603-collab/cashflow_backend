@@ -99,6 +99,7 @@ type UseCase struct {
 	stockRepo      stock.Repository
 	stockUC        *stockusecase.UseCase
 	loyaltyUC      LoyaltyService
+	chatterUC      *activityusecase.UseCase
 	logger         *slog.Logger
 }
 
@@ -115,6 +116,7 @@ func New(
 	var stockRepo stock.Repository
 	var stockUC *stockusecase.UseCase
 	var loyaltyUC LoyaltyService
+	var chatterUC *activityusecase.UseCase
 	for _, opt := range optional {
 		switch v := opt.(type) {
 		case stock.Repository:
@@ -123,6 +125,8 @@ func New(
 			stockUC = v
 		case LoyaltyService:
 			loyaltyUC = v
+		case *activityusecase.UseCase:
+			chatterUC = v
 		}
 	}
 
@@ -135,6 +139,7 @@ func New(
 		stockRepo:      stockRepo,
 		stockUC:        stockUC,
 		loyaltyUC:      loyaltyUC,
+		chatterUC:      chatterUC,
 		logger:         logger,
 	}
 }
@@ -206,6 +211,17 @@ func (uc *UseCase) CreateOrder(ctx context.Context, in CreateSaleOrderInput) (*s
 		return nil, err
 	}
 
+	if uc.chatterUC != nil {
+		_ = uc.chatterUC.MessagePost(ctx, &activity.Message{
+			Body:        "Quotation created",
+			MessageType: activity.MessageTypeNotification,
+			ResModel:    "sale.order",
+			ResID:       &order.ID,
+			AuthorID:    order.UserID,
+			CompanyID:   *order.CompanyID,
+		})
+	}
+
 	uc.logger.InfoContext(ctx, "sale quotation created", "id", order.ID, "name", order.Name, "partner_id", order.PartnerID)
 	return order, nil
 }
@@ -230,6 +246,8 @@ func (uc *UseCase) UpdateOrder(ctx context.Context, id int64, in UpdateSaleOrder
 	if order.State != sale.OrderStateDraft && order.State != sale.OrderStateSent {
 		return nil, platformerrors.Conflict(fmt.Sprintf("cannot edit order in state '%s'; only draft and sent quotations can be modified", order.State))
 	}
+
+	oldOrder := *order
 
 	if in.PartnerID != nil && *in.PartnerID > 0 {
 		if uc.partnerRepo != nil {
@@ -279,6 +297,19 @@ func (uc *UseCase) UpdateOrder(ctx context.Context, id int64, in UpdateSaleOrder
 		return nil, err
 	}
 
+	if uc.chatterUC != nil {
+		_ = uc.chatterUC.MessagePost(ctx, &activity.Message{
+			Body:        "Order confirmed",
+			MessageType: activity.MessageTypeNotification,
+			ResModel:    "sale.order",
+			ResID:       &order.ID,
+			AuthorID:    order.UserID,
+			CompanyID:   *order.CompanyID,
+		})
+	}
+
+	uc.trackUpdate(ctx, &oldOrder, order, order.UserID)
+
 	uc.logger.InfoContext(ctx, "sale order updated", "id", order.ID, "name", order.Name)
 	return order, nil
 }
@@ -312,6 +343,17 @@ func (uc *UseCase) ActionSend(ctx context.Context, id int64) (*sale.SaleOrder, e
 		return nil, err
 	}
 
+	if uc.chatterUC != nil {
+		_ = uc.chatterUC.MessagePost(ctx, &activity.Message{
+			Body:        "Quotation sent",
+			MessageType: activity.MessageTypeNotification,
+			ResModel:    "sale.order",
+			ResID:       &order.ID,
+			AuthorID:    order.UserID,
+			CompanyID:   *order.CompanyID,
+		})
+	}
+
 	uc.logger.InfoContext(ctx, "sale quotation sent", "id", order.ID, "name", order.Name)
 	return order, nil
 }
@@ -338,6 +380,17 @@ func (uc *UseCase) ConfirmOrder(ctx context.Context, id int64) (*sale.SaleOrder,
 
 	if err := uc.repo.UpdateOrder(ctx, order); err != nil {
 		return nil, err
+	}
+
+	if uc.chatterUC != nil {
+		_ = uc.chatterUC.MessagePost(ctx, &activity.Message{
+			Body:        "Order confirmed",
+			MessageType: activity.MessageTypeNotification,
+			ResModel:    "sale.order",
+			ResID:       &order.ID,
+			AuthorID:    order.UserID,
+			CompanyID:   *order.CompanyID,
+		})
 	}
 
 	// Phase 14: Sale-Stock Integration
@@ -379,6 +432,17 @@ func (uc *UseCase) CancelOrder(ctx context.Context, id int64) (*sale.SaleOrder, 
 		return nil, err
 	}
 
+	if uc.chatterUC != nil {
+		_ = uc.chatterUC.MessagePost(ctx, &activity.Message{
+			Body:        "Order cancelled",
+			MessageType: activity.MessageTypeNotification,
+			ResModel:    "sale.order",
+			ResID:       &order.ID,
+			AuthorID:    order.UserID,
+			CompanyID:   *order.CompanyID,
+		})
+	}
+
 	// Phase 23: Loyalty & Rewards — settle confirmed orders, reverse confirmed ones.
 	if uc.loyaltyUC != nil {
 		var err error
@@ -410,6 +474,17 @@ func (uc *UseCase) ResetToDraft(ctx context.Context, id int64) (*sale.SaleOrder,
 
 	if err := uc.repo.UpdateOrder(ctx, order); err != nil {
 		return nil, err
+	}
+
+	if uc.chatterUC != nil {
+		_ = uc.chatterUC.MessagePost(ctx, &activity.Message{
+			Body:        "Order reset to draft",
+			MessageType: activity.MessageTypeNotification,
+			ResModel:    "sale.order",
+			ResID:       &order.ID,
+			AuthorID:    order.UserID,
+			CompanyID:   *order.CompanyID,
+		})
 	}
 
 	uc.logger.InfoContext(ctx, "sale order reset to draft", "id", order.ID, "name", order.Name)
@@ -545,6 +620,17 @@ func (uc *UseCase) CreateInvoiceFromOrder(ctx context.Context, orderID int64, in
 
 	if err := uc.repo.UpdateOrder(ctx, order); err != nil {
 		return nil, err
+	}
+
+	if uc.chatterUC != nil {
+		_ = uc.chatterUC.MessagePost(ctx, &activity.Message{
+			Body:        "Order confirmed",
+			MessageType: activity.MessageTypeNotification,
+			ResModel:    "sale.order",
+			ResID:       &order.ID,
+			AuthorID:    order.UserID,
+			CompanyID:   *order.CompanyID,
+		})
 	}
 
 	uc.logger.InfoContext(ctx, "customer invoice created from sale order",
@@ -702,4 +788,48 @@ func (uc *UseCase) computeCogs(ctx context.Context, productID int64, qtyToInvoic
 		cost = pt.AvgCost
 	}
 	return roundTo4(delivered * cost)
+}
+
+func (uc *UseCase) trackUpdate(ctx context.Context, oldOrder, newOrder *sale.SaleOrder, authorID *int64) {
+	if uc.chatterUC == nil {
+		return
+	}
+	var tracking []activity.TrackingValue
+	if oldOrder.PartnerID != newOrder.PartnerID {
+		tracking = append(tracking, activity.TrackingValue{
+			Field:        "partner_id",
+			FieldName:    "Customer",
+			OldValueText: fmt.Sprintf("%d", oldOrder.PartnerID),
+			NewValueText: fmt.Sprintf("%d", newOrder.PartnerID),
+		})
+	}
+	if math.Abs(oldOrder.AmountTotal-newOrder.AmountTotal) > 0.0001 {
+		tracking = append(tracking, activity.TrackingValue{
+			Field:        "amount_total",
+			FieldName:    "Total",
+			OldValueText: fmt.Sprintf("%.2f", oldOrder.AmountTotal),
+			NewValueText: fmt.Sprintf("%.2f", newOrder.AmountTotal),
+		})
+	}
+	if oldOrder.State != newOrder.State {
+		tracking = append(tracking, activity.TrackingValue{
+			Field:        "state",
+			FieldName:    "Status",
+			OldValueText: string(oldOrder.State),
+			NewValueText: string(newOrder.State),
+		})
+	}
+
+	if len(tracking) > 0 {
+		msg := &activity.Message{
+			Body:           "Order updated",
+			MessageType:    activity.MessageTypeNotification,
+			ResModel:       "sale.order",
+			ResID:          &newOrder.ID,
+			AuthorID:       authorID,
+			TrackingValues: tracking,
+			CompanyID:      *newOrder.CompanyID,
+		}
+		_ = uc.chatterUC.MessagePost(ctx, msg)
+	}
 }

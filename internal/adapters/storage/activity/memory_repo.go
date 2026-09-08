@@ -12,32 +12,53 @@ import (
 )
 
 type MemoryRepo struct {
-	mu           sync.RWMutex
-	types        map[int64]activity.ActivityType
-	activities   map[int64]activity.Activity
-	messages     map[int64]activity.Message
-	notifs       map[int64]activity.Notification
-	emails       map[int64]activity.EmailQueueItem
-	nextTypeID   int64
-	nextActID    int64
-	nextMsgID    int64
-	nextNotifID  int64
-	nextEmailID  int64
+	mu             sync.RWMutex
+	types          map[int64]activity.ActivityType
+	activities     map[int64]activity.Activity
+	messages       map[int64]activity.Message
+	notifs         map[int64]activity.Notification
+	emails         map[int64]activity.EmailQueueItem
+	followers      map[int64]activity.Follower
+	subtypes       map[int64]activity.MessageSubtype
+	trackingValues map[int64][]activity.TrackingValue
+	nextTypeID     int64
+	nextActID      int64
+	nextMsgID      int64
+	nextNotifID    int64
+	nextEmailID    int64
+	nextFollowerID int64
+	nextSubtypeID  int64
 }
 
 func NewMemoryRepo() *MemoryRepo {
-	return &MemoryRepo{
-		types:      make(map[int64]activity.ActivityType),
-		activities: make(map[int64]activity.Activity),
-		messages:   make(map[int64]activity.Message),
-		notifs:     make(map[int64]activity.Notification),
-		emails:     make(map[int64]activity.EmailQueueItem),
-		nextTypeID: 1,
-		nextActID:  1,
-		nextMsgID:  1,
-		nextNotifID: 1,
-		nextEmailID: 1,
+	r := &MemoryRepo{
+		types:          make(map[int64]activity.ActivityType),
+		activities:     make(map[int64]activity.Activity),
+		messages:       make(map[int64]activity.Message),
+		notifs:         make(map[int64]activity.Notification),
+		emails:         make(map[int64]activity.EmailQueueItem),
+		followers:      make(map[int64]activity.Follower),
+		subtypes:       make(map[int64]activity.MessageSubtype),
+		trackingValues: make(map[int64][]activity.TrackingValue),
+		nextTypeID:     1,
+		nextActID:      1,
+		nextMsgID:      1,
+		nextNotifID:    1,
+		nextEmailID:    1,
+		nextFollowerID: 1,
+		nextSubtypeID:  1,
 	}
+	r.seedSubtypes()
+	return r
+}
+
+func (r *MemoryRepo) seedSubtypes() {
+	r.subtypes[1] = activity.MessageSubtype{ID: 1, Name: "discussions", Default: true, Sequence: 1}
+	r.subtypes[2] = activity.MessageSubtype{ID: 2, Name: "note", Internal: true, Sequence: 10}
+	r.subtypes[3] = activity.MessageSubtype{ID: 3, Name: "activities", Internal: true, Sequence: 20}
+	r.subtypes[4] = activity.MessageSubtype{ID: 4, Name: "mt_comment", Description: "Comment", Default: true, Sequence: 1}
+	r.subtypes[5] = activity.MessageSubtype{ID: 5, Name: "mt_note", Description: "Note", Internal: true, Sequence: 10}
+	r.nextSubtypeID = 6
 }
 
 // --- ActivityTypeRepository ---
@@ -216,6 +237,10 @@ func (r *MemoryRepo) ListMessagesByResource(ctx context.Context, resModel string
 	var filtered []activity.Message
 	for _, m := range r.messages {
 		if m.ResModel == resModel && m.ResID != nil && *m.ResID == resID {
+			// Populate tracking values if requested (simplified for memory)
+			if tvs, ok := r.trackingValues[m.ID]; ok {
+				m.TrackingValues = tvs
+			}
 			filtered = append(filtered, m)
 		}
 	}
@@ -229,6 +254,109 @@ func (r *MemoryRepo) ListMessagesByResource(ctx context.Context, resModel string
 		end = total
 	}
 	return pagination.NewPageResult(filtered[start:end], total, page), nil
+}
+
+func (r *MemoryRepo) CreateTrackingValues(ctx context.Context, values []activity.TrackingValue) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if len(values) == 0 {
+		return nil
+	}
+	msgID := values[0].MessageID
+	r.trackingValues[msgID] = append(r.trackingValues[msgID], values...)
+	return nil
+}
+
+func (r *MemoryRepo) ListTrackingValues(ctx context.Context, messageID int64) ([]activity.TrackingValue, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.trackingValues[messageID], nil
+}
+
+// --- FollowerRepository ---
+
+func (r *MemoryRepo) CreateFollower(ctx context.Context, f *activity.Follower) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	f.ID = r.nextFollowerID
+	r.nextFollowerID++
+	r.followers[f.ID] = *f
+	return nil
+}
+
+func (r *MemoryRepo) DeleteFollower(ctx context.Context, id int64) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	delete(r.followers, id)
+	return nil
+}
+
+func (r *MemoryRepo) ListFollowers(ctx context.Context, resModel string, resID int64) ([]activity.Follower, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	var res []activity.Follower
+	for _, f := range r.followers {
+		if f.ResModel == resModel && f.ResID == resID {
+			res = append(res, f)
+		}
+	}
+	return res, nil
+}
+
+func (r *MemoryRepo) GetFollowersForNotification(ctx context.Context, resModel string, resID int64, subtypeID int64) ([]activity.Follower, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	var res []activity.Follower
+	for _, f := range r.followers {
+		if f.ResModel == resModel && f.ResID == resID {
+			if subtypeID == 0 {
+				res = append(res, f)
+				continue
+			}
+			for _, sid := range f.SubtypeIDs {
+				if sid == subtypeID {
+					res = append(res, f)
+					break
+				}
+			}
+		}
+	}
+	return res, nil
+}
+
+// --- SubtypeRepository ---
+
+func (r *MemoryRepo) GetSubtypeByID(ctx context.Context, id int64) (*activity.MessageSubtype, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	s, ok := r.subtypes[id]
+	if !ok {
+		return nil, platformerrors.NotFound("subtype not found")
+	}
+	return &s, nil
+}
+
+func (r *MemoryRepo) GetSubtypeByName(ctx context.Context, resModel string, name string) (*activity.MessageSubtype, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	for _, s := range r.subtypes {
+		if s.Name == name && (s.ResModel == "" || s.ResModel == resModel) {
+			return &s, nil
+		}
+	}
+	return nil, platformerrors.NotFound("subtype not found")
+}
+
+func (r *MemoryRepo) ListSubtypes(ctx context.Context, resModel string) ([]activity.MessageSubtype, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	var res []activity.MessageSubtype
+	for _, s := range r.subtypes {
+		if s.ResModel == "" || s.ResModel == resModel {
+			res = append(res, s)
+		}
+	}
+	return res, nil
 }
 
 // --- NotificationRepository ---

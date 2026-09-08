@@ -13,6 +13,7 @@ import (
 	"cashflow_backend/internal/platform/audit"
 	platformerrors "cashflow_backend/internal/platform/errors"
 	"cashflow_backend/internal/platform/filter"
+	"cashflow_backend/internal/platform/i18n"
 	"cashflow_backend/internal/platform/pagination"
 )
 
@@ -48,8 +49,7 @@ func New(repo maintenance.Repository, reminders ReminderScheduler, logger *slog.
 // --- Equipment Categories ---
 
 func (s *Service) CreateCategory(ctx context.Context, category *maintenance.EquipmentCategory) error {
-	category.Name = strings.TrimSpace(category.Name)
-	if category.Name == "" {
+	if len(category.Name) == 0 {
 		return platformerrors.Validation("category name is required", map[string]string{"name": "cannot be empty"})
 	}
 	return s.repo.CreateCategory(ctx, category)
@@ -60,7 +60,7 @@ func (s *Service) GetCategory(ctx context.Context, companyID, id int64) (*mainte
 }
 
 func (s *Service) UpdateCategory(ctx context.Context, category *maintenance.EquipmentCategory) error {
-	if category.Name == "" {
+	if len(category.Name) == 0 {
 		return platformerrors.Validation("category name is required", map[string]string{"name": "cannot be empty"})
 	}
 	return s.repo.UpdateCategory(ctx, category)
@@ -77,8 +77,7 @@ func (s *Service) ListCategories(ctx context.Context, companyID *int64) ([]maint
 // --- Stages ---
 
 func (s *Service) CreateStage(ctx context.Context, stage *maintenance.EquipmentStage) error {
-	stage.Name = strings.TrimSpace(stage.Name)
-	if stage.Name == "" {
+	if len(stage.Name) == 0 {
 		return platformerrors.Validation("stage name is required", map[string]string{"name": "cannot be empty"})
 	}
 	return s.repo.CreateStage(ctx, stage)
@@ -89,7 +88,7 @@ func (s *Service) GetStage(ctx context.Context, id int64) (*maintenance.Equipmen
 }
 
 func (s *Service) UpdateStage(ctx context.Context, stage *maintenance.EquipmentStage) error {
-	if stage.Name == "" {
+	if len(stage.Name) == 0 {
 		return platformerrors.Validation("stage name is required", map[string]string{"name": "cannot be empty"})
 	}
 	return s.repo.UpdateStage(ctx, stage)
@@ -256,7 +255,7 @@ func (s *Service) CloseRequest(ctx context.Context, companyID, id int64, now tim
 			spawned.KanbanState = maintenance.KanbanStateNormal
 			spawned.StageID = nil
 			spawned.Archived = false
-			spawned.Name = fmt.Sprintf("%s - %s", request.Name, next.Format("2006-01-02"))
+			spawned.Name = i18n.NewTranslation(fmt.Sprintf("%s - %s", request.Name.GetLocalized(ctx), next.Format("2006-01-02")))
 			spawned.Audit = audit.Fields{}
 			if err := s.repo.CreateRequest(ctx, &spawned); err != nil {
 				return nil, err
@@ -297,9 +296,9 @@ type Dashboard struct {
 
 // KanbanColumn represents one stage column in the maintenance kanban.
 type KanbanColumn struct {
-	StageID int64  `json:"stage_id"`
-	Name    string `json:"name"`
-	Count   int    `json:"count"`
+	StageID int64                  `json:"stage_id"`
+	Name    i18n.TranslationString `json:"name"`
+	Count   int                    `json:"count"`
 }
 
 func (s *Service) Dashboard(ctx context.Context, companyID int64) (*Dashboard, error) {
@@ -398,7 +397,7 @@ func (s *Service) scheduleRequestReminder(ctx context.Context, request *maintena
 	resID := request.ID
 	act := &activity.Activity{
 		ActivityTypeID: typeID,
-		Summary:        "Maintenance: " + request.Name,
+		Summary:        "Maintenance: " + request.Name.GetLocalized(ctx),
 		Note:           request.Description,
 		DateDeadline:   deadline,
 		AssignedUserID: userID,

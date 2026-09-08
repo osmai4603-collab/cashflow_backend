@@ -1,17 +1,17 @@
 package hr
 
 import (
-	"strings"
 	"time"
 
 	"cashflow_backend/internal/platform/audit"
 	platformerrors "cashflow_backend/internal/platform/errors"
+	"cashflow_backend/internal/platform/i18n"
 )
 
 // Job represents a job position or title within an organization (hr.job in Odoo).
 type Job struct {
 	ID                int64        `json:"id"`
-	Name              string       `json:"name"` // Job Title e.g. "Senior Software Engineer"
+	Name              i18n.TranslationString       `json:"name"` // Job Title e.g. "Senior Software Engineer"
 	DepartmentID      *int64       `json:"department_id,omitempty"`
 	Description       string       `json:"description,omitempty"`
 	ExpectedEmployees int          `json:"expected_employees"`
@@ -27,8 +27,7 @@ type Job struct {
 
 // Validate verifies constraints for the Job entity.
 func (j *Job) Validate() error {
-	j.Name = strings.TrimSpace(j.Name)
-	if j.Name == "" {
+	if len(j.Name) == 0 {
 		return platformerrors.Validation("job name is required", map[string]string{
 			"name": "cannot be empty",
 		})

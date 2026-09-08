@@ -88,6 +88,8 @@ type CashflowRepositories struct {
 	ActivityType  activity.ActivityTypeRepository
 	ActivityMsg   activity.MessageRepository
 	ActivityNotif activity.NotificationRepository
+	ActivityFollower activity.FollowerRepository
+	ActivitySubtype  activity.SubtypeRepository
 	EmailQueue    activity.EmailQueueRepository
 }
 
@@ -126,6 +128,8 @@ func NewFromPostgres(pool *pgxpool.Pool) *CashflowRepositories {
 		ActivityType:  activityRepo,
 		ActivityMsg:   activityRepo,
 		ActivityNotif: activityRepo,
+		ActivityFollower: activityRepo,
+		ActivitySubtype:  activityRepo,
 		EmailQueue:    activityRepo,
 	}
 }
@@ -165,6 +169,8 @@ func NewFromMemory() *CashflowRepositories {
 		ActivityType:  activityRepo,
 		ActivityMsg:   activityRepo,
 		ActivityNotif: activityRepo,
+		ActivityFollower: activityRepo,
+		ActivitySubtype:  activityRepo,
 		EmailQueue:    activityRepo,
 	}
 }

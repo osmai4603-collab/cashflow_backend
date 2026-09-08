@@ -3,10 +3,10 @@ package accounting
 import (
 	"fmt"
 	"math"
-	"strings"
 	"time"
 
 	platformerrors "cashflow_backend/internal/platform/errors"
+	"cashflow_backend/internal/platform/i18n"
 )
 
 // TaxType defines how the tax amount is calculated.
@@ -29,7 +29,7 @@ const (
 // Tax represents a tax rate configuration (account.tax in Odoo).
 type Tax struct {
 	ID              int64     `json:"id"`
-	Name            string    `json:"name"`
+	Name            i18n.TranslationString    `json:"name"`
 	Type            TaxType   `json:"type"`
 	TypeTaxUse      TaxScope  `json:"type_tax_use"`
 	Amount          float64   `json:"amount"` // e.g. 15.0 for 15%
@@ -43,8 +43,7 @@ type Tax struct {
 
 // Validate checks Tax constraints.
 func (t *Tax) Validate() error {
-	t.Name = strings.TrimSpace(t.Name)
-	if t.Name == "" {
+	if len(t.Name) == 0 {
 		return platformerrors.Validation("tax name is required", map[string]string{
 			"name": "cannot be empty",
 		})
