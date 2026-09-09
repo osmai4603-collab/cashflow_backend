@@ -1,0 +1,1 @@
+-- Keep the administrator account intact when rolling back this data migration.

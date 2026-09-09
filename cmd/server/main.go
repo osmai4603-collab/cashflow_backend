@@ -13,6 +13,7 @@ import (
 	"time"
 
 	httpadapter "cashflow_backend/internal/adapters/http"
+	databasehttp "cashflow_backend/internal/adapters/http/database"
 	storage "cashflow_backend/internal/adapters/storage"
 	"cashflow_backend/internal/domain/activity"
 	"cashflow_backend/internal/infrastructure/config"
@@ -214,6 +215,7 @@ func main() {
 	}
 	ucs := usecases.New(repos, logger, authorizer, cfg.Auth.JWTSecret, 24*time.Hour, activityBus, statementNameProvider{})
 	handlers := httpadapter.NewHandlers(ucs, cfg.App.Name, cfg.App.Version, logger, localNotificationBus)
+	handlers.Database = databasehttp.NewHandler(cfg.Database.Name)
 
 	// ─────────────────────────────────────────────────────────────────────
 	// PHASE 2: Configuration

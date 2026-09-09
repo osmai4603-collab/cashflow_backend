@@ -11,6 +11,7 @@ import (
 	companyhttp "cashflow_backend/internal/adapters/http/company"
 	crmhttp "cashflow_backend/internal/adapters/http/crm"
 	currencyhttp "cashflow_backend/internal/adapters/http/currency"
+	databasehttp "cashflow_backend/internal/adapters/http/database"
 	deliveryhttp "cashflow_backend/internal/adapters/http/delivery"
 	expensehttp "cashflow_backend/internal/adapters/http/expense"
 	fleethttp "cashflow_backend/internal/adapters/http/fleet"
@@ -23,6 +24,7 @@ import (
 	producthttp "cashflow_backend/internal/adapters/http/product"
 	projecthttp "cashflow_backend/internal/adapters/http/project"
 	purchasehttp "cashflow_backend/internal/adapters/http/purchase"
+	reporthttp "cashflow_backend/internal/adapters/http/report"
 	salehttp "cashflow_backend/internal/adapters/http/sale"
 	sequencehttp "cashflow_backend/internal/adapters/http/sequence"
 	stockhttp "cashflow_backend/internal/adapters/http/stock"
@@ -58,6 +60,8 @@ type CashflowHandlers struct {
 	Maintenance   *maintenancehttp.Handler
 	Fleet         *fleethttp.Handler
 	Delivery      *deliveryhttp.Handler
+	Report        *reporthttp.Handler
+	Database       *databasehttp.Handler
 }
 
 // NewHandlers creates an empty handler container for the composition root.
@@ -98,5 +102,6 @@ func NewHandlers(
 		Maintenance:   maintenancehttp.NewHandler(useCases.Maintenance, logger),
 		Fleet:         fleethttp.NewHandler(useCases.Fleet, logger),
 		Delivery:      deliveryhttp.NewHandler(useCases.Delivery),
+		Report:        reporthttp.NewHandler(useCases.ReportGenerator, useCases.Dashboard),
 	}
 }

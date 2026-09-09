@@ -33,6 +33,7 @@ func setupTestServer() (*chi.Mux, *userstorage.MemoryRepo) {
 		r.Delete("/{id}", h.Delete)
 		r.Get("/", h.List)
 		r.Post("/login", h.Login)
+		r.Post("/logout", h.Logout)
 	})
 
 	return r, repo
@@ -43,11 +44,11 @@ func TestUserHandler_CRUD(t *testing.T) {
 
 	// 1. Create User
 	createReq := userhttp.CreateUserRequest{
-		Name:      "Test User",
-		Login:     "testuser",
-		Password:  "securepassword",
-		Email:     "test@example.com",
-		CompanyID: 1,
+		Name:        "Test User",
+		Login:       "testuser",
+		Password:    "securepassword",
+		Email:       "test@example.com",
+		CompanyID:   1,
 		PartnerName: "Test Partner",
 	}
 	body, _ := json.Marshal(createReq)
@@ -94,6 +95,18 @@ func TestUserHandler_CRUD(t *testing.T) {
 
 	if w.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", w.Code)
+	}
+}
+
+func TestUserHandler_Logout(t *testing.T) {
+	r, _ := setupTestServer()
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/users/logout", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusNoContent {
+		t.Fatalf("expected 204, got %d. Body: %s", w.Code, w.Body.String())
 	}
 }
 

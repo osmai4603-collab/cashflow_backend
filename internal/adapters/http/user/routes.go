@@ -10,5 +10,6 @@ func RegisterRoutes(r chi.Router, h *Handler) {
 		u.Get("/{id}", h.GetByID)
 		u.Put("/{id}", h.Update)
 		u.Delete("/{id}", h.Delete)
+		u.Post("/logout", h.Logout)
 	})
 }

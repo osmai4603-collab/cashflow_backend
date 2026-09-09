@@ -120,6 +120,14 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	response.Paginated(w, http.StatusOK, ToUserResponseList(result.Items), result)
 }
 
+// Logout handles POST /api/v1/users/logout.
+// Tokens are stateless JWTs, so there is nothing to invalidate server-side;
+// the endpoint exists to satisfy the client contract and the client discards
+// its local session afterwards.
+func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
+	response.NoContent(w)
+}
+
 // Login handles POST /api/v1/users/login
 func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	var req LoginRequest

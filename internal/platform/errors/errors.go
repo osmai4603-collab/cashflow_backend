@@ -15,6 +15,7 @@ const (
 	CodeForbidden    = "FORBIDDEN"
 	CodeInternal     = "INTERNAL_ERROR"
 	CodeBadRequest   = "BAD_REQUEST"
+	CodeBadGateway   = "BAD_GATEWAY"
 )
 
 // AppError represents a structured, domain-level application error.
@@ -119,6 +120,18 @@ func Internal(message string, err ...error) *AppError {
 	}
 }
 
+func BadGateway(message string, err ...error) *AppError {
+	var original error
+	if len(err) > 0 {
+		original = err[0]
+	}
+	return &AppError{
+		Code:    CodeBadGateway,
+		Message: message,
+		Err:     original,
+	}
+}
+
 // HTTPStatus maps an error to the corresponding HTTP status code.
 func HTTPStatus(err error) int {
 	if err == nil {
@@ -138,6 +151,8 @@ func HTTPStatus(err error) int {
 			return http.StatusUnauthorized
 		case CodeForbidden:
 			return http.StatusForbidden
+		case CodeBadGateway:
+			return http.StatusBadGateway
 		case CodeInternal:
 			return http.StatusInternalServerError
 		default:

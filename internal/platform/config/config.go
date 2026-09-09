@@ -20,6 +20,7 @@ import (
 type Configuration struct {
 	Server    ServerSettings    `json:"server,omitempty"`
 	Database  DatabaseSettings  `json:"database,omitempty"`
+	Odoo      OdooSettings      `json:"odoo,omitempty"`
 	App       AppSettings       `json:"app,omitempty"`
 	Cache     CacheSettings     `json:"cache,omitempty"`
 	Auth      AuthSettings      `json:"auth,omitempty"`
@@ -98,6 +99,13 @@ type DatabaseSettings struct {
 	MaxConnsGevent  int32         `json:"max_conns_gevent" env:"DB_MAXCONN_GEVENT"` // reserved
 	MaxConnLifetime time.Duration `json:"max_conn_lifetime" env:"DB_MAX_CONN_LIFETIME_MINUTES"`
 	MaxConnIdleTime time.Duration `json:"max_conn_idle_time" env:"DB_MAX_CONN_IDLE_TIME_MINUTES"`
+}
+
+// OdooSettings configures the private Odoo database-management proxy.
+type OdooSettings struct {
+	BaseURL        string `json:"base_url" env:"ODOO_BASE_URL"`
+	MasterPassword string `json:"master_password" env:"ODOO_MASTER_PASSWORD"`
+	TimeoutSeconds int    `json:"timeout_seconds" env:"ODOO_TIMEOUT_SECONDS"`
 }
 
 // AppSettings maps application metadata and Cashflow's default_productivity_apps.
@@ -274,6 +282,11 @@ func Defaults() *Configuration {
 			MinConns:        5,
 			MaxConnLifetime: 60 * time.Minute,
 			MaxConnIdleTime: 30 * time.Minute,
+		},
+		Odoo: OdooSettings{
+			BaseURL:        "http://127.0.0.1:8069",
+			MasterPassword: "admin",
+			TimeoutSeconds: 20,
 		},
 		App: AppSettings{
 			Name:        "cashflow_go_backend",

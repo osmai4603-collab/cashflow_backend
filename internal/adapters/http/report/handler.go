@@ -6,9 +6,10 @@ import (
 	"time"
 
 	"cashflow_backend/internal/domain/report"
+	"cashflow_backend/internal/platform/response"
 	reportusecase "cashflow_backend/internal/usecase/report"
 
-	"github.com/gin-gonic/gin"
+	"github.com/go-chi/chi/v5"
 )
 
 type Handler struct {
@@ -20,26 +21,21 @@ func NewHandler(generator report.ReportGenerator, dashboard *reportusecase.Dashb
 	return &Handler{generator: generator, dashboard: dashboard}
 }
 
-func (h *Handler) GetReport(c *gin.Context) {
-	code := c.Param("code")
-	companyID, _ := strconv.ParseInt(c.Query("company_id"), 10, 64)
-	if companyID == 0 {
-		// Fallback or error
-	}
+func (h *Handler) GetReport(w http.ResponseWriter, r *http.Request) {
+	code := chi.URLParam(r, "code")
+	companyID, _ := strconv.ParseInt(r.URL.Query().Get("company_id"), 10, 64)
 
 	opts := report.ReportOptions{
 		CompanyID: companyID,
 	}
 
-	if from := c.Query("date_from"); from != "" {
-		t, err := time.Parse("2006-01-02", from)
-		if err == nil {
+	if from := r.URL.Query().Get("date_from"); from != "" {
+		if t, err := time.Parse("2006-01-02", from); err == nil {
 			opts.DateFrom = &t
 		}
 	}
-	if to := c.Query("date_to"); to != "" {
-		t, err := time.Parse("2006-01-02", to)
-		if err == nil {
+	if to := r.URL.Query().Get("date_to"); to != "" {
+		if t, err := time.Parse("2006-01-02", to); err == nil {
 			opts.DateTo = &t
 		}
 	}
@@ -57,25 +53,25 @@ func (h *Handler) GetReport(c *gin.Context) {
 	case "SALE_ANALYSIS":
 		config = reportusecase.GetSalesAnalysisConfig()
 	default:
-		c.JSON(http.StatusNotFound, gin.H{"error": "Report not found"})
+		response.JSON(w, http.StatusNotFound, map[string]string{"error": "Report not found"})
 		return
 	}
 
-	res, err := h.generator.Generate(c.Request.Context(), config, opts)
+	res, err := h.generator.Generate(r.Context(), config, opts)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		response.JSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusOK, res)
+	response.JSON(w, http.StatusOK, res)
 }
 
-func (h *Handler) GetDashboard(c *gin.Context) {
-	companyID, _ := strconv.ParseInt(c.Query("company_id"), 10, 64)
-	res, err := h.dashboard.GetOverviewDashboard(c.Request.Context(), companyID)
+func (h *Handler) GetDashboard(w http.ResponseWriter, r *http.Request) {
+	companyID, _ := strconv.ParseInt(r.URL.Query().Get("company_id"), 10, 64)
+	res, err := h.dashboard.GetOverviewDashboard(r.Context(), companyID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		response.JSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, res)
+	response.JSON(w, http.StatusOK, res)
 }

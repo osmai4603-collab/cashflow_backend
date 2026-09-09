@@ -39,6 +39,11 @@
     "max_conn_lifetime": "60m",
     "max_conn_idle_time": "30m"
   },
+  "odoo": {
+    "base_url": "http://127.0.0.1:8069",
+    "master_password": "admin",
+    "timeout_seconds": 20
+  },
   "app": {
     "name": "cashflow_go_backend",
     "version": "0.1.0",

@@ -26,6 +26,7 @@ import (
 	producthttp "cashflow_backend/internal/adapters/http/product"
 	projecthttp "cashflow_backend/internal/adapters/http/project"
 	purchasehttp "cashflow_backend/internal/adapters/http/purchase"
+	reporthttp "cashflow_backend/internal/adapters/http/report"
 	salehttp "cashflow_backend/internal/adapters/http/sale"
 	sequencehttp "cashflow_backend/internal/adapters/http/sequence"
 	stockhttp "cashflow_backend/internal/adapters/http/stock"
@@ -102,6 +103,10 @@ func NewRouterWithHandlers(
 
 	if handlers.User != nil {
 		r.Post("/api/v1/users/login", handlers.User.Login)
+	}
+	if handlers.Database != nil {
+		r.Get("/api/v1/databases", handlers.Database.List)
+		r.Post("/api/v1/databases", handlers.Database.Create)
 	}
 
 	// API v1 Mount Point
@@ -193,6 +198,9 @@ func NewRouterWithHandlers(
 		}
 		if handlers.Delivery != nil {
 			deliveryhttp.RegisterRoutes(v1, handlers.Delivery, authorizer)
+		}
+		if handlers.Report != nil {
+			reporthttp.RegisterRoutes(v1, handlers.Report, authorizer)
 		}
 	})
 

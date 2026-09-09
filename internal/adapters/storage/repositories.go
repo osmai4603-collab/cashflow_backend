@@ -21,6 +21,7 @@ import (
 	productstorage "cashflow_backend/internal/adapters/storage/product"
 	projectstorage "cashflow_backend/internal/adapters/storage/project"
 	purchasestorage "cashflow_backend/internal/adapters/storage/purchase"
+	reportstorage "cashflow_backend/internal/adapters/storage/report"
 	salestorage "cashflow_backend/internal/adapters/storage/sale"
 	sequencestorage "cashflow_backend/internal/adapters/storage/sequence"
 	stockstorage "cashflow_backend/internal/adapters/storage/stock"
@@ -47,6 +48,7 @@ import (
 	"cashflow_backend/internal/domain/product"
 	"cashflow_backend/internal/domain/project"
 	"cashflow_backend/internal/domain/purchase"
+	"cashflow_backend/internal/domain/report"
 	"cashflow_backend/internal/domain/sale"
 	"cashflow_backend/internal/domain/sequence"
 	"cashflow_backend/internal/domain/stock"
@@ -77,6 +79,8 @@ type CashflowRepositories struct {
 	BankStatement bankstatement.Repository
 	Project       project.Repository
 	Permission    group.PermissionRepository
+	Report        report.Repository
+	ReportData    report.DataRepository
 	MRP           mrp.Repository
 	Requisition   purchaseusecase.RequisitionRepository
 	SupplierInfo  purchaseusecase.SupplierInfoRepository
@@ -96,6 +100,7 @@ type CashflowRepositories struct {
 func NewFromPostgres(pool *pgxpool.Pool) *CashflowRepositories {
 	activityRepo := activitystorage.NewPostgresRepo(pool)
 	requisitionRepo := purchasestorage.NewRequisitionPostgresRepo(pool)
+	reportRepo := reportstorage.NewPostgresRepo(pool)
 	return &CashflowRepositories{
 		Partner:       partnerstorage.NewPostgresRepo(pool),
 		Product:       productstorage.NewPostgresRepo(pool),
@@ -117,6 +122,8 @@ func NewFromPostgres(pool *pgxpool.Pool) *CashflowRepositories {
 		BankStatement: bankstatementstorage.NewPostgresRepo(pool),
 		Project:       projectstorage.NewPostgresRepo(pool),
 		Permission:    groupstorage.NewPostgresRepo(pool),
+		Report:        reportRepo,
+		ReportData:    reportRepo,
 		MRP:           mrpstorage.NewPostgresRepo(pool),
 		Requisition:   requisitionRepo,
 		SupplierInfo:  requisitionRepo,
@@ -137,6 +144,7 @@ func NewFromPostgres(pool *pgxpool.Pool) *CashflowRepositories {
 func NewFromMemory() *CashflowRepositories {
 	activityRepo := activitystorage.NewMemoryRepo()
 	requisitionRepo := purchasestorage.NewMemoryRequisitionRepo()
+	reportRepo := reportstorage.NewMemoryRepo()
 	return &CashflowRepositories{
 		Partner:       partnerstorage.NewMemoryRepo(),
 		Product:       productstorage.NewMemoryRepo(),
@@ -158,6 +166,8 @@ func NewFromMemory() *CashflowRepositories {
 		BankStatement: bankstatementstorage.NewMemoryRepo(),
 		Project:       projectstorage.NewMemoryRepo(),
 		Permission:    groupstorage.NewMemoryRepo(),
+		Report:        reportRepo,
+		ReportData:    reportRepo,
 		MRP:           mrpstorage.NewMemoryRepo(),
 		Requisition:   requisitionRepo,
 		SupplierInfo:  requisitionRepo,

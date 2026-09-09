@@ -8,6 +8,7 @@ import (
 	"cashflow_backend/internal/domain/accounting"
 	"cashflow_backend/internal/domain/activity"
 	bankstatementdomain "cashflow_backend/internal/domain/bankstatement"
+	"cashflow_backend/internal/domain/report"
 	"cashflow_backend/internal/platform/auth"
 	platformcurrency "cashflow_backend/internal/platform/currency"
 	accountingusecase "cashflow_backend/internal/usecase/accounting"
@@ -30,6 +31,7 @@ import (
 	productusecase "cashflow_backend/internal/usecase/product"
 	projectusecase "cashflow_backend/internal/usecase/project"
 	purchaseusecase "cashflow_backend/internal/usecase/purchase"
+	reportusecase "cashflow_backend/internal/usecase/report"
 	saleusecase "cashflow_backend/internal/usecase/sale"
 	sequenceusecase "cashflow_backend/internal/usecase/sequence"
 	stockusecase "cashflow_backend/internal/usecase/stock"
@@ -63,6 +65,8 @@ type CashflowUseCases struct {
 	Maintenance   *maintenanceusecase.Service
 	Fleet         *fleetusecase.Service
 	Delivery      *deliveryusecase.UseCase
+	ReportGenerator report.ReportGenerator
+	Dashboard       *reportusecase.DashboardUseCase
 }
 
 func New(
@@ -111,5 +115,7 @@ func New(
 	useCases.Maintenance = maintenanceusecase.New(repositories.Maintenance, useCases.Activity, logger)
 	useCases.Fleet = fleetusecase.New(repositories.Fleet, useCases.Activity, logger)
 	useCases.Delivery = deliveryusecase.NewUseCase(repositories.Delivery, repositories.Sale, repositories.Product, logger)
+	useCases.ReportGenerator = reportusecase.NewReportGenerator(repositories.Report, repositories.ReportData)
+	useCases.Dashboard = reportusecase.NewDashboardUseCase(useCases.ReportGenerator)
 	return useCases
 }

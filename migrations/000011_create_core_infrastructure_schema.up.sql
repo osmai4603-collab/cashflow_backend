@@ -296,7 +296,7 @@ SELECT setval('res_companies_id_seq', (SELECT COALESCE(MAX(id), 0) FROM res_comp
 -- Default admin user (password: admin123 - bcrypt hash of "admin123")
 INSERT INTO res_users (id, login, email, name, password_hash, partner_id, company_id, is_superuser, active)
 SELECT 1, 'admin', 'admin@example.com', 'Administrator',
-    '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy',
+    '$2a$10$CM3u7Nj5os9FgJqaBfnNoe.0y64Uu.eR9H94FQxWu/XLHLLL9NNJ2',
     (SELECT id FROM res_partners WHERE email = 'admin@example.com' LIMIT 1),
     1,
     true,
