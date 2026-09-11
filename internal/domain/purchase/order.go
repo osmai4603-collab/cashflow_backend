@@ -296,3 +296,18 @@ func (o *PurchaseOrder) UpdateBillStatus() {
 func roundTo4(val float64) float64 {
 	return math.Round(val*10000) / 10000
 }
+
+// ThreadModel implements activity.Threadable.
+func (o *PurchaseOrder) ThreadModel() string { return "purchase.order" }
+
+// ThreadID implements activity.Threadable.
+func (o *PurchaseOrder) ThreadID() int64 { return o.ID }
+
+// ThreadCompanyID implements activity.Threadable.
+func (o *PurchaseOrder) ThreadCompanyID() int64 {
+	if o.CompanyID != nil && *o.CompanyID > 0 {
+		return *o.CompanyID
+	}
+	return 1
+}
+

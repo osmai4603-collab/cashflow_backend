@@ -117,3 +117,17 @@ func DependencyCreatesCycle(taskID, dependencyID int64, dependencies map[int64][
 }
 
 func (t *Task) IsClosed() bool { return t.State == TaskDone || t.State == TaskCancelled }
+
+// ThreadModel satisfies activity.Threadable.
+func (t *Task) ThreadModel() string { return "project.task" }
+
+// ThreadID satisfies activity.Threadable.
+func (t *Task) ThreadID() int64 { return t.ID }
+
+// ThreadCompanyID satisfies activity.Threadable.
+func (t *Task) ThreadCompanyID() int64 {
+	if t.CompanyID > 0 {
+		return t.CompanyID
+	}
+	return 1
+}

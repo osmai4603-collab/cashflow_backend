@@ -11,6 +11,8 @@ import (
 	productstorage "cashflow_backend/internal/adapters/storage/product"
 	purchasestorage "cashflow_backend/internal/adapters/storage/purchase"
 	stockstorage "cashflow_backend/internal/adapters/storage/stock"
+	"cashflow_backend/internal/domain/partner"
+	"cashflow_backend/internal/domain/product"
 	"cashflow_backend/internal/domain/purchase"
 	"cashflow_backend/internal/domain/stock"
 	purchaseusecase "cashflow_backend/internal/usecase/purchase"
@@ -31,17 +33,38 @@ func TestPurchaseStockUseCase_CreateReceiptsFromOrder(t *testing.T) {
 	uc := purchaseusecase.NewPurchaseStockUseCase(purchaseRepo, stockRepo, stockUC, logger)
 
 	// 2. Prepare Data
-	productID := int64(201)
+	vendor := &partner.Partner{
+		ID:         5,
+		Name:       "Test Vendor",
+		IsSupplier: true,
+		Active:     true,
+	}
+	if err := partnerRepo.Create(ctx, vendor); err != nil {
+		t.Fatalf("failed to seed vendor: %v", err)
+	}
+
+	prod := &product.ProductTemplate{
+		Name:      "Inventory Item",
+		Type:      product.ProductTypeGoods,
+		SalePrice: 100.0,
+		CostPrice: 60.0,
+		PurchaseOK: true,
+		Active:    true,
+	}
+	if err := productRepo.CreateTemplate(ctx, prod); err != nil {
+		t.Fatalf("failed to seed product: %v", err)
+	}
+
 	order := &purchase.PurchaseOrder{
 		ID:        1,
 		Name:      "PO/2026/00001",
-		PartnerID: 5,
+		PartnerID: vendor.ID,
 		DateOrder: time.Now(),
 		State:     purchase.OrderStatePurchase,
 		Lines: []purchase.PurchaseOrderLine{
 			{
 				ID:         20,
-				ProductID:  productID,
+				ProductID:  prod.ID,
 				ProductQty: 10,
 				Name:       "Inventory Item",
 			},
@@ -73,7 +96,7 @@ func TestPurchaseStockUseCase_CreateReceiptsFromOrder(t *testing.T) {
 	if len(picking.Moves) != 1 {
 		t.Errorf("expected 1 move, got %d", len(picking.Moves))
 	}
-	if *picking.Moves[0].PurchaseLineID != 20 {
-		t.Errorf("expected purchase line ID 20, got %v", picking.Moves[0].PurchaseLineID)
+	if picking.Moves[0].PurchaseLineID == nil || *picking.Moves[0].PurchaseLineID != order.Lines[0].ID {
+		t.Errorf("expected purchase line ID %d, got %v", order.Lines[0].ID, picking.Moves[0].PurchaseLineID)
 	}
 }

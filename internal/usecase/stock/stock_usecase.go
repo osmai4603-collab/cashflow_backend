@@ -119,6 +119,7 @@ type UseCase struct {
 	purchaseRepo  purchase.Repository
 	companyRepo   companydomain.Repository
 	accountingSvc AccountingGateway
+	hooks         *CompositeStockIntegrationHook
 	logger        *slog.Logger
 }
 
@@ -132,12 +133,16 @@ func New(
 ) *UseCase {
 	var accountingSvc AccountingGateway
 	var logger *slog.Logger
+	var hookList []StockIntegrationHook
+
 	for _, value := range optional {
 		switch typed := value.(type) {
 		case AccountingGateway:
 			accountingSvc = typed
 		case *slog.Logger:
 			logger = typed
+		case StockIntegrationHook:
+			hookList = append(hookList, typed)
 		}
 	}
 	if logger == nil {
@@ -154,6 +159,7 @@ func New(
 		saleRepo:      saleRepo,
 		purchaseRepo:  purchaseRepo,
 		accountingSvc: accountingSvc,
+		hooks:         NewCompositeStockIntegrationHook(hookList...),
 		logger:        logger,
 	}
 	for _, value := range optional {
@@ -164,9 +170,19 @@ func New(
 			uc.logger = typed
 		case AccountingGateway:
 			uc.accountingSvc = typed
+		case StockIntegrationHook:
+			uc.hooks.Add(typed)
 		}
 	}
 	return uc
+}
+
+// AddHook registers an integration hook to listen to picking lifecycle events.
+func (uc *UseCase) AddHook(hook StockIntegrationHook) {
+	if uc.hooks == nil {
+		uc.hooks = NewCompositeStockIntegrationHook()
+	}
+	uc.hooks.Add(hook)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -809,6 +825,12 @@ func (uc *UseCase) ValidatePicking(ctx context.Context, id int64, in ValidatePic
 		}
 	}
 
+	if uc.hooks != nil {
+		if err := uc.hooks.OnPickingValidated(ctx, picking); err != nil {
+			uc.logger.ErrorContext(ctx, "stock integration hook OnPickingValidated failed", "picking_id", picking.ID, "error", err)
+		}
+	}
+
 	uc.logger.InfoContext(ctx, "stock picking validated", "id", picking.ID, "name", picking.Name, "date_done", picking.DateDone)
 	return picking, nil
 }
@@ -826,6 +848,12 @@ func (uc *UseCase) CancelPicking(ctx context.Context, id int64) (*stock.StockPic
 
 	if err := uc.repo.UpdatePicking(ctx, picking); err != nil {
 		return nil, err
+	}
+
+	if uc.hooks != nil {
+		if err := uc.hooks.OnPickingCancelled(ctx, picking); err != nil {
+			uc.logger.ErrorContext(ctx, "stock integration hook OnPickingCancelled failed", "picking_id", picking.ID, "error", err)
+		}
 	}
 
 	uc.logger.InfoContext(ctx, "stock picking cancelled", "id", picking.ID, "name", picking.Name)

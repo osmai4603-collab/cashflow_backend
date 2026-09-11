@@ -48,6 +48,7 @@ type StockPicking struct {
 	ShippingWeight     float64      `json:"shipping_weight"`
 	NumberOfPackages   int          `json:"number_of_packages"`
 	ProcurementGroupID *int64       `json:"procurement_group_id,omitempty"`
+	BackorderOfID      *int64       `json:"backorder_of_id,omitempty"`
 	CompanyID          *int64       `json:"company_id,omitempty"`
 	Note               string       `json:"note,omitempty"`
 	Active             bool         `json:"active"`
@@ -188,4 +189,18 @@ func (p *StockPicking) ActionCancel() error {
 		_ = p.Moves[i].ActionCancel()
 	}
 	return nil
+}
+
+// ThreadModel satisfies activity.Threadable.
+func (p *StockPicking) ThreadModel() string { return "stock.picking" }
+
+// ThreadID satisfies activity.Threadable.
+func (p *StockPicking) ThreadID() int64 { return p.ID }
+
+// ThreadCompanyID satisfies activity.Threadable.
+func (p *StockPicking) ThreadCompanyID() int64 {
+	if p.CompanyID != nil && *p.CompanyID > 0 {
+		return *p.CompanyID
+	}
+	return 1
 }

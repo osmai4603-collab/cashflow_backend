@@ -247,3 +247,17 @@ func addRepeatInterval(base time.Time, interval int, unit RepeatUnit) time.Time 
 		return base
 	}
 }
+
+// ThreadModel satisfies activity.Threadable.
+func (r *MaintenanceRequest) ThreadModel() string { return "maintenance.request" }
+
+// ThreadID satisfies activity.Threadable.
+func (r *MaintenanceRequest) ThreadID() int64 { return r.ID }
+
+// ThreadCompanyID satisfies activity.Threadable.
+func (r *MaintenanceRequest) ThreadCompanyID() int64 {
+	if r.CompanyID > 0 {
+		return r.CompanyID
+	}
+	return 1
+}

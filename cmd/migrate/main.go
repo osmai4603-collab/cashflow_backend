@@ -8,7 +8,7 @@ import (
 	"os"
 	"time"
 
-	"cashflow_backend/internal/infrastructure/config"
+	"cashflow_backend/internal/platform/config"
 	"cashflow_backend/internal/platform/database"
 	"cashflow_backend/migrations"
 

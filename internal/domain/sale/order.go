@@ -376,3 +376,18 @@ func (o *SaleOrder) ApplyCoupon(couponID int64) {
 func roundTo4(val float64) float64 {
 	return math.Round(val*10000) / 10000
 }
+
+// ThreadModel implements activity.Threadable.
+func (o *SaleOrder) ThreadModel() string { return "sale.order" }
+
+// ThreadID implements activity.Threadable.
+func (o *SaleOrder) ThreadID() int64 { return o.ID }
+
+// ThreadCompanyID implements activity.Threadable.
+func (o *SaleOrder) ThreadCompanyID() int64 {
+	if o.CompanyID != nil && *o.CompanyID > 0 {
+		return *o.CompanyID
+	}
+	return 1
+}
+

@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"cashflow_backend/internal/infrastructure/worker"
+	"cashflow_backend/internal/infrastructure/runtime/worker"
 )
 
 func TestWorkerManager_Lifecycle(t *testing.T) {

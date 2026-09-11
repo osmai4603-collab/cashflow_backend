@@ -3,13 +3,11 @@ package config_test
 import (
 	"testing"
 	"time"
-
-	"cashflow_backend/internal/infrastructure/config"
-	platconfig "cashflow_backend/internal/platform/config"
+	"cashflow_backend/internal/platform/config"
 )
 
 func TestLoadEnvironment_CanonicalAndAliases(t *testing.T) {
-	cfg := platconfig.Defaults()
+	cfg := config.Defaults()
 
 	env := map[string]string{
 		"PGHOST":               "db-node-1",
@@ -45,7 +43,7 @@ func TestLoadEnvironment_CanonicalAndAliases(t *testing.T) {
 }
 
 func TestLoadEnvironment_InvalidValue(t *testing.T) {
-	cfg := platconfig.Defaults()
+	cfg := config.Defaults()
 	env := map[string]string{"DB_MAX_CONNS": "not-a-number"}
 	lookup := func(key string) (string, bool) {
 		v, ok := env[key]
@@ -57,7 +55,7 @@ func TestLoadEnvironment_InvalidValue(t *testing.T) {
 }
 
 func TestLoadEnvironment_ListSplitting(t *testing.T) {
-	cfg := platconfig.Defaults()
+	cfg := config.Defaults()
 	env := map[string]string{"SERVER_WIDE_MODULES": "base, web, rpc"}
 	lookup := func(key string) (string, bool) {
 		v, ok := env[key]
@@ -78,7 +76,7 @@ func TestLoadEnvironment_ListSplitting(t *testing.T) {
 }
 
 func TestLoadEnvironment_CanonicalBeatsAlias(t *testing.T) {
-	cfg := platconfig.Defaults()
+	cfg := config.Defaults()
 	env := map[string]string{
 		"DB_HOST": "pg-main",
 		"PGHOST":  "pg-replica",

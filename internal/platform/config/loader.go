@@ -8,15 +8,13 @@ package config
 import (
 	"fmt"
 	"os"
-
-	platconfig "cashflow_backend/internal/platform/config"
 )
 
 // Load returns a fully-populated Configuration built by layering defaults,
 // an optional JSON config file, the environment and runtime options. A nil
 // filePath or the constant UseDefaultFile selects the default config file.
 // When the default file is absent, defaults alone are used.
-func Load(opts ...Option) (*platconfig.Configuration, error) {
+func Load(opts ...Option) (*Configuration, error) {
 	loader := newLoader()
 	for _, opt := range opts {
 		opt(loader)
@@ -41,7 +39,7 @@ func WithNoFile() Option {
 
 // WithRuntimeOverrides applies values after env+CLI, matching Odoo's runtime
 // layer (config.status/network).
-func WithRuntimeOverrides(apply func(*platconfig.Configuration)) Option {
+func WithRuntimeOverrides(apply func(*Configuration)) Option {
 	return func(l *loader) { l.runtimeOverrides = append(l.runtimeOverrides, apply) }
 }
 
@@ -56,15 +54,15 @@ const (
 // loader executes the layered resolution pipeline.
 type loader struct {
 	filePath         string
-	runtimeOverrides []func(*platconfig.Configuration)
+	runtimeOverrides []func(*Configuration)
 }
 
 func newLoader() *loader {
 	return &loader{filePath: UseDefaultFile}
 }
 
-func (l *loader) load() (*platconfig.Configuration, error) {
-	cfg := platconfig.Defaults()
+func (l *loader) load() (*Configuration, error) {
+	cfg := Defaults()
 
 	// 1st layer: config file (JSON; only present keys override defaults).
 	path := l.resolveFilePath()

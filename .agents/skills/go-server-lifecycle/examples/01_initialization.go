@@ -1,66 +1,91 @@
 package lifecycle
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
+
+	"github.com/mattn/go-isatty"
 )
 
 // =============================================================================
 // Phase 1: Initialization
 // =============================================================================
 // Initialize all dependencies BEFORE starting the server.
-// If any critical dependency fails, exit immediately.
+// If any critical dependency fails, exit immediately (Fail-Fast).
 // Order: config → logger → database → cache → services
 // =============================================================================
 
-// Config holds the application configuration loaded from environment or files.
+// Config holds the application configuration.
 type Config struct {
 	Port            string
 	DatabaseDSN     string
-	ShutdownTimeout int // seconds
-	DrainTimeout    int // seconds
+	ShutdownTimeout int
+	DrainTimeout    int
 }
 
-// LoadConfig reads configuration from environment variables.
-// In production, consider using a config file or secret manager.
+// LoadConfig reads configuration.
 func LoadConfig() (*Config, error) {
-	port := os.Getenv("PORT")
-	if port == "" {
-		port = "8080"
-	}
-
 	dsn := os.Getenv("DATABASE_DSN")
 	if dsn == "" {
-		return nil, fmt.Errorf("DATABASE_DSN environment variable is required")
+		return nil, fmt.Errorf("DATABASE_DSN is required")
 	}
 
 	return &Config{
-		Port:            port,
+		Port:            "8080",
 		DatabaseDSN:     dsn,
-		ShutdownTimeout: 10,
-		DrainTimeout:    5,
+		ShutdownTimeout: 15,
+		DrainTimeout:    10,
 	}, nil
 }
 
+// prettyHandler is a simplified custom slog.Handler for colored terminal output.
+type prettyHandler struct {
+	w io.Writer
+}
+
+func (h *prettyHandler) Enabled(_ context.Context, _ slog.Level) bool { return true }
+func (h *prettyHandler) Handle(_ context.Context, r slog.Record) error {
+	timeStr := r.Time.Format("2006-01-02 03:04:05 PM")
+	fmt.Fprintf(h.w, "\033[90m%s\033[0m [%s] %s\n", timeStr, r.Level, r.Message)
+	return nil
+}
+func (h *prettyHandler) WithAttrs(attrs []slog.Attr) slog.Handler { return h }
+func (h *prettyHandler) WithGroup(name string) slog.Handler      { return h }
+
+// initLogger creates an environment-aware logger.
+// Best Practice: Colored Text for TTY, Structured JSON for Production.
+func initLogger() *slog.Logger {
+	out := os.Stderr
+	isTerminal := isatty.IsTerminal(out.Fd()) || isatty.IsCygwinTerminal(out.Fd())
+
+	if isTerminal {
+		return slog.New(&prettyHandler{w: out})
+	}
+
+	return slog.New(slog.NewJSONHandler(out, &slog.HandlerOptions{
+		ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
+			if a.Key == slog.TimeKey {
+				return slog.String(slog.TimeKey, a.Value.Time().Format("2006-01-02 03:04:05 PM"))
+			}
+			return a
+		},
+	}))
+}
+
 // Dependencies holds all initialized dependencies.
-// Created in order, closed in REVERSE order during cleanup.
 type Dependencies struct {
 	Logger *slog.Logger
 	DB     *sql.DB
-	// Add more dependencies as needed:
-	// Cache  *redis.Client
-	// Queue  *amqp.Connection
 }
 
 // InitDependencies creates all dependencies in the correct order.
-// If any critical dependency fails, return an error — do NOT start the server.
 func InitDependencies(cfg *Config) (*Dependencies, error) {
-	// 1. Logger (first — everything else logs through it)
-	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
-		Level: slog.LevelInfo,
-	}))
+	// 1. Logger (Dual-Mode)
+	logger := initLogger()
 
 	// 2. Database connection
 	db, err := sql.Open("postgres", cfg.DatabaseDSN)
@@ -68,7 +93,6 @@ func InitDependencies(cfg *Config) (*Dependencies, error) {
 		return nil, fmt.Errorf("failed to open database: %w", err)
 	}
 
-	// Verify the connection is alive
 	if err := db.Ping(); err != nil {
 		return nil, fmt.Errorf("failed to ping database: %w", err)
 	}
@@ -83,14 +107,8 @@ func InitDependencies(cfg *Config) (*Dependencies, error) {
 
 // Close releases all dependencies in REVERSE order of creation.
 func (d *Dependencies) Close() {
-	// Close in reverse: DB → Logger
 	if d.DB != nil {
-		if err := d.DB.Close(); err != nil {
-			d.Logger.Error("failed to close database", "error", err)
-		} else {
-			d.Logger.Info("database connection closed")
-		}
+		_ = d.DB.Close()
 	}
-
 	d.Logger.Info("all dependencies closed")
 }

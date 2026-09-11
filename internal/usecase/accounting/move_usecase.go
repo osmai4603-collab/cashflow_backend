@@ -421,8 +421,8 @@ func (uc *UseCase) UpdateMove(ctx context.Context, id int64, in UpdateMoveInput)
 		return nil, err
 	}
 
-	if move.State != accounting.MoveStateDraft {
-		return nil, platformerrors.Conflict("only draft moves can be edited")
+	if err := move.CanEdit(); err != nil {
+		return nil, err
 	}
 
 	if in.Date != nil {

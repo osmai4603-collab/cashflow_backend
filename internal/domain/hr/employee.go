@@ -92,3 +92,17 @@ func (e *Employee) Validate() error {
 
 	return nil
 }
+
+// ThreadModel satisfies activity.Threadable.
+func (e *Employee) ThreadModel() string { return "hr.employee" }
+
+// ThreadID satisfies activity.Threadable.
+func (e *Employee) ThreadID() int64 { return e.ID }
+
+// ThreadCompanyID satisfies activity.Threadable.
+func (e *Employee) ThreadCompanyID() int64 {
+	if e.CompanyID != nil && *e.CompanyID > 0 {
+		return *e.CompanyID
+	}
+	return 1
+}

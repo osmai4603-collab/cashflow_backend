@@ -163,3 +163,17 @@ func (l *Lead) Validate() error {
 func roundTo4(val float64) float64 {
 	return math.Round(val*10000) / 10000
 }
+
+// ThreadModel satisfies activity.Threadable.
+func (l *Lead) ThreadModel() string { return "crm.lead" }
+
+// ThreadID satisfies activity.Threadable.
+func (l *Lead) ThreadID() int64 { return l.ID }
+
+// ThreadCompanyID satisfies activity.Threadable.
+func (l *Lead) ThreadCompanyID() int64 {
+	if l.CompanyID != nil && *l.CompanyID > 0 {
+		return *l.CompanyID
+	}
+	return 1
+}

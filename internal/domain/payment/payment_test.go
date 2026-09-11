@@ -243,3 +243,43 @@ func TestCategorizeAging(t *testing.T) {
 		t.Errorf("AgingBucket.Add failed, got %+v", b1)
 	}
 }
+
+func TestPaymentTransaction_Transitions(t *testing.T) {
+	tx := &PaymentTransaction{
+		Reference:  "TX-001",
+		Amount:     100.0,
+		Currency:   "USD",
+		ProviderID: 1,
+		PartnerID:  10,
+		CompanyID:  1,
+		State:      TransactionStateDraft,
+	}
+
+	if err := tx.Validate(); err != nil {
+		t.Fatalf("expected valid tx, got %v", err)
+	}
+
+	// draft -> pending
+	if err := tx.Transition(TransactionStatePending); err != nil {
+		t.Fatalf("expected draft->pending to succeed: %v", err)
+	}
+	if tx.State != TransactionStatePending {
+		t.Errorf("expected pending state, got %s", tx.State)
+	}
+
+	// pending -> authorized
+	if err := tx.Transition(TransactionStateAuthorized); err != nil {
+		t.Fatalf("expected pending->authorized to succeed: %v", err)
+	}
+
+	// authorized -> done
+	if err := tx.Transition(TransactionStateDone); err != nil {
+		t.Fatalf("expected authorized->done to succeed: %v", err)
+	}
+
+	// done -> pending (invalid from terminal)
+	if err := tx.Transition(TransactionStatePending); err == nil {
+		t.Errorf("expected done->pending to fail")
+	}
+}
+

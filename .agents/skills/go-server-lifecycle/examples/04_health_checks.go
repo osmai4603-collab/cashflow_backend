@@ -1,131 +1,91 @@
 package lifecycle
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
+	"runtime"
 	"sync/atomic"
+	"time"
 )
 
 // =============================================================================
-// Phase 4: Health Check Endpoints
+// Phase 4: Health Check & Metrics Endpoints
 // =============================================================================
-// Separate endpoints for each probe type.
-// CRITICAL: Liveness must NOT check external dependencies.
-//
-// Official best practice for Kubernetes probes:
-// - Liveness  → /livez   → Is the process alive?
-// - Readiness → /readyz  → Can it serve traffic?
-// - Startup   → /startupz → Has initialization finished?
+// Probes:
+// - Liveness  → /livez   → Is the process healthy? (No external deps check)
+// - Readiness → /readyz  → Can it serve traffic? (Check critical deps)
+// - Metrics   → /metrics → Provide runtime telemetry (CPU, Mem, DB, Traffic)
 // =============================================================================
 
-// HealthChecker manages the health state of the server.
-// It uses atomic values for thread-safe state changes during shutdown.
-type HealthChecker struct {
-	// ready indicates whether the server is ready to accept traffic.
-	// Set to false during drain phase to remove from load balancer.
-	ready atomic.Bool
-
-	// alive indicates whether the process is healthy.
-	alive atomic.Bool
-
-	// dependencies holds references to check in readiness probes.
-	deps *Dependencies
+// DBStatsProvider allows storage backends to report health.
+type DBStatsProvider interface {
+	Stats() DBStats
 }
 
-// NewHealthChecker creates a new HealthChecker.
-// The server starts as alive but NOT ready (until initialization completes).
-func NewHealthChecker(deps *Dependencies) *HealthChecker {
-	hc := &HealthChecker{
-		deps: deps,
-	}
+type DBStats struct {
+	ActiveConns int32 `json:"active_conns"`
+	MaxConns    int32 `json:"max_conns"`
+}
+
+type HealthChecker struct {
+	ready atomic.Bool
+	alive atomic.Bool
+	deps  *Dependencies
+	db    DBStatsProvider
+}
+
+func NewHealthChecker(deps *Dependencies, db DBStatsProvider) *HealthChecker {
+	hc := &HealthChecker{deps: deps, db: db}
 	hc.alive.Store(true)
-	hc.ready.Store(false) // Not ready until initialization completes
+	hc.ready.Store(false)
 	return hc
 }
 
-// MarkReady signals that the server has completed initialization
-// and is ready to serve traffic.
-func (hc *HealthChecker) MarkReady() {
-	hc.ready.Store(true)
-}
-
-// MarkNotReady signals that the server should stop receiving traffic.
-// Used during the drain phase before shutdown.
-func (hc *HealthChecker) MarkNotReady() {
-	hc.ready.Store(false)
-}
-
-// RegisterRoutes registers health check endpoints on the given mux.
 func (hc *HealthChecker) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /livez", hc.handleLiveness)
 	mux.HandleFunc("GET /readyz", hc.handleReadiness)
+	mux.HandleFunc("GET /metrics", hc.handleMetrics)
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Liveness Probe: /livez
-// ─────────────────────────────────────────────────────────────────────────────
-// PURPOSE: Determine if the process is alive and not deadlocked.
-//
-// RULE: Check ONLY the process health.
-//       DO NOT check external dependencies (DB, cache, etc.)
-//
-// WHY: If liveness checks the DB and the DB has a temporary flicker,
-//       Kubernetes restarts ALL pods → cascading failure.
-// ─────────────────────────────────────────────────────────────────────────────
 
 func (hc *HealthChecker) handleLiveness(w http.ResponseWriter, r *http.Request) {
-	if !hc.alive.Load() {
-		w.WriteHeader(http.StatusServiceUnavailable)
-		json.NewEncoder(w).Encode(map[string]string{
-			"status": "dead",
-		})
-		return
-	}
-
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(map[string]string{
-		"status": "alive",
-	})
+	_ = json.NewEncoder(w).Encode(map[string]string{"status": "alive"})
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Readiness Probe: /readyz
-// ─────────────────────────────────────────────────────────────────────────────
-// PURPOSE: Determine if the server is ready to serve traffic.
-//
-// RULE: Check CRITICAL dependencies (DB connection, etc.)
-//       If this fails, the pod is removed from the load balancer
-//       but NOT restarted.
-//
-// USED DURING DRAIN: Set ready=false to stop receiving traffic
-//                     before graceful shutdown.
-// ─────────────────────────────────────────────────────────────────────────────
-
 func (hc *HealthChecker) handleReadiness(w http.ResponseWriter, r *http.Request) {
-	// First check: is the server marked as ready?
 	if !hc.ready.Load() {
 		w.WriteHeader(http.StatusServiceUnavailable)
-		json.NewEncoder(w).Encode(map[string]string{
-			"status": "not_ready",
-			"reason": "server is draining or not initialized",
-		})
 		return
 	}
 
-	// Second check: are critical dependencies healthy?
+	// Example: Check DB dependency
 	if hc.deps != nil && hc.deps.DB != nil {
 		if err := hc.deps.DB.PingContext(r.Context()); err != nil {
 			w.WriteHeader(http.StatusServiceUnavailable)
-			json.NewEncoder(w).Encode(map[string]string{
-				"status": "not_ready",
-				"reason": "database connection failed",
-			})
 			return
 		}
 	}
 
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(map[string]string{
-		"status": "ready",
-	})
 }
+
+func (hc *HealthChecker) handleMetrics(w http.ResponseWriter, r *http.Request) {
+	var m runtime.MemStats
+	runtime.ReadMemStats(&m)
+
+	data := map[string]interface{}{
+		"memory_alloc_mb": float64(m.Alloc) / 1048576,
+		"num_goroutines":  runtime.NumGoroutine(),
+		"uptime_seconds":  time.Since(startTime).Seconds(),
+	}
+
+	if hc.db != nil {
+		data["db"] = hc.db.Stats()
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(data)
+}
+
+var startTime = time.Now()

@@ -3,8 +3,7 @@ package config_test
 import (
 	"testing"
 
-	"cashflow_backend/internal/infrastructure/config"
-	platconfig "cashflow_backend/internal/platform/config"
+	"cashflow_backend/internal/platform/config"
 )
 
 func TestParseFlags_AppliesOverrides(t *testing.T) {
@@ -24,7 +23,7 @@ func TestParseFlags_AppliesOverrides(t *testing.T) {
 		t.Fatalf("ParseFlags: %v", err)
 	}
 
-	cfg := platconfig.Defaults()
+	cfg := config.Defaults()
 	flags.Apply(cfg)
 
 	if cfg.Server.Port != "9191" {
@@ -67,7 +66,7 @@ func TestParseFlags_ShortSeparateForm(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ParseFlags: %v", err)
 	}
-	cfg := platconfig.Defaults()
+	cfg := config.Defaults()
 	flags.Apply(cfg)
 	if len(cfg.Runtime.UpdateModules) != 1 || cfg.Runtime.UpdateModules[0] != "stock" {
 		t.Errorf("expected update modules [stock], got %v", cfg.Runtime.UpdateModules)

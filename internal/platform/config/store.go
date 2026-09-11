@@ -3,8 +3,6 @@ package config
 import (
 	"encoding/json"
 	"os"
-
-	platconfig "cashflow_backend/internal/platform/config"
 )
 
 const defaultFilePerm = os.FileMode(0o600)
@@ -14,9 +12,9 @@ const defaultFilePerm = os.FileMode(0o600)
 type Store interface {
 	// LoadInto merges the stored JSON onto cfg. Only keys present in the
 	// document override the pre-populated defaults.
-	LoadInto(cfg *platconfig.Configuration) error
+	LoadInto(cfg *Configuration) error
 	// Save writes the configuration to durable storage.
-	Save(cfg *platconfig.Configuration) error
+	Save(cfg *Configuration) error
 }
 
 // FileStore is a Store backed by a JSON file on disk.
@@ -36,7 +34,7 @@ func (s *FileStore) Path() string { return s.path }
 
 // LoadInto reads the JSON file and merges present keys onto cfg. A missing file
 // (when not required) leaves cfg untouched.
-func (s *FileStore) LoadInto(cfg *platconfig.Configuration) error {
+func (s *FileStore) LoadInto(cfg *Configuration) error {
 	data, err := os.ReadFile(s.path)
 	if err != nil {
 		if os.IsNotExist(err) && s.createIfMissing {
@@ -53,7 +51,7 @@ func (s *FileStore) LoadInto(cfg *platconfig.Configuration) error {
 }
 
 // Save writes the configuration JSON to disk with 0600 permissions.
-func (s *FileStore) Save(cfg *platconfig.Configuration) error {
+func (s *FileStore) Save(cfg *Configuration) error {
 	data, err := json.MarshalIndent(cfg, "", "  ")
 	if err != nil {
 		return err
@@ -69,14 +67,14 @@ type MemoryStore struct {
 
 func NewMemoryStore() *MemoryStore { return &MemoryStore{} }
 
-func (s *MemoryStore) LoadInto(cfg *platconfig.Configuration) error {
+func (s *MemoryStore) LoadInto(cfg *Configuration) error {
 	if len(s.data) == 0 {
 		return nil
 	}
 	return json.Unmarshal(s.data, cfg)
 }
 
-func (s *MemoryStore) Save(cfg *platconfig.Configuration) error {
+func (s *MemoryStore) Save(cfg *Configuration) error {
 	data, err := json.Marshal(cfg)
 	if err != nil {
 		return err

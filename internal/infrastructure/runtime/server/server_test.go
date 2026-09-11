@@ -11,9 +11,9 @@ import (
 	"time"
 
 	httpadapter "cashflow_backend/internal/adapters/http"
-	"cashflow_backend/internal/infrastructure/health"
-	"cashflow_backend/internal/infrastructure/server"
-	"cashflow_backend/internal/infrastructure/worker"
+	"cashflow_backend/internal/infrastructure/runtime/health"
+	"cashflow_backend/internal/infrastructure/runtime/server"
+	"cashflow_backend/internal/infrastructure/runtime/worker"
 	platconfig "cashflow_backend/internal/platform/config"
 )
 

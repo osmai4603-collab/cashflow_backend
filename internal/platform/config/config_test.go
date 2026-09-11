@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"cashflow_backend/internal/infrastructure/config"
+	"cashflow_backend/internal/platform/config"
 )
 
 func TestLoad_Defaults(t *testing.T) {

@@ -279,10 +279,32 @@ func (m *AccountMove) Post(sequence string) error {
 	return nil
 }
 
+// CanEdit checks whether the journal entry can be modified.
+// Posted entries are immutable — reversals or credit notes must be used instead.
+func (m *AccountMove) CanEdit() error {
+	if m.State == MoveStatePosted {
+		return platformerrors.Conflict(
+			"cannot edit a posted journal entry; create a reversal or credit note instead",
+		)
+	}
+	if m.State == MoveStateCancel {
+		return platformerrors.Conflict(
+			"cannot edit a cancelled journal entry; reset to draft first",
+		)
+	}
+	return nil
+}
+
 // Cancel transitions the move to cancelled status.
+// Posted moves cannot be cancelled directly; they must be reversed via CreateReverseMove().
 func (m *AccountMove) Cancel() error {
 	if m.State == MoveStateCancel {
 		return nil
+	}
+	if m.State == MoveStatePosted {
+		return platformerrors.Conflict(
+			"cannot cancel a posted entry; use CreateReverseMove() instead",
+		)
 	}
 	m.State = MoveStateCancel
 	return nil
@@ -295,9 +317,10 @@ func (m *AccountMove) CreateReverseMove(reversalDate time.Time, ref string) *Acc
 	}
 
 	revType := MoveTypeEntry
-	if m.MoveType == MoveTypeOutInvoice {
+	switch m.MoveType {
+	case MoveTypeOutInvoice:
 		revType = MoveTypeOutRefund
-	} else if m.MoveType == MoveTypeInInvoice {
+	case MoveTypeInInvoice:
 		revType = MoveTypeInRefund
 	}
 
@@ -343,4 +366,15 @@ func (m *AccountMove) CreateReverseMove(reversalDate time.Time, ref string) *Acc
 	rev.AmountResidual = m.AmountTotal
 
 	return rev
+}
+
+// ThreadModel implements activity.Threadable.
+func (m *AccountMove) ThreadModel() string { return "account.move" }
+
+// ThreadID implements activity.Threadable.
+func (m *AccountMove) ThreadID() int64 { return m.ID }
+
+// ThreadCompanyID implements activity.Threadable.
+func (m *AccountMove) ThreadCompanyID() int64 {
+	return 1
 }

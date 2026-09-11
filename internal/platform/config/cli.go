@@ -3,8 +3,6 @@ package config
 import (
 	"flag"
 	"fmt"
-
-	platconfig "cashflow_backend/internal/platform/config"
 )
 
 // Flags describes the CLI options that can override the configuration, mirroring
@@ -87,7 +85,7 @@ func ParseFlags(args []string) (*Flags, error) {
 
 // Apply mutates the configuration with the parsed CLI layer (highest priority
 // after runtime overrides).
-func (f *Flags) Apply(cfg *platconfig.Configuration) {
+func (f *Flags) Apply(cfg *Configuration) {
 	if f.HTTPInterface != "" {
 		cfg.Server.Interface = f.HTTPInterface
 	}

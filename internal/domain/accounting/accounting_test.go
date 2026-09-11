@@ -227,4 +227,40 @@ func TestMoveBalanceAndPosting(t *testing.T) {
 			t.Fatalf("reversal move must be balanced: %v", err)
 		}
 	})
+
+	t.Run("Posted Move Immutability and Cancellation Invariants", func(t *testing.T) {
+		draftMove := &accounting.AccountMove{
+			State: accounting.MoveStateDraft,
+		}
+		if err := draftMove.CanEdit(); err != nil {
+			t.Errorf("expected draft move to be editable, got error: %v", err)
+		}
+		if err := draftMove.Cancel(); err != nil {
+			t.Errorf("expected draft move to be cancellable, got error: %v", err)
+		}
+		if draftMove.State != accounting.MoveStateCancel {
+			t.Errorf("expected state to be cancel, got %s", draftMove.State)
+		}
+
+		postedMove := &accounting.AccountMove{
+			State: accounting.MoveStatePosted,
+		}
+		if err := postedMove.CanEdit(); err == nil {
+			t.Errorf("expected posted move to NOT be editable")
+		}
+		if err := postedMove.Cancel(); err == nil {
+			t.Errorf("expected cancelling posted move to return conflict error")
+		}
+
+		cancelledMove := &accounting.AccountMove{
+			State: accounting.MoveStateCancel,
+		}
+		if err := cancelledMove.CanEdit(); err == nil {
+			t.Errorf("expected cancelled move to NOT be editable")
+		}
+		if err := cancelledMove.Cancel(); err != nil {
+			t.Errorf("expected cancelling already cancelled move to succeed (idempotent), got %v", err)
+		}
+	})
 }
+

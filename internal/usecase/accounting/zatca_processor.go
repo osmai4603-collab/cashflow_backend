@@ -200,20 +200,12 @@ func (p *ZatcaProcessor) prepareTemplateData(ctx context.Context, move *accounti
 
 // ValidateXML performs XSD and Schematron validation.
 func (p *ZatcaProcessor) ValidateXML(ctx context.Context, xmlContent []byte) error {
-	// TODO: Integrate with a library that supports Schematron/XSLT validation.
-	// For now, simple check for root element
-	if !bytes.Contains(xmlContent, []byte("<Invoice")) && !bytes.Contains(xmlContent, []byte("<CreditNote")) {
-		return platformerrors.Validation("invalid ZATCA XML: root element not found", nil)
-	}
-	return nil
+	return platformerrors.NotImplemented("ZATCA XML validation not yet implemented; XSD/Schematron required")
 }
 
 // SignXML performs digital signature (XAdES) for ZATCA Phase 2.
 func (p *ZatcaProcessor) SignXML(ctx context.Context, xmlContent []byte, cert *accounting.EDICertificate) ([]byte, error) {
-	// TODO: Implement XML canonicalization (C14N) and SHA-256 signing.
-	// This requires a full XAdES implementation. For now, returning as-is with a log.
-	fmt.Printf("Signing XML with certificate: %s\n", cert.Name)
-	return xmlContent, nil
+	return nil, platformerrors.NotImplemented("ZATCA XML signing not yet implemented; XAdES-BES required")
 }
 
 // GenerateQRCode creates the TLV-encoded Base64 QR code required by ZATCA.
@@ -263,6 +255,5 @@ func (p *ZatcaProcessor) GetTransactionType(ctx context.Context, move *accountin
 
 // EmbedXMLInPDF placeholder for attaching XML to a PDF.
 func (p *ZatcaProcessor) EmbedXMLInPDF(ctx context.Context, pdfPath string, xmlContent []byte) error {
-	// TODO: Use a PDF library (like gofpdf or similar) to attach the XML.
-	return nil
+	return platformerrors.NotImplemented("ZATCA PDF attachment not yet implemented")
 }

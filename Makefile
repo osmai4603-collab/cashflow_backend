@@ -11,7 +11,7 @@ build:
 	go build -o $(MIGRATE_NAME) ./cmd/migrate
 
 run: build
-	@./$(BINARY_NAME)
+	@CASHFLOW_LOG_COLOR=true ./$(BINARY_NAME)
 
 stop:
 	@pid=$$(pgrep -f "^(\./)?$(BINARY_NAME)"); \
@@ -54,4 +54,14 @@ docker-down:
 
 docker-logs:
 	docker compose logs -f
+
+db-up:
+	docker compose up -d postgres redis
+
+db-down:
+	docker compose stop postgres redis
+
+monitor:
+	@chmod +x tool/monitor.sh
+	./tool/monitor.sh
 

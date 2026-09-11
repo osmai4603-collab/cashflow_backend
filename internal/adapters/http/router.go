@@ -35,6 +35,7 @@ import (
 	platconfig "cashflow_backend/internal/platform/config"
 	"cashflow_backend/internal/platform/i18n"
 	"cashflow_backend/internal/platform/response"
+	"cashflow_backend/internal/infrastructure/runtime/metrics"
 )
 
 // HealthRoutes defines the liveness and readiness probe endpoints.
@@ -78,6 +79,7 @@ func NewRouterWithHandlers(
 
 	// Global Middlewares
 	r.Use(middleware.RequestID)
+	r.Use(metrics.Middleware)
 	if proxyMode {
 		// Reverse proxy mode: trust X-Forwarded-For / X-Real-IP (Odoo --proxy-mode).
 		r.Use(middleware.RealIP)
@@ -92,6 +94,8 @@ func NewRouterWithHandlers(
 		r.Get("/livez", health.HandleLiveness)
 		r.Get("/readyz", health.HandleReadiness)
 	}
+	r.Get("/metrics", metrics.Handler)
+	r.Mount("/debug", middleware.Profiler())
 
 	// Root Endpoint
 	if handlers == nil {
@@ -259,6 +263,11 @@ func structuredLogger(logger *slog.Logger) func(next http.Handler) http.Handler 
 			ww := middleware.NewWrapResponseWriter(w, r.ProtoMajor)
 
 			next.ServeHTTP(ww, r)
+
+			// Suppress logging for observability endpoints unless there is an error (status >= 400)
+			if (r.URL.Path == "/metrics" || r.URL.Path == "/livez" || r.URL.Path == "/readyz") && ww.Status() < 400 {
+				return
+			}
 
 			logger.Info("http request",
 				"method", r.Method,

@@ -123,8 +123,7 @@ func encodeTLV(tag byte, value string) []byte {
 }
 
 func TestZatcaReality_TLVStructure(t *testing.T) {
-	// This test "describes reality" by demonstrating how the TLV should be constructed
-	// even if the processor is still using a mock.
+	// This test demonstrates how the TLV should be constructed
 	sellerName := "Cashflow Solutions Ltd"
 	vatNumber := "300000000000003"
 	timestamp := "2026-05-20T10:00:00Z"
@@ -140,8 +139,36 @@ func TestZatcaReality_TLVStructure(t *testing.T) {
 
 	encoded := base64.StdEncoding.EncodeToString(fullTLV)
 
-	// Real-world check: ZATCA Phase 1 QR codes are always TLV encoded and then Base64.
-	if !strings.HasPrefix(encoded, "AQ") { // Tag 1 (0x01) usually starts with 'AQ' in Base64 if length is > 0
-		t.Errorf("Base64 TLV seems incorrect: %s", encoded)
+	decoded, err := base64.StdEncoding.DecodeString(encoded)
+	if err != nil {
+		t.Fatalf("failed to decode base64 TLV: %v", err)
+	}
+
+	if len(decoded) < 2 {
+		t.Fatal("decoded TLV too short")
+	}
+	if decoded[0] != 0x01 {
+		t.Errorf("expected Tag 1 (0x01), got 0x%02x", decoded[0])
+	}
+	if int(decoded[1]) != len(sellerName) {
+		t.Errorf("expected Tag 1 length %d, got %d", len(sellerName), decoded[1])
 	}
 }
+
+func TestZatcaProcessor_NotImplementedStubs(t *testing.T) {
+	processor := accountingusecase.NewZatcaProcessor()
+	ctx := context.Background()
+
+	if err := processor.ValidateXML(ctx, []byte("<xml/>")); err == nil {
+		t.Error("expected ValidateXML to return NotImplemented error")
+	}
+
+	if _, err := processor.SignXML(ctx, []byte("<xml/>"), &accounting.EDICertificate{Name: "cert"}); err == nil {
+		t.Error("expected SignXML to return NotImplemented error")
+	}
+
+	if err := processor.EmbedXMLInPDF(ctx, "invoice.pdf", []byte("<xml/>")); err == nil {
+		t.Error("expected EmbedXMLInPDF to return NotImplemented error")
+	}
+}
+

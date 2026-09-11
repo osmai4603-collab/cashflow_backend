@@ -8,7 +8,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"cashflow_backend/internal/infrastructure/health"
+	"cashflow_backend/internal/infrastructure/runtime/health"
 )
 
 type mockPinger struct {

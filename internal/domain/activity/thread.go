@@ -60,3 +60,12 @@ type ThreadContext struct {
 func (c ThreadContext) String() string {
 	return fmt.Sprintf("%s(%d)", c.ResModel, c.ResID)
 }
+
+// Threadable represents any domain entity that supports Chatter / Messages and Field Tracking.
+// Mirrors Odoo 19 mail.thread mixin.
+type Threadable interface {
+	ThreadModel() string
+	ThreadID() int64
+	ThreadCompanyID() int64
+}
+
