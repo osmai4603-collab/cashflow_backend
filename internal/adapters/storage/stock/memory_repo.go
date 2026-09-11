@@ -16,42 +16,48 @@ import (
 
 // MemoryRepo provides a thread-safe, high-fidelity in-memory implementation of stock.Repository.
 type MemoryRepo struct {
-	mu             sync.RWMutex
-	locations      map[int64]*stock.StockLocation
-	warehouses     map[int64]*stock.Warehouse
-	pickings       map[int64]*stock.StockPicking
-	moves          map[int64]*stock.StockMove
-	moveLines      map[int64]*stock.StockMoveLine
-	lots           map[int64]*stock.StockLot
-	quants         map[string]*stock.StockQuant // key: "productID:locationID"
-	productValues  map[int64]*stock.ProductValue
-	periods        map[int64]*stock.AccountingPeriod
-	orderpoints    map[int64]*stock.Orderpoint
-	landedCosts    map[int64]*stock.LandedCost
-	procurements   map[int64]*stock.ProcurementGroup
-	scraps         map[int64]*stock.StockScrap
-	seqInCounters  map[int]int64
-	seqOutCounters map[int]int64
-	seqIntCounters map[int]int64
-	opCounters     map[int]int64
-	lcCounters     map[int]int64
-	routes         map[int64]*stock.StockRoute
-	rules          map[int64]*stock.StockRule
-	lastLocID      int64
-	lastWhID       int64
-	lastPickingID  int64
-	lastMoveID     int64
-	lastMoveLineID int64
-	lastLotID      int64
-	lastQuantID    int64
-	lastValueID    int64
-	lastPeriodID   int64
-	lastOpID       int64
-	lastLCID       int64
-	lastPGID       int64
-	lastRouteID    int64
-	lastRuleID     int64
-	lastScrapID    int64
+	mu                sync.RWMutex
+	locations         map[int64]*stock.StockLocation
+	warehouses        map[int64]*stock.Warehouse
+	pickings          map[int64]*stock.StockPicking
+	moves             map[int64]*stock.StockMove
+	moveLines         map[int64]*stock.StockMoveLine
+	lots              map[int64]*stock.StockLot
+	quants            map[string]*stock.StockQuant // key: "productID:locationID"
+	productValues     map[int64]*stock.ProductValue
+	periods           map[int64]*stock.AccountingPeriod
+	orderpoints       map[int64]*stock.Orderpoint
+	landedCosts       map[int64]*stock.LandedCost
+	procurements      map[int64]*stock.ProcurementGroup
+	scraps            map[int64]*stock.StockScrap
+	seqInCounters     map[int]int64
+	seqOutCounters    map[int]int64
+	seqIntCounters    map[int]int64
+	opCounters        map[int]int64
+	lcCounters        map[int]int64
+	routes            map[int64]*stock.StockRoute
+	rules             map[int64]*stock.StockRule
+	packagings        map[int64]*stock.ProductPackaging
+	packageTypes      map[int64]*stock.StockPackageType
+	packages          map[int64]*stock.StockPackage
+	lastLocID         int64
+	lastWhID          int64
+	lastPickingID     int64
+	lastMoveID        int64
+	lastMoveLineID    int64
+	lastLotID         int64
+	lastQuantID       int64
+	lastValueID       int64
+	lastPeriodID      int64
+	lastOpID          int64
+	lastLCID          int64
+	lastPGID          int64
+	lastRouteID       int64
+	lastRuleID        int64
+	lastScrapID       int64
+	lastPackagingID   int64
+	lastPackageTypeID int64
+	lastPackageID     int64
 }
 
 // NewMemoryRepo initializes a MemoryRepo pre-seeded with standard locations and warehouse.
@@ -71,6 +77,9 @@ func NewMemoryRepo() *MemoryRepo {
 		procurements:   make(map[int64]*stock.ProcurementGroup),
 		routes:         make(map[int64]*stock.StockRoute),
 		rules:          make(map[int64]*stock.StockRule),
+		packagings:     make(map[int64]*stock.ProductPackaging),
+		packageTypes:   make(map[int64]*stock.StockPackageType),
+		packages:       make(map[int64]*stock.StockPackage),
 		scraps:         make(map[int64]*stock.StockScrap),
 		seqInCounters:  make(map[int]int64),
 		seqOutCounters: make(map[int]int64),
@@ -2053,4 +2062,79 @@ func (r *MemoryRepo) UpdateScrap(ctx context.Context, s *stock.StockScrap) error
 	clone := *s
 	r.scraps[s.ID] = &clone
 	return nil
+}
+
+func (r *MemoryRepo) CreatePackaging(ctx context.Context, packaging *stock.ProductPackaging) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if err := packaging.Validate(); err != nil {
+		return err
+	}
+	r.lastPackagingID++
+	packaging.ID = r.lastPackagingID
+	clone := *packaging
+	r.packagings[packaging.ID] = &clone
+	return nil
+}
+
+func (r *MemoryRepo) GetPackagingByID(ctx context.Context, id int64) (*stock.ProductPackaging, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	packaging, ok := r.packagings[id]
+	if !ok {
+		return nil, platformerrors.NotFound("product packaging not found")
+	}
+	clone := *packaging
+	return &clone, nil
+}
+
+func (r *MemoryRepo) CreatePackageType(ctx context.Context, packageType *stock.StockPackageType) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if packageType.Name == "" || packageType.MaxWeight < 0 {
+		return platformerrors.Validation("invalid package type", nil)
+	}
+	r.lastPackageTypeID++
+	packageType.ID = r.lastPackageTypeID
+	clone := *packageType
+	r.packageTypes[packageType.ID] = &clone
+	return nil
+}
+
+func (r *MemoryRepo) GetPackageTypeByID(ctx context.Context, id int64) (*stock.StockPackageType, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	packageType, ok := r.packageTypes[id]
+	if !ok {
+		return nil, platformerrors.NotFound("package type not found")
+	}
+	clone := *packageType
+	return &clone, nil
+}
+
+func (r *MemoryRepo) CreatePackage(ctx context.Context, packageItem *stock.StockPackage) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if err := packageItem.Validate(); err != nil {
+		return err
+	}
+	if _, ok := r.locations[packageItem.LocationID]; !ok {
+		return platformerrors.NotFound("package location not found")
+	}
+	r.lastPackageID++
+	packageItem.ID = r.lastPackageID
+	clone := *packageItem
+	r.packages[packageItem.ID] = &clone
+	return nil
+}
+
+func (r *MemoryRepo) GetPackageByID(ctx context.Context, id int64) (*stock.StockPackage, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	packageItem, ok := r.packages[id]
+	if !ok {
+		return nil, platformerrors.NotFound("package not found")
+	}
+	clone := *packageItem
+	return &clone, nil
 }

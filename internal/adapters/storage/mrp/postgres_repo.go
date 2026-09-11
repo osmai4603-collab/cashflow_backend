@@ -301,6 +301,48 @@ func (r *PostgresRepo) GetUnbuildByID(ctx context.Context, id int64) (*mrp.Unbui
 	return uo, nil
 }
 
+func (r *PostgresRepo) CreateWorkorderTimeLog(ctx context.Context, log *mrp.WorkorderTimeLog) error {
+	return r.pool.QueryRow(ctx, `INSERT INTO mrp_workorder_time_logs (workorder_id, user_id, date_start, date_end, duration, loss_id) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id`, log.WorkorderID, log.UserID, log.DateStart, log.DateEnd, log.Duration, log.LossID).Scan(&log.ID)
+}
+
+func (r *PostgresRepo) ListWorkorderTimeLogs(ctx context.Context, workorderID int64) ([]mrp.WorkorderTimeLog, error) {
+	rows, err := r.pool.Query(ctx, `SELECT id, workorder_id, user_id, date_start, date_end, duration, loss_id FROM mrp_workorder_time_logs WHERE workorder_id=$1 ORDER BY date_start`, workorderID)
+	if err != nil {
+		return nil, platformerrors.Internal("failed to list workorder time logs", err)
+	}
+	defer rows.Close()
+	result := make([]mrp.WorkorderTimeLog, 0)
+	for rows.Next() {
+		var log mrp.WorkorderTimeLog
+		if err := rows.Scan(&log.ID, &log.WorkorderID, &log.UserID, &log.DateStart, &log.DateEnd, &log.Duration, &log.LossID); err != nil {
+			return nil, platformerrors.Internal("failed to scan workorder time log", err)
+		}
+		result = append(result, log)
+	}
+	return result, rows.Err()
+}
+
+func (r *PostgresRepo) CreateWorkcenterCalendar(ctx context.Context, calendar *mrp.WorkcenterCalendar) error {
+	return r.pool.QueryRow(ctx, `INSERT INTO mrp_workcenter_calendars (workcenter_id, day_of_week, hour_from, hour_to, attendance_type, company_id) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id`, calendar.WorkcenterID, calendar.DayOfWeek, calendar.HourFrom, calendar.HourTo, calendar.AttendanceType, calendar.CompanyID).Scan(&calendar.ID)
+}
+
+func (r *PostgresRepo) ListWorkcenterCalendars(ctx context.Context, workcenterID int64) ([]mrp.WorkcenterCalendar, error) {
+	rows, err := r.pool.Query(ctx, `SELECT id, workcenter_id, day_of_week, hour_from, hour_to, attendance_type, company_id FROM mrp_workcenter_calendars WHERE workcenter_id=$1 ORDER BY day_of_week, hour_from`, workcenterID)
+	if err != nil {
+		return nil, platformerrors.Internal("failed to list workcenter calendars", err)
+	}
+	defer rows.Close()
+	result := make([]mrp.WorkcenterCalendar, 0)
+	for rows.Next() {
+		var calendar mrp.WorkcenterCalendar
+		if err := rows.Scan(&calendar.ID, &calendar.WorkcenterID, &calendar.DayOfWeek, &calendar.HourFrom, &calendar.HourTo, &calendar.AttendanceType, &calendar.CompanyID); err != nil {
+			return nil, platformerrors.Internal("failed to scan workcenter calendar", err)
+		}
+		result = append(result, calendar)
+	}
+	return result, rows.Err()
+}
+
 func (r *PostgresRepo) DeleteWorkcenter(ctx context.Context, id int64) error {
 	query := `DELETE FROM mrp_workcenters WHERE id = $1`
 	tag, err := r.pool.Exec(ctx, query, id)

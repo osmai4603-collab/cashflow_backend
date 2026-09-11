@@ -55,8 +55,9 @@ type ProductionOrder struct {
 	State            ProductionState  `json:"state"`
 	ReservationState ReservationState `json:"reservation_state"`
 
-	MoveRawIDs      []int64 `json:"move_raw_ids,omitempty"`      // StockMoves for components
-	MoveFinishedIDs []int64 `json:"move_finished_ids,omitempty"` // StockMoves for finished products
+	MoveRawIDs      []int64            `json:"move_raw_ids,omitempty"`      // StockMoves for components
+	MoveFinishedIDs []int64            `json:"move_finished_ids,omitempty"` // StockMoves for finished products
+	Operations      []RoutingOperation `json:"operations,omitempty"`
 
 	CompanyID int64        `json:"company_id"`
 	Audit     audit.Fields `json:"audit"`

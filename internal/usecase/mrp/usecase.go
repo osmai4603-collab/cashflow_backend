@@ -25,6 +25,25 @@ type Usecase struct {
 	productRepo product.Repository
 }
 
+// ScheduleProduction computes and returns a production plan using persisted workcenter calendars.
+func (u *Usecase) ScheduleProduction(ctx context.Context, id int64) (*mrp.SchedulingResult, error) {
+	mo, err := u.repo.GetProductionByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	calendars := make([]mrp.WorkcenterCalendar, 0)
+	if phase2, ok := u.repo.(mrp.Phase2Repository); ok {
+		for _, operation := range mo.Operations {
+			items, listErr := phase2.ListWorkcenterCalendars(ctx, operation.WorkcenterID)
+			if listErr != nil {
+				return nil, listErr
+			}
+			calendars = append(calendars, items...)
+		}
+	}
+	return mrp.NewSchedulingEngine(calendars).ScheduleProduction(ctx, mo)
+}
+
 func NewUsecase(repo mrp.Repository, seq sequenceusecase.UseCase, stockRepo stock.Repository, acc *accountingusecase.UseCase, products ...product.Repository) *Usecase {
 	u := &Usecase{
 		repo:       repo,
@@ -467,14 +486,20 @@ func (u *Usecase) StartWorkorder(ctx context.Context, userID int64, id int64) (*
 		return nil, fmt.Errorf("cannot start blocked work order")
 	}
 
+	if err := wo.Start(); err != nil {
+		return nil, err
+	}
 	now := time.Now()
-	wo.State = mrp.WorkorderStateProgress
-	wo.DateStart = &now
 	wo.Audit.UpdatedAt = now
 	wo.Audit.UpdatedBy = &userID
 
 	if err := u.repo.UpdateWorkorder(ctx, wo); err != nil {
 		return nil, err
+	}
+	if phase2, ok := u.repo.(mrp.Phase2Repository); ok && len(wo.TimeLogs) > 0 {
+		if err := phase2.CreateWorkorderTimeLog(ctx, &wo.TimeLogs[len(wo.TimeLogs)-1]); err != nil {
+			return nil, err
+		}
 	}
 
 	// Update MO state to In Progress if it's the first WO started

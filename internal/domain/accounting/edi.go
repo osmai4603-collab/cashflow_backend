@@ -29,8 +29,8 @@ const (
 type EDITransactionType string
 
 const (
-	EDITransactionStandard    EDITransactionType = "standard"    // B2B
-	EDITransactionSimplified  EDITransactionType = "simplified"  // B2C
+	EDITransactionStandard    EDITransactionType = "standard"   // B2B
+	EDITransactionSimplified  EDITransactionType = "simplified" // B2C
 	EDITransactionSelfBilling EDITransactionType = "self_billing"
 	EDITransactionThirdParty  EDITransactionType = "third_party"
 	EDITransactionExport      EDITransactionType = "export"
@@ -47,6 +47,12 @@ type EDIDocument struct {
 	State           EDIState           `json:"state"`
 	XMLContent      []byte             `json:"xml_content"`
 	Hash            string             `json:"hash"` // Previous Invoice Hash (PIH) for chaining
+	UUID            string             `json:"uuid,omitempty"`
+	PreviousHash    string             `json:"previous_hash,omitempty"`
+	Signature       string             `json:"signature,omitempty"`
+	ZATCAStatus     string             `json:"zatca_status,omitempty"`
+	ZATCARequestID  string             `json:"zatca_request_id,omitempty"`
+	ClearedXML      string             `json:"cleared_xml,omitempty"`
 	QRCode          string             `json:"qr_code"`
 	ErrorMsg        string             `json:"error_msg,omitempty"`
 	SentAt          *time.Time         `json:"sent_at,omitempty"`

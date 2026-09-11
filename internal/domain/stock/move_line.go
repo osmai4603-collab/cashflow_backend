@@ -16,6 +16,7 @@ type StockMoveLine struct {
 	ProductUom       *int64       `json:"product_uom,omitempty"`
 	LotID            *int64       `json:"lot_id,omitempty"`
 	PackageID        *int64       `json:"package_id,omitempty"`
+	ResultPackageID  *int64       `json:"result_package_id,omitempty"`
 	OwnerID          *int64       `json:"owner_id,omitempty"`
 	LocationID       int64        `json:"location_id"`
 	LocationDestID   int64        `json:"location_dest_id"`

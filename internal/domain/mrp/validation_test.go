@@ -112,3 +112,81 @@ func TestWorkorderValidate(t *testing.T) {
 		t.Fatal("time must be valid")
 	}
 }
+
+func TestWorkorderTimeTracking(t *testing.T) {
+	workorder := &Workorder{ID: 3, ProductionID: 21, WorkcenterID: 5, Name: "Assemble", State: WorkorderStateReady}
+	if err := workorder.Start(); err != nil {
+		t.Fatalf("start failed: %v", err)
+	}
+	if workorder.State != WorkorderStateProgress || len(workorder.TimeLogs) != 1 {
+		t.Fatalf("expected active work order and one time log, got state=%q logs=%d", workorder.State, len(workorder.TimeLogs))
+	}
+	if err := workorder.Pause(); err != nil {
+		t.Fatalf("pause failed: %v", err)
+	}
+	if workorder.State != WorkorderStatePaused || workorder.Duration < 0 || workorder.TimeLogs[0].DateEnd == nil {
+		t.Fatalf("expected closed paused interval, got state=%q duration=%v", workorder.State, workorder.Duration)
+	}
+	if err := workorder.Resume(); err != nil {
+		t.Fatalf("resume failed: %v", err)
+	}
+	if err := workorder.Finish(4); err != nil {
+		t.Fatalf("finish failed: %v", err)
+	}
+	if workorder.State != WorkorderStateDone || workorder.QtyProduced != 4 || workorder.DateFinished == nil {
+		t.Fatalf("expected completed work order, got state=%q qty=%v", workorder.State, workorder.QtyProduced)
+	}
+	if len(workorder.TimeLogs) != 2 || workorder.TimeLogs[1].DateEnd == nil || workorder.Duration < workorder.TimeLogs[0].Duration {
+		t.Fatalf("expected two closed intervals, got logs=%d duration=%v", len(workorder.TimeLogs), workorder.Duration)
+	}
+}
+
+func TestSchedulingEngineForwardAndBackward(t *testing.T) {
+	start := time.Date(2026, time.March, 9, 8, 0, 0, 0, time.UTC)
+	operations := []RoutingOperation{
+		{ID: 2, WorkcenterID: 20, Sequence: 20, TimeCycleManual: 30},
+		{ID: 1, WorkcenterID: 10, Sequence: 10, TimeCycleManual: 60},
+	}
+	engine := NewSchedulingEngine(nil)
+	forward, err := engine.ForwardSchedule(nil, start, operations)
+	if err != nil {
+		t.Fatalf("forward schedule failed: %v", err)
+	}
+	if len(forward) != 2 || forward[0].OperationID != 1 || !forward[1].PlannedEnd.Equal(start.Add(90*time.Minute)) {
+		t.Fatalf("unexpected forward schedule: %+v", forward)
+	}
+	backward, err := engine.BackwardSchedule(nil, start.Add(90*time.Minute), operations)
+	if err != nil {
+		t.Fatalf("backward schedule failed: %v", err)
+	}
+	if len(backward) != 2 || !backward[0].PlannedStart.Equal(start) || !backward[1].PlannedEnd.Equal(start.Add(90*time.Minute)) {
+		t.Fatalf("unexpected backward schedule: %+v", backward)
+	}
+}
+
+func TestCalculateOEE(t *testing.T) {
+	from := time.Date(2026, time.March, 9, 8, 0, 0, 0, time.UTC)
+	to := from.Add(8 * time.Hour)
+	metrics, err := CalculateOEE(10, from, to, 480, 4, 100, 5, []WorkcenterProductivity{{WorkcenterID: 10, LossType: LossTypeProductive, Duration: 400}})
+	if err != nil {
+		t.Fatalf("calculate OEE failed: %v", err)
+	}
+	if metrics.Availability < 83.33 || metrics.Availability > 83.34 || metrics.Quality != 95 || metrics.OEE <= 0 {
+		t.Fatalf("unexpected OEE metrics: %+v", metrics)
+	}
+}
+
+func TestSubcontractingWorkflow(t *testing.T) {
+	order := &SubcontractingOrder{ProductionID: 1, SubcontractorID: 2}
+	if err := order.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	for _, step := range []func() error{order.ConfirmPurchase, order.MarkSent, order.MarkReceived, order.Finish} {
+		if err := step(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if order.State != SubcontractStateDone {
+		t.Fatalf("expected done, got %q", order.State)
+	}
+}

@@ -1,0 +1,13 @@
+DROP TABLE IF EXISTS payment_webhook_logs;
+DROP TABLE IF EXISTS payment_refunds;
+DROP TABLE IF EXISTS payment_tokens;
+DROP TABLE IF EXISTS payment_provider_configs;
+ALTER TABLE payment_providers DROP COLUMN IF EXISTS journal_id;
+ALTER TABLE payment_providers DROP COLUMN IF EXISTS capture_manually;
+ALTER TABLE payment_providers DROP COLUMN IF EXISTS allow_tokenize;
+ALTER TABLE payment_providers DROP COLUMN IF EXISTS webhook_secret;
+ALTER TABLE payment_providers DROP COLUMN IF EXISTS support_authorize;
+ALTER TABLE payment_providers DROP COLUMN IF EXISTS support_tokenize;
+ALTER TABLE payment_providers DROP COLUMN IF EXISTS support_refund;
+ALTER TABLE payment_providers DROP COLUMN IF EXISTS inline_form;
+ALTER TABLE payment_providers DROP COLUMN IF EXISTS module_state;

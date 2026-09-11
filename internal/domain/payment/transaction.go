@@ -20,14 +20,23 @@ const (
 )
 
 type PaymentProvider struct {
-	ID        int64     `json:"id"`
-	Name      string    `json:"name"`
-	Code      string    `json:"code"` // e.g., "stripe", "paypal", "tap"
-	State     string    `json:"state"` // "enabled", "disabled", "test"
-	Active    bool      `json:"active"`
-	CompanyID int64     `json:"company_id"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	ID               int64     `json:"id"`
+	Name             string    `json:"name"`
+	Code             string    `json:"code"`  // e.g., "stripe", "paypal", "tap"
+	State            string    `json:"state"` // "enabled", "disabled", "test"
+	Active           bool      `json:"active"`
+	CompanyID        int64     `json:"company_id"`
+	ModuleState      string    `json:"module_state"`
+	InlineFormView   bool      `json:"inline_form"`
+	SupportRefund    string    `json:"support_refund"`
+	SupportTokenize  bool      `json:"support_tokenize"`
+	SupportAuthorize bool      `json:"support_authorize"`
+	WebhookSecret    string    `json:"webhook_secret,omitempty"`
+	AllowTokenize    bool      `json:"allow_tokenize"`
+	CaptureManually  bool      `json:"capture_manually"`
+	JournalID        int64     `json:"journal_id"`
+	CreatedAt        time.Time `json:"created_at"`
+	UpdatedAt        time.Time `json:"updated_at"`
 }
 
 type PaymentTransaction struct {
@@ -111,4 +120,3 @@ func (t *PaymentTransaction) Transition(to TransactionState) error {
 	t.UpdatedAt = time.Now().UTC()
 	return nil
 }
-

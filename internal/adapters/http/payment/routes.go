@@ -21,6 +21,8 @@ func RegisterRoutes(r chi.Router, h *Handler, authorizers ...auth.Authorizer) {
 	r.Route("/payments", func(pr chi.Router) {
 		access(pr, auth.ActionCreate).Post("/", h.CreatePayment)
 		access(pr, auth.ActionRead).Get("/", h.ListPayments)
+		access(pr, auth.ActionCreate).Post("/initiate", h.InitiateTransaction)
+		access(pr, auth.ActionWrite).Post("/webhook/{code}", h.ProcessTransactionWebhook)
 
 		// Static routes before parameterized routes
 		access(pr, auth.ActionRead).Get("/receivable", h.GetReceivableAging)
@@ -33,5 +35,7 @@ func RegisterRoutes(r chi.Router, h *Handler, authorizers ...auth.Authorizer) {
 		access(pr, auth.ActionWrite).Post("/{id}/post", h.PostPayment)
 		access(pr, auth.ActionWrite).Post("/{id}/cancel", h.CancelPayment)
 		access(pr, auth.ActionWrite).Post("/{id}/reconcile", h.ReconcilePayment)
+		access(pr, auth.ActionWrite).Post("/{id}/capture", h.CaptureTransaction)
+		access(pr, auth.ActionWrite).Post("/{id}/void", h.VoidTransaction)
 	})
 }

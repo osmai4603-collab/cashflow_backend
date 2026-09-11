@@ -1,0 +1,11 @@
+DROP TABLE IF EXISTS edi_zatca_submissions;
+ALTER TABLE edi_certificates DROP COLUMN IF EXISTS onboarding_status;
+ALTER TABLE edi_certificates DROP COLUMN IF EXISTS compliance_request_id;
+ALTER TABLE edi_certificates DROP COLUMN IF EXISTS production_csid;
+ALTER TABLE edi_certificates DROP COLUMN IF EXISTS compliance_csid;
+ALTER TABLE edi_documents DROP COLUMN IF EXISTS cleared_xml;
+ALTER TABLE edi_documents DROP COLUMN IF EXISTS zatca_request_id;
+ALTER TABLE edi_documents DROP COLUMN IF EXISTS zatca_status;
+ALTER TABLE edi_documents DROP COLUMN IF EXISTS signature;
+ALTER TABLE edi_documents DROP COLUMN IF EXISTS previous_hash;
+ALTER TABLE edi_documents DROP COLUMN IF EXISTS uuid;

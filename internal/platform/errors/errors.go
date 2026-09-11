@@ -97,6 +97,10 @@ func Forbidden(message string) *AppError {
 	}
 }
 
+func PermissionDenied(message string) *AppError {
+	return Forbidden(message)
+}
+
 func BadRequest(message string, err ...error) *AppError {
 	var original error
 	if len(err) > 0 {

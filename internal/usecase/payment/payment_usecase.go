@@ -35,6 +35,10 @@ type PartnerRepository interface {
 	GetByID(ctx context.Context, id int64) (*partner.Partner, error)
 }
 
+type ProviderRegistry interface {
+	Get(string) (payment.PaymentProviderInterface, error)
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Input DTOs
 // ─────────────────────────────────────────────────────────────────────────────
@@ -77,6 +81,7 @@ type UseCase struct {
 	accountingService AccountingService
 	partnerRepo       PartnerRepository
 	logger            *slog.Logger
+	providers         ProviderRegistry
 }
 
 // New constructs a new Payment UseCase.
@@ -85,12 +90,18 @@ func New(
 	accountingService AccountingService,
 	partnerRepo PartnerRepository,
 	logger *slog.Logger,
+	providers ...ProviderRegistry,
 ) *UseCase {
+	var registry ProviderRegistry
+	if len(providers) > 0 {
+		registry = providers[0]
+	}
 	return &UseCase{
 		repo:              repo,
 		accountingService: accountingService,
 		partnerRepo:       partnerRepo,
 		logger:            logger,
+		providers:         registry,
 	}
 }
 

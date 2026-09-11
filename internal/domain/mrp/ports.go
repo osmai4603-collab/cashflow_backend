@@ -44,6 +44,15 @@ type Repository interface {
 	GetUnbuildByID(ctx context.Context, id int64) (*UnbuildOrder, error)
 }
 
+// Phase2Repository persists the advanced MRP scheduling and time-tracking data.
+// It is intentionally separate so existing adapters can adopt Phase 2 incrementally.
+type Phase2Repository interface {
+	CreateWorkorderTimeLog(context.Context, *WorkorderTimeLog) error
+	ListWorkorderTimeLogs(context.Context, int64) ([]WorkorderTimeLog, error)
+	CreateWorkcenterCalendar(context.Context, *WorkcenterCalendar) error
+	ListWorkcenterCalendars(context.Context, int64) ([]WorkcenterCalendar, error)
+}
+
 // WorkcenterFilter defines criteria for listing workcenters.
 type WorkcenterFilter struct {
 	CompanyID *int64

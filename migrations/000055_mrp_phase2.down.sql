@@ -1,0 +1,9 @@
+DROP TABLE IF EXISTS mrp_quality_checks;
+DROP TABLE IF EXISTS mrp_quality_points;
+DROP TABLE IF EXISTS mrp_subcontracting_orders;
+DROP TABLE IF EXISTS mrp_subcontracting_bom;
+DROP TABLE IF EXISTS mrp_workcenter_productivity;
+DROP TABLE IF EXISTS mrp_productivity_losses;
+DROP TABLE IF EXISTS mrp_capacity_slots;
+DROP TABLE IF EXISTS mrp_workcenter_calendars;
+DROP TABLE IF EXISTS mrp_workorder_time_logs;

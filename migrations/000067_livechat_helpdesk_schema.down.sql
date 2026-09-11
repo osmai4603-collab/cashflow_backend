@@ -1,0 +1,10 @@
+DROP TABLE IF EXISTS knowledge_articles;
+DROP TABLE IF EXISTS knowledge_categories;
+DROP TABLE IF EXISTS helpdesk_tickets;
+DROP TABLE IF EXISTS helpdesk_sla_policies;
+DROP TABLE IF EXISTS helpdesk_stages;
+DROP TABLE IF EXISTS helpdesk_teams;
+DROP TABLE IF EXISTS livechat_messages;
+DROP TABLE IF EXISTS livechat_sessions;
+DROP TABLE IF EXISTS livechat_channel_users;
+DROP TABLE IF EXISTS livechat_channels;

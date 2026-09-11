@@ -1,0 +1,9 @@
+DROP TABLE IF EXISTS pos_sync_batches;
+DROP TABLE IF EXISTS pos_cash_movements;
+DROP TABLE IF EXISTS pos_payments;
+DROP TABLE IF EXISTS pos_order_lines;
+DROP TABLE IF EXISTS pos_orders;
+DROP TABLE IF EXISTS pos_sessions;
+DROP TABLE IF EXISTS pos_config_payment_method_rel;
+DROP TABLE IF EXISTS pos_payment_methods;
+DROP TABLE IF EXISTS pos_configs;

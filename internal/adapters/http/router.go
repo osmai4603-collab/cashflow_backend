@@ -13,6 +13,7 @@ import (
 	analytichttp "cashflow_backend/internal/adapters/http/analytic"
 	attachmenthttp "cashflow_backend/internal/adapters/http/attachment"
 	bankstatementhttp "cashflow_backend/internal/adapters/http/bankstatement"
+	calendarhttp "cashflow_backend/internal/adapters/http/calendar"
 	companyhttp "cashflow_backend/internal/adapters/http/company"
 	crmhttp "cashflow_backend/internal/adapters/http/crm"
 	currencyhttp "cashflow_backend/internal/adapters/http/currency"
@@ -23,19 +24,23 @@ import (
 	maintenancehttp "cashflow_backend/internal/adapters/http/maintenance"
 	partnerhttp "cashflow_backend/internal/adapters/http/partner"
 	paymenthttp "cashflow_backend/internal/adapters/http/payment"
+	poshttp "cashflow_backend/internal/adapters/http/pos"
 	producthttp "cashflow_backend/internal/adapters/http/product"
 	projecthttp "cashflow_backend/internal/adapters/http/project"
 	purchasehttp "cashflow_backend/internal/adapters/http/purchase"
+	recruitmenthttp "cashflow_backend/internal/adapters/http/recruitment"
 	reporthttp "cashflow_backend/internal/adapters/http/report"
+	resourcehttp "cashflow_backend/internal/adapters/http/resource"
 	salehttp "cashflow_backend/internal/adapters/http/sale"
 	sequencehttp "cashflow_backend/internal/adapters/http/sequence"
 	stockhttp "cashflow_backend/internal/adapters/http/stock"
+	timesheethttp "cashflow_backend/internal/adapters/http/timesheet"
 	userhttp "cashflow_backend/internal/adapters/http/user"
+	"cashflow_backend/internal/infrastructure/runtime/metrics"
 	"cashflow_backend/internal/platform/auth"
 	platconfig "cashflow_backend/internal/platform/config"
 	"cashflow_backend/internal/platform/i18n"
 	"cashflow_backend/internal/platform/response"
-	"cashflow_backend/internal/infrastructure/runtime/metrics"
 )
 
 // HealthRoutes defines the liveness and readiness probe endpoints.
@@ -153,6 +158,9 @@ func NewRouterWithHandlers(
 		if handlers.BankStatement != nil {
 			bankstatementhttp.RegisterRoutes(v1, handlers.BankStatement, authorizer)
 		}
+		if handlers.Calendar != nil {
+			calendarhttp.RegisterRoutes(v1, handlers.Calendar, authorizer)
+		}
 
 		// Business Modules
 		if handlers.Partner != nil {
@@ -184,6 +192,18 @@ func NewRouterWithHandlers(
 		}
 		if handlers.Payment != nil {
 			paymenthttp.RegisterRoutes(v1, handlers.Payment, authorizer)
+		}
+		if handlers.Pos != nil {
+			poshttp.RegisterRoutes(v1, handlers.Pos)
+		}
+		if handlers.Recruitment != nil {
+			recruitmenthttp.RegisterRoutes(v1, handlers.Recruitment)
+		}
+		if handlers.Timesheet != nil {
+			timesheethttp.RegisterRoutes(v1, handlers.Timesheet)
+		}
+		if handlers.Resource != nil {
+			resourcehttp.RegisterRoutes(v1, handlers.Resource)
 		}
 		if handlers.HR != nil {
 			hrhttp.RegisterRoutes(v1, handlers.HR, authorizer)

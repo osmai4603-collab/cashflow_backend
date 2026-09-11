@@ -50,38 +50,148 @@ type PostgresRepo struct {
 	pool *pgxpool.Pool
 }
 
-func (r *PostgresRepo) CreateRoute(context.Context, *stock.StockRoute) error {
-	return platformerrors.Internal("stock route persistence is not implemented", nil)
+func (r *PostgresRepo) CreateRoute(ctx context.Context, route *stock.StockRoute) error {
+	return r.pool.QueryRow(ctx, `INSERT INTO stock_routes (name, sequence, active, company_id) VALUES ($1,$2,$3,$4) RETURNING id`, route.Name, route.Sequence, route.Active, route.CompanyID).Scan(&route.ID)
 }
 
-func (r *PostgresRepo) GetRouteByID(context.Context, int64) (*stock.StockRoute, error) {
-	return nil, platformerrors.Internal("stock route persistence is not implemented", nil)
+func (r *PostgresRepo) GetRouteByID(ctx context.Context, id int64) (*stock.StockRoute, error) {
+	route := &stock.StockRoute{}
+	if err := r.pool.QueryRow(ctx, `SELECT id, name, sequence, active, company_id FROM stock_routes WHERE id=$1`, id).Scan(&route.ID, &route.Name, &route.Sequence, &route.Active, &route.CompanyID); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, platformerrors.NotFound("stock route not found")
+		}
+		return nil, platformerrors.Internal("failed to fetch stock route", err)
+	}
+	return route, nil
 }
 
-func (r *PostgresRepo) ListRoutes(context.Context, *int64) ([]stock.StockRoute, error) {
-	return nil, platformerrors.Internal("stock route persistence is not implemented", nil)
+func (r *PostgresRepo) ListRoutes(ctx context.Context, companyID *int64) ([]stock.StockRoute, error) {
+	query := `SELECT id, name, sequence, active, company_id FROM stock_routes WHERE ($1::bigint IS NULL OR company_id=$1) ORDER BY sequence, id`
+	rows, err := r.pool.Query(ctx, query, companyID)
+	if err != nil {
+		return nil, platformerrors.Internal("failed to list stock routes", err)
+	}
+	defer rows.Close()
+	result := make([]stock.StockRoute, 0)
+	for rows.Next() {
+		var route stock.StockRoute
+		if err := rows.Scan(&route.ID, &route.Name, &route.Sequence, &route.Active, &route.CompanyID); err != nil {
+			return nil, err
+		}
+		result = append(result, route)
+	}
+	return result, rows.Err()
 }
 
-func (r *PostgresRepo) CreateRule(context.Context, *stock.StockRule) error {
-	return platformerrors.Internal("stock rule persistence is not implemented", nil)
+func (r *PostgresRepo) CreateRule(ctx context.Context, rule *stock.StockRule) error {
+	return r.pool.QueryRow(ctx, `INSERT INTO stock_rules (name, action, route_id, location_src_id, location_dest_id, picking_type_id, procure_method, warehouse_id, company_id, sequence, active) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id`, rule.Name, string(rule.Action), rule.RouteID, rule.LocationSrcID, rule.LocationDestID, rule.PickingTypeID, string(rule.ProcureMethod), rule.WarehouseID, rule.CompanyID, rule.Sequence, rule.Active).Scan(&rule.ID)
 }
 
-func (r *PostgresRepo) GetRuleByID(context.Context, int64) (*stock.StockRule, error) {
-	return nil, platformerrors.Internal("stock rule persistence is not implemented", nil)
+func (r *PostgresRepo) GetRuleByID(ctx context.Context, id int64) (*stock.StockRule, error) {
+	rule := &stock.StockRule{}
+	var action, method string
+	if err := r.pool.QueryRow(ctx, `SELECT id, name, action, route_id, location_src_id, location_dest_id, picking_type_id, procure_method, warehouse_id, company_id, sequence, active FROM stock_rules WHERE id=$1`, id).Scan(&rule.ID, &rule.Name, &action, &rule.RouteID, &rule.LocationSrcID, &rule.LocationDestID, &rule.PickingTypeID, &method, &rule.WarehouseID, &rule.CompanyID, &rule.Sequence, &rule.Active); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, platformerrors.NotFound("stock rule not found")
+		}
+		return nil, platformerrors.Internal("failed to fetch stock rule", err)
+	}
+	rule.Action = stock.ActionType(action)
+	rule.ProcureMethod = stock.ProcurementMethod(method)
+	return rule, nil
 }
 
-func (r *PostgresRepo) ListRulesByRoute(context.Context, int64) ([]stock.StockRule, error) {
-	return nil, platformerrors.Internal("stock rule persistence is not implemented", nil)
+func (r *PostgresRepo) ListRulesByRoute(ctx context.Context, routeID int64) ([]stock.StockRule, error) {
+	rows, err := r.pool.Query(ctx, `SELECT id, name, action, route_id, location_src_id, location_dest_id, picking_type_id, procure_method, warehouse_id, company_id, sequence, active FROM stock_rules WHERE route_id=$1 ORDER BY sequence, id`, routeID)
+	if err != nil {
+		return nil, platformerrors.Internal("failed to list stock rules", err)
+	}
+	defer rows.Close()
+	result := make([]stock.StockRule, 0)
+	for rows.Next() {
+		var rule stock.StockRule
+		var action, method string
+		if err := rows.Scan(&rule.ID, &rule.Name, &action, &rule.RouteID, &rule.LocationSrcID, &rule.LocationDestID, &rule.PickingTypeID, &method, &rule.WarehouseID, &rule.CompanyID, &rule.Sequence, &rule.Active); err != nil {
+			return nil, err
+		}
+		rule.Action = stock.ActionType(action)
+		rule.ProcureMethod = stock.ProcurementMethod(method)
+		result = append(result, rule)
+	}
+	return result, rows.Err()
 }
 
-func (r *PostgresRepo) FindRule(context.Context, int64, int64) (*stock.StockRule, error) {
-	return nil, platformerrors.Internal("stock rule persistence is not implemented", nil)
+func (r *PostgresRepo) FindRule(ctx context.Context, routeID int64, locationDestID int64) (*stock.StockRule, error) {
+	rule := &stock.StockRule{}
+	var action, method string
+	if err := r.pool.QueryRow(ctx, `SELECT id, name, action, route_id, location_src_id, location_dest_id, picking_type_id, procure_method, warehouse_id, company_id, sequence, active FROM stock_rules WHERE route_id=$1 AND location_dest_id=$2 AND active=true ORDER BY sequence, id LIMIT 1`, routeID, locationDestID).Scan(&rule.ID, &rule.Name, &action, &rule.RouteID, &rule.LocationSrcID, &rule.LocationDestID, &rule.PickingTypeID, &method, &rule.WarehouseID, &rule.CompanyID, &rule.Sequence, &rule.Active); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, platformerrors.NotFound("stock rule not found")
+		}
+		return nil, platformerrors.Internal("failed to find stock rule", err)
+	}
+	rule.Action = stock.ActionType(action)
+	rule.ProcureMethod = stock.ProcurementMethod(method)
+	return rule, nil
 }
 
 func (r *PostgresRepo) CreateScrap(context.Context, *stock.StockScrap) error {
 	return platformerrors.Internal("stock scrap persistence is not implemented", nil)
 }
 
+func (r *PostgresRepo) CreatePackaging(ctx context.Context, packaging *stock.ProductPackaging) error {
+	if err := packaging.Validate(); err != nil {
+		return err
+	}
+	return r.pool.QueryRow(ctx, `INSERT INTO product_packagings (name, product_id, barcode, qty, package_type_id, company_id, active) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id`, packaging.Name, packaging.ProductID, packaging.Barcode, packaging.Qty, packaging.PackageTypeID, packaging.CompanyID, packaging.Active).Scan(&packaging.ID)
+}
+
+func (r *PostgresRepo) GetPackagingByID(ctx context.Context, id int64) (*stock.ProductPackaging, error) {
+	item := &stock.ProductPackaging{}
+	if err := r.pool.QueryRow(ctx, `SELECT id, name, product_id, barcode, qty, package_type_id, company_id, active FROM product_packagings WHERE id=$1`, id).Scan(&item.ID, &item.Name, &item.ProductID, &item.Barcode, &item.Qty, &item.PackageTypeID, &item.CompanyID, &item.Active); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, platformerrors.NotFound("product packaging not found")
+		}
+		return nil, platformerrors.Internal("failed to fetch product packaging", err)
+	}
+	return item, nil
+}
+
+func (r *PostgresRepo) CreatePackageType(ctx context.Context, packageType *stock.StockPackageType) error {
+	if packageType.Name == "" || packageType.MaxWeight < 0 {
+		return platformerrors.Validation("invalid package type", nil)
+	}
+	return r.pool.QueryRow(ctx, `INSERT INTO stock_package_types (name, height, width, length, max_weight, barcode, sequence, company_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id`, packageType.Name, packageType.Height, packageType.Width, packageType.Length, packageType.MaxWeight, packageType.Barcode, packageType.Sequence, packageType.CompanyID).Scan(&packageType.ID)
+}
+
+func (r *PostgresRepo) GetPackageTypeByID(ctx context.Context, id int64) (*stock.StockPackageType, error) {
+	item := &stock.StockPackageType{}
+	if err := r.pool.QueryRow(ctx, `SELECT id, name, height, width, length, max_weight, barcode, sequence, company_id FROM stock_package_types WHERE id=$1`, id).Scan(&item.ID, &item.Name, &item.Height, &item.Width, &item.Length, &item.MaxWeight, &item.Barcode, &item.Sequence, &item.CompanyID); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, platformerrors.NotFound("package type not found")
+		}
+		return nil, platformerrors.Internal("failed to fetch package type", err)
+	}
+	return item, nil
+}
+
+func (r *PostgresRepo) CreatePackage(ctx context.Context, packageItem *stock.StockPackage) error {
+	if err := packageItem.Validate(); err != nil {
+		return err
+	}
+	return r.pool.QueryRow(ctx, `INSERT INTO stock_packages (name, package_type_id, location_id, company_id, weight) VALUES ($1,$2,$3,$4,$5) RETURNING id`, packageItem.Name, packageItem.PackageTypeID, packageItem.LocationID, packageItem.CompanyID, packageItem.Weight).Scan(&packageItem.ID)
+}
+
+func (r *PostgresRepo) GetPackageByID(ctx context.Context, id int64) (*stock.StockPackage, error) {
+	item := &stock.StockPackage{}
+	if err := r.pool.QueryRow(ctx, `SELECT id, name, package_type_id, location_id, company_id, weight FROM stock_packages WHERE id=$1`, id).Scan(&item.ID, &item.Name, &item.PackageTypeID, &item.LocationID, &item.CompanyID, &item.Weight); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, platformerrors.NotFound("package not found")
+		}
+		return nil, platformerrors.Internal("failed to fetch package", err)
+	}
+	return item, nil
+}
 func (r *PostgresRepo) GetScrapByID(context.Context, int64) (*stock.StockScrap, error) {
 	return nil, platformerrors.Internal("stock scrap persistence is not implemented", nil)
 }
@@ -252,6 +362,9 @@ func (r *PostgresRepo) ListLocations(ctx context.Context, f *filter.Filter, page
 		%s
 		ORDER BY id ASC
 		LIMIT $%d OFFSET $%d
+			return platformerrors.Internal("stock scrap persistence is not implemented", nil)
+		}
+
 	`, whereClause, nextIdx, nextIdx+1)
 
 	args = append(args, page.LimitClamped(), page.Offset())
@@ -551,7 +664,6 @@ func (r *PostgresRepo) CreatePicking(ctx context.Context, picking *stock.StockPi
 		return nil
 	})
 }
-
 func (r *PostgresRepo) GetPickingByID(ctx context.Context, id int64) (*stock.StockPicking, error) {
 	query := `
 		SELECT id, name, picking_type, state, partner_id, location_id, location_dest_id,
@@ -685,7 +797,6 @@ func (r *PostgresRepo) UpdatePicking(ctx context.Context, picking *stock.StockPi
 		return nil
 	})
 }
-
 func (r *PostgresRepo) DeletePicking(ctx context.Context, id int64) error {
 	query := `UPDATE stock_pickings SET active = false, updated_at = NOW() WHERE id = $1 AND active = true`
 	res, err := r.pool.Exec(ctx, query, id)

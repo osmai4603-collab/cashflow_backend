@@ -30,3 +30,14 @@ type Repository interface {
 	UpdateTransaction(ctx context.Context, t *PaymentTransaction) error
 	GetProviderByCode(ctx context.Context, code string, companyID int64) (*PaymentProvider, error)
 }
+
+// Phase2Repository persists provider configuration and external payment artifacts.
+type Phase2Repository interface {
+	CreateProviderConfig(context.Context, *ProviderConfig) error
+	CreatePaymentToken(context.Context, *PaymentToken) error
+	ListPaymentTokens(context.Context, int64) ([]PaymentToken, error)
+	CreatePaymentRefund(context.Context, *PaymentRefund) error
+	GetPaymentRefundByID(context.Context, int64) (*PaymentRefund, error)
+	CreateWebhookLog(context.Context, *WebhookLog) error
+	GetWebhookLogByIdempotencyKey(context.Context, string) (*WebhookLog, error)
+}

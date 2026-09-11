@@ -2,6 +2,7 @@ package paymentstorage
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 
@@ -32,23 +33,82 @@ type PostgresRepo struct {
 }
 
 func (r *PostgresRepo) CreateTransaction(ctx context.Context, t *payment.PaymentTransaction) error {
-	return platformerrors.Internal("payment transaction persistence is not implemented", nil)
+	metadata, err := json.Marshal(t.Metadata)
+	if err != nil {
+		return platformerrors.Validation("invalid transaction metadata", nil)
+	}
+	query := `INSERT INTO payment_transactions (reference, amount, currency, provider_id, partner_id, state, provider_reference, sale_order_id, invoice_id, payment_id, idempotency_key, return_url, webhook_received, last_error, metadata, company_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) RETURNING id, created_at, updated_at`
+	err = r.pool.QueryRow(ctx, query, t.Reference, t.Amount, t.Currency, t.ProviderID, t.PartnerID, string(t.State), t.ProviderReference, t.SaleOrderID, t.InvoiceID, t.PaymentID, t.IdempotencyKey, t.ReturnURL, t.WebhookReceived, t.LastError, metadata, t.CompanyID).Scan(&t.ID, &t.CreatedAt, &t.UpdatedAt)
+	if err != nil {
+		return platformerrors.Internal("failed to create payment transaction", err)
+	}
+	return nil
 }
 
 func (r *PostgresRepo) GetTransactionByID(ctx context.Context, id int64) (*payment.PaymentTransaction, error) {
-	return nil, platformerrors.NotFound(fmt.Sprintf("payment transaction %d not found", id))
+	return r.getTransaction(ctx, "id = $1", id)
 }
 
 func (r *PostgresRepo) GetTransactionByReference(ctx context.Context, ref string) (*payment.PaymentTransaction, error) {
-	return nil, platformerrors.NotFound(fmt.Sprintf("payment transaction %q not found", ref))
+	return r.getTransaction(ctx, "reference = $1", ref)
 }
 
 func (r *PostgresRepo) UpdateTransaction(ctx context.Context, t *payment.PaymentTransaction) error {
-	return platformerrors.Internal("payment transaction persistence is not implemented", nil)
+	metadata, err := json.Marshal(t.Metadata)
+	if err != nil {
+		return platformerrors.Validation("invalid transaction metadata", nil)
+	}
+	query := `UPDATE payment_transactions SET state=$1, provider_reference=$2, sale_order_id=$3, invoice_id=$4, payment_id=$5, idempotency_key=$6, return_url=$7, webhook_received=$8, last_error=$9, metadata=$10, updated_at=NOW() WHERE id=$11 RETURNING updated_at`
+	if err := r.pool.QueryRow(ctx, query, string(t.State), t.ProviderReference, t.SaleOrderID, t.InvoiceID, t.PaymentID, t.IdempotencyKey, t.ReturnURL, t.WebhookReceived, t.LastError, metadata, t.ID).Scan(&t.UpdatedAt); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return platformerrors.NotFound(fmt.Sprintf("payment transaction %d not found", t.ID))
+		}
+		return platformerrors.Internal("failed to update payment transaction", err)
+	}
+	return nil
 }
 
 func (r *PostgresRepo) GetProviderByCode(ctx context.Context, code string, companyID int64) (*payment.PaymentProvider, error) {
-	return nil, platformerrors.NotFound(fmt.Sprintf("payment provider %q not found", code))
+	provider := &payment.PaymentProvider{}
+	if err := r.pool.QueryRow(ctx, `SELECT id, name, code, state, active, company_id, created_at, updated_at FROM payment_providers WHERE code=$1 AND company_id=$2 AND active=true`, code, companyID).Scan(&provider.ID, &provider.Name, &provider.Code, &provider.State, &provider.Active, &provider.CompanyID, &provider.CreatedAt, &provider.UpdatedAt); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, platformerrors.NotFound(fmt.Sprintf("payment provider %q not found", code))
+		}
+		return nil, platformerrors.Internal("failed to fetch payment provider", err)
+	}
+	return provider, nil
+}
+
+func (r *PostgresRepo) GetProviderByID(ctx context.Context, id int64) (*payment.PaymentProvider, error) {
+	provider := &payment.PaymentProvider{}
+	if err := r.pool.QueryRow(ctx, `SELECT id, name, code, state, active, company_id, created_at, updated_at FROM payment_providers WHERE id=$1`, id).Scan(&provider.ID, &provider.Name, &provider.Code, &provider.State, &provider.Active, &provider.CompanyID, &provider.CreatedAt, &provider.UpdatedAt); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, platformerrors.NotFound("provider not found")
+		}
+		return nil, platformerrors.Internal("failed to fetch provider", err)
+	}
+	return provider, nil
+}
+
+func (r *PostgresRepo) getTransaction(ctx context.Context, predicate string, value any) (*payment.PaymentTransaction, error) {
+	query := `SELECT id, reference, amount, currency, provider_id, partner_id, state, provider_reference, sale_order_id, invoice_id, payment_id, idempotency_key, return_url, webhook_received, last_error, metadata, created_at, updated_at, company_id FROM payment_transactions WHERE ` + predicate
+	var transaction payment.PaymentTransaction
+	var state string
+	var metadata []byte
+	err := r.pool.QueryRow(ctx, query, value).Scan(&transaction.ID, &transaction.Reference, &transaction.Amount, &transaction.Currency, &transaction.ProviderID, &transaction.PartnerID, &state, &transaction.ProviderReference, &transaction.SaleOrderID, &transaction.InvoiceID, &transaction.PaymentID, &transaction.IdempotencyKey, &transaction.ReturnURL, &transaction.WebhookReceived, &transaction.LastError, &metadata, &transaction.CreatedAt, &transaction.UpdatedAt, &transaction.CompanyID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, platformerrors.NotFound("payment transaction not found", nil)
+		}
+		return nil, platformerrors.Internal("failed to fetch payment transaction", err)
+	}
+	transaction.State = payment.TransactionState(state)
+	if len(metadata) > 0 && string(metadata) != "null" {
+		if err := json.Unmarshal(metadata, &transaction.Metadata); err != nil {
+			return nil, platformerrors.Internal("failed to decode transaction metadata", err)
+		}
+	}
+	return &transaction, nil
 }
 
 // NewPostgresRepo creates a new PostgresRepo.

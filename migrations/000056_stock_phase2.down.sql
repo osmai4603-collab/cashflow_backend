@@ -1,0 +1,10 @@
+DROP TABLE IF EXISTS stock_putaway_rules;
+DROP TABLE IF EXISTS stock_storage_category_capacities;
+DROP TABLE IF EXISTS stock_storage_categories;
+DROP TABLE IF EXISTS stock_barcode_rules;
+DROP TABLE IF EXISTS stock_barcode_nomenclatures;
+ALTER TABLE stock_quants DROP COLUMN IF EXISTS package_id;
+ALTER TABLE stock_move_lines DROP COLUMN IF EXISTS result_package_id;
+DROP TABLE IF EXISTS product_packagings;
+DROP TABLE IF EXISTS stock_packages;
+DROP TABLE IF EXISTS stock_package_types;

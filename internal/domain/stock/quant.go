@@ -13,6 +13,7 @@ type StockQuant struct {
 	LocationID       int64     `json:"location_id"`
 	Quantity         float64   `json:"quantity"`
 	ReservedQuantity float64   `json:"reserved_quantity"`
+	PackageID        *int64    `json:"package_id,omitempty"`
 	CompanyID        *int64    `json:"company_id,omitempty"`
 	CreatedAt        time.Time `json:"created_at"`
 	UpdatedAt        time.Time `json:"updated_at"`

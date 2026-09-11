@@ -21,11 +21,19 @@ type MemoryRepo struct {
 	reconciliations map[int64][]payment.PaymentReconciliation // paymentID -> []reconciliations
 	providers       map[int64]*payment.PaymentProvider
 	transactions    map[int64]*payment.PaymentTransaction
+	providerConfigs map[int64]*payment.ProviderConfig
+	tokens          map[int64]*payment.PaymentToken
+	refunds         map[int64]*payment.PaymentRefund
+	webhookLogs     map[string]*payment.WebhookLog
 	seqCounters     map[int]int64
 	lastPaymentID   int64
 	lastReconID     int64
 	lastProviderID  int64
 	lastTransID     int64
+	lastConfigID    int64
+	lastTokenID     int64
+	lastRefundID    int64
+	lastWebhookID   int64
 }
 
 // NewMemoryRepo initializes an empty MemoryRepo.
@@ -35,6 +43,10 @@ func NewMemoryRepo() *MemoryRepo {
 		reconciliations: make(map[int64][]payment.PaymentReconciliation),
 		providers:       make(map[int64]*payment.PaymentProvider),
 		transactions:    make(map[int64]*payment.PaymentTransaction),
+		providerConfigs: make(map[int64]*payment.ProviderConfig),
+		tokens:          make(map[int64]*payment.PaymentToken),
+		refunds:         make(map[int64]*payment.PaymentRefund),
+		webhookLogs:     make(map[string]*payment.WebhookLog),
 		seqCounters:     make(map[int]int64),
 	}
 	r.seedProviders()
@@ -330,4 +342,112 @@ func (r *MemoryRepo) GetProviderByCode(ctx context.Context, code string, company
 		}
 	}
 	return nil, platformerrors.NotFound("provider not found")
+}
+
+func (r *MemoryRepo) GetProviderByID(ctx context.Context, id int64) (*payment.PaymentProvider, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	provider, ok := r.providers[id]
+	if !ok {
+		return nil, platformerrors.NotFound("provider not found")
+	}
+	clone := *provider
+	return &clone, nil
+}
+
+func (r *MemoryRepo) CreateProviderConfig(ctx context.Context, config *payment.ProviderConfig) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if config.ProviderID <= 0 || config.Key == "" || config.CompanyID <= 0 {
+		return platformerrors.Validation("invalid provider config", nil)
+	}
+	r.lastConfigID++
+	config.ID = r.lastConfigID
+	clone := *config
+	r.providerConfigs[config.ID] = &clone
+	return nil
+}
+
+func (r *MemoryRepo) CreatePaymentToken(ctx context.Context, token *payment.PaymentToken) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if err := token.Validate(); err != nil {
+		return err
+	}
+	r.lastTokenID++
+	token.ID = r.lastTokenID
+	if token.CreatedAt.IsZero() {
+		token.CreatedAt = time.Now().UTC()
+	}
+	clone := *token
+	r.tokens[token.ID] = &clone
+	return nil
+}
+
+func (r *MemoryRepo) ListPaymentTokens(ctx context.Context, partnerID int64) ([]payment.PaymentToken, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	result := make([]payment.PaymentToken, 0)
+	for _, token := range r.tokens {
+		if token.PartnerID == partnerID && token.Active {
+			result = append(result, *token)
+		}
+	}
+	return result, nil
+}
+
+func (r *MemoryRepo) CreatePaymentRefund(ctx context.Context, refund *payment.PaymentRefund) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.lastRefundID++
+	refund.ID = r.lastRefundID
+	if refund.CreatedAt.IsZero() {
+		refund.CreatedAt = time.Now().UTC()
+	}
+	clone := *refund
+	r.refunds[refund.ID] = &clone
+	return nil
+}
+
+func (r *MemoryRepo) GetPaymentRefundByID(ctx context.Context, id int64) (*payment.PaymentRefund, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	refund, ok := r.refunds[id]
+	if !ok {
+		return nil, platformerrors.NotFound("payment refund not found")
+	}
+	clone := *refund
+	return &clone, nil
+}
+
+func (r *MemoryRepo) CreateWebhookLog(ctx context.Context, log *payment.WebhookLog) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if log.IdempotencyKey == "" {
+		return platformerrors.Validation("webhook idempotency key is required", nil)
+	}
+	if _, exists := r.webhookLogs[log.IdempotencyKey]; exists {
+		return platformerrors.Conflict("webhook already exists")
+	}
+	r.lastWebhookID++
+	log.ID = r.lastWebhookID
+	if log.ReceivedAt.IsZero() {
+		log.ReceivedAt = time.Now().UTC()
+	}
+	clone := *log
+	clone.Payload = append([]byte(nil), log.Payload...)
+	r.webhookLogs[log.IdempotencyKey] = &clone
+	return nil
+}
+
+func (r *MemoryRepo) GetWebhookLogByIdempotencyKey(ctx context.Context, key string) (*payment.WebhookLog, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	log, ok := r.webhookLogs[key]
+	if !ok {
+		return nil, platformerrors.NotFound("webhook log not found")
+	}
+	clone := *log
+	clone.Payload = append([]byte(nil), log.Payload...)
+	return &clone, nil
 }

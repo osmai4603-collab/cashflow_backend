@@ -11,28 +11,29 @@ import (
 type BomType string
 
 const (
-	BomTypeNormal  BomType = "normal"  // Regular manufacturing
-	BomTypePhantom BomType = "phantom" // Kit/Bundle, components delivered instead of finished product
+	BomTypeNormal      BomType = "normal"      // Regular manufacturing
+	BomTypePhantom     BomType = "phantom"     // Kit/Bundle, components delivered instead of finished product
+	BomTypeSubcontract BomType = "subcontract" // Manufacturing performed by an external partner
 )
 
 // BillOfMaterials (BoM) defines components and operations for a product (mrp.bom).
 type BillOfMaterials struct {
-	ID             int64              `json:"id"`
-	Code           string             `json:"code,omitempty"`
-	ProductID      int64              `json:"product_id"`
-	ProductQty     float64            `json:"product_qty"`
-	UoMID          int64              `json:"uom_id"`
-	Type           BomType            `json:"type"`
-	ReadyToProduce string             `json:"ready_to_produce"` // all_available, asap
-	Consumption    string             `json:"consumption"`      // flexible, warning, strict
-	Active         bool               `json:"active"`
-	CompanyID      int64              `json:"company_id"`
+	ID             int64   `json:"id"`
+	Code           string  `json:"code,omitempty"`
+	ProductID      int64   `json:"product_id"`
+	ProductQty     float64 `json:"product_qty"`
+	UoMID          int64   `json:"uom_id"`
+	Type           BomType `json:"type"`
+	ReadyToProduce string  `json:"ready_to_produce"` // all_available, asap
+	Consumption    string  `json:"consumption"`      // flexible, warning, strict
+	Active         bool    `json:"active"`
+	CompanyID      int64   `json:"company_id"`
 
-	Lines          []BomLine          `json:"lines,omitempty"`
-	ByProducts     []BomByProduct     `json:"by_products,omitempty"`
-	Operations     []RoutingOperation `json:"operations,omitempty"`
+	Lines      []BomLine          `json:"lines,omitempty"`
+	ByProducts []BomByProduct     `json:"by_products,omitempty"`
+	Operations []RoutingOperation `json:"operations,omitempty"`
 
-	Audit          audit.Fields       `json:"audit"`
+	Audit audit.Fields `json:"audit"`
 }
 
 // BomByProduct represents a byproduct of a manufacturing process (mrp.bom.byproduct).
@@ -86,7 +87,7 @@ type RoutingOperation struct {
 	WorkcenterID    int64   `json:"workcenter_id"`
 	Name            string  `json:"name"`
 	Sequence        int     `json:"sequence"`
-	TimeMode        string  `json:"time_mode"` // manual, computed
+	TimeMode        string  `json:"time_mode"`         // manual, computed
 	TimeCycleManual float64 `json:"time_cycle_manual"` // expected duration in minutes
 }
 
