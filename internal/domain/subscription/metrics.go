@@ -50,6 +50,7 @@ func (m *MetricsEngine) CalculateMetrics(ctx context.Context, companyID int64) (
 		case "yearly":
 			monthlyAmount = sub.RecurringAmount / (float64(interval) * 12.0)
 		case "monthly":
+			monthlyAmount = sub.RecurringAmount / float64(interval)
 		default:
 			monthlyAmount = sub.RecurringAmount / float64(interval)
 		}

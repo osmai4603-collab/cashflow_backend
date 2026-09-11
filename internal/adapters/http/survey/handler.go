@@ -9,6 +9,7 @@ import (
 	"cashflow_backend/internal/domain/survey"
 	"cashflow_backend/internal/platform/response"
 	surveyusecase "cashflow_backend/internal/usecase/survey"
+
 	"github.com/go-chi/chi/v5"
 )
 
@@ -62,7 +63,7 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) Submit(w http.ResponseWriter, r *http.Request) {
 	id, _ := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
-	var input survey.UserInput
+	var input survey.SurveyInput
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
 		response.Error(w, err)
 		return

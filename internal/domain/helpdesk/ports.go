@@ -25,6 +25,8 @@ type Repository interface {
 	// Knowledge
 	GetArticle(ctx context.Context, id int64) (*KnowledgeArticle, error)
 	GetArticleBySlug(ctx context.Context, slug string) (*KnowledgeArticle, error)
+	CreateArticle(ctx context.Context, article *KnowledgeArticle) error
+	UpdateArticle(ctx context.Context, article *KnowledgeArticle) error
 	ListArticles(ctx context.Context, categoryID int64, includeInternal bool) ([]KnowledgeArticle, error)
 	ListCategories(ctx context.Context, companyID int64) ([]KnowledgeCategory, error)
 }

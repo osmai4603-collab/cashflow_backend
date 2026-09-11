@@ -23,6 +23,7 @@ type BlacklistEntry struct {
 
 type BlacklistRepository interface {
 	Add(ctx context.Context, entry *BlacklistEntry) error
+	ListBlacklist(ctx context.Context, companyID int64) ([]*BlacklistEntry, error)
 	Remove(ctx context.Context, companyID int64, value string) error
 	IsBlacklisted(ctx context.Context, companyID int64, value string) (bool, error)
 }

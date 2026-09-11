@@ -9,6 +9,7 @@ import (
 	"cashflow_backend/internal/domain/marketing"
 	"cashflow_backend/internal/platform/response"
 	marketingusecase "cashflow_backend/internal/usecase/marketing"
+
 	"github.com/go-chi/chi/v5"
 )
 
@@ -37,7 +38,7 @@ func (h *Handler) ListCampaigns(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) CreateCampaign(w http.ResponseWriter, r *http.Request) {
-	var c marketing.MarketingCampaign
+	var c marketing.Campaign
 	if err := json.NewDecoder(r.Body).Decode(&c); err != nil {
 		response.Error(w, err)
 		return
@@ -197,7 +198,7 @@ func (h *Handler) ListAutomations(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) CreateAutomation(w http.ResponseWriter, r *http.Request) {
-	var a marketing.MarketingAutomation
+	var a marketing.Automation
 	if err := json.NewDecoder(r.Body).Decode(&a); err != nil {
 		response.Error(w, err)
 		return
@@ -212,7 +213,7 @@ func (h *Handler) CreateAutomation(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) UpdateAutomation(w http.ResponseWriter, r *http.Request) {
 	id, _ := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
-	var a marketing.MarketingAutomation
+	var a marketing.Automation
 	if err := json.NewDecoder(r.Body).Decode(&a); err != nil {
 		response.Error(w, err)
 		return

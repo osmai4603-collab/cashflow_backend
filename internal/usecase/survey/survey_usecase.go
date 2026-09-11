@@ -1,8 +1,8 @@
 package surveyusecase
 
 import (
-	"context"
 	"cashflow_backend/internal/domain/survey"
+	"context"
 )
 
 type UseCase struct {
@@ -21,7 +21,7 @@ func (u *UseCase) GetSurvey(ctx context.Context, id int64) (*survey.Survey, erro
 	return nil, nil
 }
 
-func (u *UseCase) SubmitSurvey(ctx context.Context, input *survey.UserInput) (interface{}, error) {
+func (u *UseCase) SubmitSurvey(ctx context.Context, input *survey.SurveyInput) (interface{}, error) {
 	return nil, nil
 }
 

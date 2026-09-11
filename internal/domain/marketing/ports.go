@@ -13,32 +13,32 @@ type CampaignRepository interface {
 }
 
 type MailingListRepository interface {
-	Create(ctx context.Context, list *MailingList) error
-	GetByID(ctx context.Context, id int64) (*MailingList, error)
-	Update(ctx context.Context, list *MailingList) error
-	List(ctx context.Context, companyID int64) ([]*MailingList, error)
-	Delete(ctx context.Context, id int64) error
+	CreateMailingList(ctx context.Context, list *MailingList) error
+	GetMailingListByID(ctx context.Context, id int64) (*MailingList, error)
+	UpdateMailingList(ctx context.Context, list *MailingList) error
+	ListMailingLists(ctx context.Context, companyID int64) ([]*MailingList, error)
+	DeleteMailingList(ctx context.Context, id int64) error
 	AddContact(ctx context.Context, listID, contactID int64) error
 	RemoveContact(ctx context.Context, listID, contactID int64) error
 }
 
 type ContactRepository interface {
-	Create(ctx context.Context, contact *Contact) error
-	GetByID(ctx context.Context, id int64) (*Contact, error)
+	CreateContact(ctx context.Context, contact *Contact) error
+	GetContactByID(ctx context.Context, id int64) (*Contact, error)
 	GetByEmail(ctx context.Context, companyID int64, email string) (*Contact, error)
-	Update(ctx context.Context, contact *Contact) error
-	List(ctx context.Context, companyID int64) ([]*Contact, error)
-	Delete(ctx context.Context, id int64) error
+	UpdateContact(ctx context.Context, contact *Contact) error
+	ListContacts(ctx context.Context, companyID int64) ([]*Contact, error)
+	DeleteContact(ctx context.Context, id int64) error
 	SetOptOut(ctx context.Context, id int64, optOut bool) error
 	SetBlacklist(ctx context.Context, id int64, blacklist bool) error
 }
 
 type MassMailingRepository interface {
-	Create(ctx context.Context, mailing *MassMailing) error
-	GetByID(ctx context.Context, id int64) (*MassMailing, error)
-	Update(ctx context.Context, mailing *MassMailing) error
-	List(ctx context.Context, companyID int64) ([]*MassMailing, error)
-	Delete(ctx context.Context, id int64) error
+	CreateMassMailing(ctx context.Context, mailing *MassMailing) error
+	GetMassMailingByID(ctx context.Context, id int64) (*MassMailing, error)
+	UpdateMassMailing(ctx context.Context, mailing *MassMailing) error
+	ListMassMailings(ctx context.Context, companyID int64) ([]*MassMailing, error)
+	DeleteMassMailing(ctx context.Context, id int64) error
 }
 
 type TrackingRepository interface {
@@ -49,12 +49,12 @@ type TrackingRepository interface {
 }
 
 type AutomationRepository interface {
-	Create(ctx context.Context, automation *Automation) error
-	GetByID(ctx context.Context, id int64) (*Automation, error)
-	Update(ctx context.Context, automation *Automation) error
-	List(ctx context.Context, companyID int64) ([]*Automation, error)
+	CreateAutomation(ctx context.Context, automation *Automation) error
+	GetAutomationByID(ctx context.Context, id int64) (*Automation, error)
+	UpdateAutomation(ctx context.Context, automation *Automation) error
+	ListAutomations(ctx context.Context, companyID int64) ([]*Automation, error)
 	ListActive(ctx context.Context, companyID int64) ([]*Automation, error)
-	Delete(ctx context.Context, id int64) error
+	DeleteAutomation(ctx context.Context, id int64) error
 
 	CreateActivity(ctx context.Context, activity *AutomationActivity) error
 	GetActivities(ctx context.Context, automationID int64) ([]*AutomationActivity, error)

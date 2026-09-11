@@ -34,7 +34,7 @@ func (r *MemoryRepo) GetCartBySession(ctx context.Context, websiteID int64, sess
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	for _, c := range r.carts {
-		if c.WebsiteID == websiteID && c.SessionUUID == sessionUUID {
+		if (websiteID <= 0 || c.WebsiteID == websiteID) && c.SessionUUID == sessionUUID {
 			return c, nil
 		}
 	}

@@ -9,6 +9,7 @@ import (
 	"cashflow_backend/internal/domain/subscription"
 	"cashflow_backend/internal/platform/response"
 	subscriptionusecase "cashflow_backend/internal/usecase/subscription"
+
 	"github.com/go-chi/chi/v5"
 )
 
@@ -37,7 +38,7 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
-	var s subscription.Subscription
+	var s subscription.SaleSubscription
 	if err := json.NewDecoder(r.Body).Decode(&s); err != nil {
 		response.Error(w, err)
 		return

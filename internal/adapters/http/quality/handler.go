@@ -8,7 +8,6 @@ import (
 	"cashflow_backend/internal/domain/quality"
 	"cashflow_backend/internal/platform/response"
 	qualityusecase "cashflow_backend/internal/usecase/quality"
-	"github.com/go-chi/chi/v5"
 )
 
 type Handler struct {
@@ -36,7 +35,7 @@ func (h *Handler) ListPoints(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) CreatePoint(w http.ResponseWriter, r *http.Request) {
-	var p quality.ControlPoint
+	var p quality.QualityControlPoint
 	if err := json.NewDecoder(r.Body).Decode(&p); err != nil {
 		response.Error(w, err)
 		return
@@ -50,7 +49,7 @@ func (h *Handler) CreatePoint(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) ExecuteCheck(w http.ResponseWriter, r *http.Request) {
-	var c quality.Check
+	var c quality.QualityCheck
 	if err := json.NewDecoder(r.Body).Decode(&c); err != nil {
 		response.Error(w, err)
 		return
@@ -73,7 +72,7 @@ func (h *Handler) ListAlerts(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) CreateAlert(w http.ResponseWriter, r *http.Request) {
-	var a quality.Alert
+	var a quality.QualityAlert
 	if err := json.NewDecoder(r.Body).Decode(&a); err != nil {
 		response.Error(w, err)
 		return

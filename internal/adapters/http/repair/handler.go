@@ -9,6 +9,7 @@ import (
 	"cashflow_backend/internal/domain/repair"
 	"cashflow_backend/internal/platform/response"
 	repairusecase "cashflow_backend/internal/usecase/repair"
+
 	"github.com/go-chi/chi/v5"
 )
 
@@ -37,7 +38,7 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
-	var o repair.Order
+	var o repair.RepairOrder
 	if err := json.NewDecoder(r.Body).Decode(&o); err != nil {
 		response.Error(w, err)
 		return

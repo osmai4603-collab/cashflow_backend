@@ -1,19 +1,19 @@
 package repairusecase
 
 import (
-	"context"
 	"cashflow_backend/internal/domain/repair"
+	"context"
 )
 
 type UseCase struct {
 	repo repair.Repository
 }
 
-func (u *UseCase) ListOrders(ctx context.Context) ([]repair.Order, error) {
+func (u *UseCase) ListOrders(ctx context.Context) ([]repair.RepairOrder, error) {
 	return nil, nil
 }
 
-func (u *UseCase) CreateOrder(ctx context.Context, o *repair.Order) (*repair.Order, error) {
+func (u *UseCase) CreateOrder(ctx context.Context, o *repair.RepairOrder) (*repair.RepairOrder, error) {
 	return nil, nil
 }
 
