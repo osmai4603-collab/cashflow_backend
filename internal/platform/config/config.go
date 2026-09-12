@@ -18,25 +18,26 @@ import (
 // Cashflow configuration report is represented here, including those that are not
 // yet consumed by the Go backend (marked with an inline "reserved" note).
 type Configuration struct {
-	Server    ServerSettings    `json:"server,omitempty"`
-	Database  DatabaseSettings  `json:"database,omitempty"`
-	Odoo      OdooSettings      `json:"odoo,omitempty"`
-	App       AppSettings       `json:"app,omitempty"`
-	Cache     CacheSettings     `json:"cache,omitempty"`
-	Auth      AuthSettings      `json:"auth,omitempty"`
-	Security  SecuritySettings  `json:"security,omitempty"`
-	Log       LogSettings       `json:"log,omitempty"`
-	Email     EmailSettings     `json:"email,omitempty"`
-	Worker    WorkerSettings    `json:"worker,omitempty"`
-	Stock     StockSettings     `json:"stock,omitempty"`
-	Limit     LimitSettings     `json:"limit,omitempty"`
-	Runtime   RuntimeSettings   `json:"runtime,omitempty"`
-	Feature   FeatureSettings   `json:"feature,omitempty"`
-	Test      TestSettings      `json:"test,omitempty"`
-	Transient TransientSettings `json:"transient,omitempty"`
-	GeoIP     GeoIPSettings     `json:"geoip,omitempty"`
-	I18n      I18nSettings      `json:"i18n,omitempty"`
-	WebSocket WebSocketSettings `json:"websocket,omitempty"`
+	Server     ServerSettings     `json:"server,omitempty"`
+	Database   DatabaseSettings   `json:"database,omitempty"`
+	Odoo       OdooSettings       `json:"odoo,omitempty"`
+	App        AppSettings        `json:"app,omitempty"`
+	Cache      CacheSettings      `json:"cache,omitempty"`
+	Auth       AuthSettings       `json:"auth,omitempty"`
+	Security   SecuritySettings   `json:"security,omitempty"`
+	Log        LogSettings        `json:"log,omitempty"`
+	Email      EmailSettings      `json:"email,omitempty"`
+	Worker     WorkerSettings     `json:"worker,omitempty"`
+	Stock      StockSettings      `json:"stock,omitempty"`
+	Limit      LimitSettings      `json:"limit,omitempty"`
+	Runtime    RuntimeSettings    `json:"runtime,omitempty"`
+	Feature    FeatureSettings    `json:"feature,omitempty"`
+	Test       TestSettings       `json:"test,omitempty"`
+	Transient  TransientSettings  `json:"transient,omitempty"`
+	GeoIP      GeoIPSettings      `json:"geoip,omitempty"`
+	I18n       I18nSettings       `json:"i18n,omitempty"`
+	WebSocket  WebSocketSettings  `json:"websocket,omitempty"`
+	Management ManagementSettings `json:"management,omitempty"`
 }
 
 // ServerSettings maps the Cashflow HTTP service group plus the go-server-lifecycle
@@ -249,6 +250,27 @@ type WebSocketSettings struct {
 	RateLimitDelay   float64 `json:"websocket_rate_limit_delay" env:"WEBSOCKET_RATE_LIMIT_DELAY"`
 }
 
+// ManagementSettings configures the isolated observability/management listener.
+// The listener is intentionally separate from the public API port so that
+// metrics and pprof are never reachable through the business endpoint.
+type ManagementSettings struct {
+	// Enabled turns the dedicated management listener on.
+	Enabled bool `json:"enabled" env:"MANAGEMENT_ENABLED"`
+	// Interface the management listener binds to. Never defaults to 0.0.0.0.
+	Interface string `json:"interface" env:"MANAGEMENT_INTERFACE"`
+	// Port is fully independent from the public server port.
+	Port string `json:"port" env:"MANAGEMENT_PORT"`
+	// MetricsEnabled serves /metrics (text) and /metrics/json.
+	MetricsEnabled bool `json:"metrics_enabled" env:"MANAGEMENT_METRICS_ENABLED"`
+	// PprofEnabled serves the pprof suite on the management listener only.
+	PprofEnabled bool `json:"pprof_enabled" env:"MANAGEMENT_PPROF_ENABLED"`
+	// RequireAuth demands a Bearer token on every management request. Enforced
+	// when the listener is not network-isolated.
+	RequireAuth bool `json:"require_auth" env:"MANAGEMENT_REQUIRE_AUTH"`
+	// AuthToken is the bearer token; mandatory when RequireAuth is set.
+	AuthToken string `json:"auth_token" env:"MANAGEMENT_AUTH_TOKEN"`
+}
+
 // Defaults returns a fully populated Configuration with production-safe
 // defaults matching the cashflow_19_configuration_system_report.
 func Defaults() *Configuration {
@@ -349,6 +371,15 @@ func Defaults() *Configuration {
 			RateLimitBurst:   10,
 			RateLimitDelay:   0.2,
 		},
+		Management: ManagementSettings{
+			Enabled:        true,
+			Interface:      "127.0.0.1",
+			Port:           "8066",
+			MetricsEnabled: true,
+			PprofEnabled:   false,
+			RequireAuth:    false,
+			AuthToken:      "",
+		},
 	}
 }
 
@@ -369,6 +400,11 @@ func (c *Configuration) RedisAddr() string {
 // HTTPAddr returns the full listen address used by the HTTP server.
 func (c *Configuration) HTTPAddr() string {
 	return fmt.Sprintf("%s:%s", c.Server.Interface, c.Server.Port)
+}
+
+// ManagementAddr returns the full listen address of the management listener.
+func (c *Configuration) ManagementAddr() string {
+	return fmt.Sprintf("%s:%s", c.Management.Interface, c.Management.Port)
 }
 
 // BaseURL returns the externally advertised base URL.

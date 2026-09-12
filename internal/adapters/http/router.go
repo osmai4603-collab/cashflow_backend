@@ -99,8 +99,9 @@ func NewRouterWithHandlers(
 		r.Get("/livez", health.HandleLiveness)
 		r.Get("/readyz", health.HandleReadiness)
 	}
-	r.Get("/metrics", metrics.Handler)
-	r.Mount("/debug", middleware.Profiler())
+	// NOTE: /metrics and /debug (pprof) are intentionally NOT served here. They
+	// live on the isolated management listener (127.0.0.1:8066) created by
+	// NewManagementRouter so observability is never reachable on the public port.
 
 	// Root Endpoint
 	if handlers == nil {
@@ -284,8 +285,8 @@ func structuredLogger(logger *slog.Logger) func(next http.Handler) http.Handler 
 
 			next.ServeHTTP(ww, r)
 
-			// Suppress logging for observability endpoints unless there is an error (status >= 400)
-			if (r.URL.Path == "/metrics" || r.URL.Path == "/livez" || r.URL.Path == "/readyz") && ww.Status() < 400 {
+			// Suppress logging for observability probes unless there is an error (status >= 400)
+			if (r.URL.Path == "/livez" || r.URL.Path == "/readyz") && ww.Status() < 400 {
 				return
 			}
 

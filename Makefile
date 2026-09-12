@@ -1,4 +1,4 @@
-.PHONY: all build run stop test test-race bench lint clean docker-up docker-down docker-logs migrate-up migrate-down seed
+.PHONY: all build run stop test test-race bench lint clean docker-up docker-down docker-logs migrate-up migrate-down seed monitoring-up monitoring-down monitoring-logs monitoring-baseline monitoring-check alertmanager-logs db-up db-down monitor
 
 BINARY_NAME=bin/server
 MIGRATE_NAME=bin/migrate
@@ -64,4 +64,27 @@ db-down:
 monitor:
 	@chmod +x tool/monitor.sh
 	./tool/monitor.sh
+
+monitoring-up:
+	docker compose up -d
+	docker compose -f docker-compose.monitoring.yml up -d
+
+monitoring-down:
+	docker compose -f docker-compose.monitoring.yml down
+
+monitoring-logs:
+	docker compose -f docker-compose.monitoring.yml logs -f
+
+alertmanager-logs:
+	docker compose -f docker-compose.monitoring.yml logs -f alertmanager
+
+# فحص صياغة ملفات المراقبة الاثنين دون سحب صور (يعمل حتى بدون إنترنت Docker).
+monitoring-check:
+	@echo "==> main compose" && docker compose config --quiet
+	@echo "==> monitoring compose" && docker compose -f docker-compose.monitoring.yml config --quiet
+	@python3 -c "import yaml,json;[yaml.safe_load(open(f)) or None for f in ['deploy/monitoring/prometheus.yml','deploy/monitoring/prometheus-alerts.yml','deploy/monitoring/alertmanager/alertmanager.yml']];json.load(open('deploy/monitoring/grafana/dashboards/cashflow-overview.json'));print('==> yaml/json ok')"
+
+monitoring-baseline:
+	@chmod +x tool/calibrate_baseline.sh
+	./tool/calibrate_baseline.sh
 

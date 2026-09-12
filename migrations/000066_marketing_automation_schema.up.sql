@@ -3,7 +3,7 @@
 CREATE TABLE marketing_campaigns (
     id              BIGSERIAL PRIMARY KEY,
     name            VARCHAR(128) NOT NULL,
-    user_id         BIGINT NOT NULL REFERENCES users(id),
+    user_id         BIGINT NOT NULL REFERENCES res_users(id),
     utm_source      VARCHAR(64) NOT NULL DEFAULT 'marketing',
     utm_medium      VARCHAR(64) NOT NULL DEFAULT 'email',
     utm_campaign    VARCHAR(128) NOT NULL,
@@ -14,7 +14,7 @@ CREATE TABLE marketing_campaigns (
     total_bounced   INT NOT NULL DEFAULT 0,
     total_revenue   NUMERIC(15,4) NOT NULL DEFAULT 0,
     state           VARCHAR(32) NOT NULL DEFAULT 'draft',
-    company_id      BIGINT NOT NULL REFERENCES companies(id),
+    company_id      BIGINT NOT NULL REFERENCES res_companies(id),
     created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -23,19 +23,19 @@ CREATE TABLE mailing_lists (
     id          BIGSERIAL PRIMARY KEY,
     name        VARCHAR(128) NOT NULL,
     is_public   BOOLEAN NOT NULL DEFAULT FALSE,
-    company_id  BIGINT NOT NULL REFERENCES companies(id),
+    company_id  BIGINT NOT NULL REFERENCES res_companies(id),
     created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE TABLE mailing_contacts (
     id           BIGSERIAL PRIMARY KEY,
-    partner_id   BIGINT REFERENCES partners(id),
+    partner_id   BIGINT REFERENCES res_partners(id),
     email        VARCHAR(128) NOT NULL,
     mobile       VARCHAR(32),
     name         VARCHAR(128) NOT NULL,
     is_opt_out   BOOLEAN NOT NULL DEFAULT FALSE,
     is_blacklist BOOLEAN NOT NULL DEFAULT FALSE,
-    company_id   BIGINT NOT NULL REFERENCES companies(id),
+    company_id   BIGINT NOT NULL REFERENCES res_companies(id),
     created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     UNIQUE(email, company_id)
@@ -58,7 +58,7 @@ CREATE TABLE mass_mailings (
     scheduled_date TIMESTAMPTZ,
     sent_date      TIMESTAMPTZ,
     state          VARCHAR(32) NOT NULL DEFAULT 'draft',
-    company_id     BIGINT NOT NULL REFERENCES companies(id),
+    company_id     BIGINT NOT NULL REFERENCES res_companies(id),
     created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -85,7 +85,7 @@ CREATE TABLE marketing_automations (
     target_model VARCHAR(64) NOT NULL,
     filter_json  JSONB NOT NULL DEFAULT '{}',
     active       BOOLEAN NOT NULL DEFAULT TRUE,
-    company_id   BIGINT NOT NULL REFERENCES companies(id),
+    company_id   BIGINT NOT NULL REFERENCES res_companies(id),
     created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 

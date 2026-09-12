@@ -1,7 +1,7 @@
 CREATE TABLE IF NOT EXISTS pos_configs (
     id BIGSERIAL PRIMARY KEY,
     name VARCHAR(128) NOT NULL,
-    warehouse_id BIGINT NOT NULL REFERENCES warehouses(id),
+    warehouse_id BIGINT NOT NULL REFERENCES stock_warehouses(id),
     stock_location_id BIGINT NOT NULL REFERENCES stock_locations(id),
     journal_id BIGINT NOT NULL REFERENCES account_journals(id),
     invoice_journal_id BIGINT REFERENCES account_journals(id),
@@ -10,7 +10,7 @@ CREATE TABLE IF NOT EXISTS pos_configs (
     allow_discount BOOLEAN NOT NULL DEFAULT TRUE,
     manual_discount_limit NUMERIC(5,2) NOT NULL DEFAULT 100.00,
     active BOOLEAN NOT NULL DEFAULT TRUE,
-    company_id BIGINT NOT NULL REFERENCES companies(id),
+    company_id BIGINT NOT NULL REFERENCES res_companies(id),
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -20,7 +20,7 @@ CREATE TABLE IF NOT EXISTS pos_payment_methods (
     name VARCHAR(64) NOT NULL,
     journal_id BIGINT NOT NULL REFERENCES account_journals(id),
     is_cash_count BOOLEAN NOT NULL DEFAULT FALSE,
-    company_id BIGINT NOT NULL REFERENCES companies(id),
+    company_id BIGINT NOT NULL REFERENCES res_companies(id),
     active BOOLEAN NOT NULL DEFAULT TRUE
 );
 
@@ -33,7 +33,7 @@ CREATE TABLE IF NOT EXISTS pos_config_payment_method_rel (
 CREATE TABLE IF NOT EXISTS pos_sessions (
     id BIGSERIAL PRIMARY KEY,
     config_id BIGINT NOT NULL REFERENCES pos_configs(id),
-    user_id BIGINT NOT NULL REFERENCES users(id),
+    user_id BIGINT NOT NULL REFERENCES res_users(id),
     name VARCHAR(64) NOT NULL UNIQUE,
     state VARCHAR(32) NOT NULL DEFAULT 'opening_control',
     start_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -46,7 +46,7 @@ CREATE TABLE IF NOT EXISTS pos_sessions (
     total_payments_amount NUMERIC(15,4) NOT NULL DEFAULT 0,
     stock_picking_id BIGINT REFERENCES stock_pickings(id),
     account_move_id BIGINT REFERENCES account_moves(id),
-    company_id BIGINT NOT NULL REFERENCES companies(id),
+    company_id BIGINT NOT NULL REFERENCES res_companies(id),
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -56,8 +56,8 @@ CREATE TABLE IF NOT EXISTS pos_orders (
     name VARCHAR(64) NOT NULL,
     client_uuid VARCHAR(64) NOT NULL UNIQUE,
     session_id BIGINT NOT NULL REFERENCES pos_sessions(id),
-    partner_id BIGINT REFERENCES partners(id),
-    user_id BIGINT NOT NULL REFERENCES users(id),
+    partner_id BIGINT REFERENCES res_partners(id),
+    user_id BIGINT NOT NULL REFERENCES res_users(id),
     table_id BIGINT,
     customer_count INT NOT NULL DEFAULT 0,
     state VARCHAR(32) NOT NULL DEFAULT 'draft',
@@ -67,7 +67,7 @@ CREATE TABLE IF NOT EXISTS pos_orders (
     amount_paid NUMERIC(15,4) NOT NULL DEFAULT 0,
     amount_return NUMERIC(15,4) NOT NULL DEFAULT 0,
     tip_amount NUMERIC(15,4) NOT NULL DEFAULT 0,
-    company_id BIGINT NOT NULL REFERENCES companies(id),
+    company_id BIGINT NOT NULL REFERENCES res_companies(id),
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -77,7 +77,7 @@ CREATE INDEX IF NOT EXISTS idx_pos_orders_partner ON pos_orders(partner_id);
 CREATE TABLE IF NOT EXISTS pos_order_lines (
     id BIGSERIAL PRIMARY KEY,
     order_id BIGINT NOT NULL REFERENCES pos_orders(id) ON DELETE CASCADE,
-    product_id BIGINT NOT NULL REFERENCES products(id),
+    product_id BIGINT NOT NULL REFERENCES product_templates(id),
     qty NUMERIC(15,4) NOT NULL,
     price_unit NUMERIC(15,4) NOT NULL DEFAULT 0,
     discount NUMERIC(5,2) NOT NULL DEFAULT 0,
@@ -104,7 +104,7 @@ CREATE TABLE IF NOT EXISTS pos_cash_movements (
     type VARCHAR(8) NOT NULL CHECK (type IN ('in', 'out')),
     amount NUMERIC(15,4) NOT NULL CHECK (amount > 0),
     reason TEXT NOT NULL,
-    user_id BIGINT NOT NULL REFERENCES users(id),
+    user_id BIGINT NOT NULL REFERENCES res_users(id),
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 

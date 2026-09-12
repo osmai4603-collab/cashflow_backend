@@ -10,20 +10,20 @@ import (
 // envAliases maps legacy environment names to their canonical env tag value.
 // Mirrors Odoo's config.aliases mechanism.
 var envAliases = map[string]string{
-	"PGHOST":                     "DB_HOST",
-	"PGPORT":                     "DB_PORT",
-	"PGUSER":                     "DB_USER",
-	"PGPASSWORD":                 "DB_PASSWORD",
-	"PGDATABASE":                 "DB_NAME",
-	"PGSSLMODE":                  "DB_SSLMODE",
-	"PGAPPNAME":                  "DB_APP_NAME",
-	"PGPATH":                     "PG_PATH",
-	"PGHOST_REPLICA":             "DB_REPLICA_HOST",
-	"PGPORT_REPLICA":             "DB_REPLICA_PORT",
-	"PGDATABASE_TEMPLATE":        "DB_TEMPLATE",
-	"IMPORT_IMAGE_MAXBYTES":      "IMPORT_FILE_MAXBYTES",
-	"IMPORT_IMAGE_TIMEOUT":       "IMPORT_FILE_TIMEOUT",
-	"IMPORT_IMAGE_REGEX":         "IMPORT_URL_REGEX",
+	"PGHOST":                "DB_HOST",
+	"PGPORT":                "DB_PORT",
+	"PGUSER":                "DB_USER",
+	"PGPASSWORD":            "DB_PASSWORD",
+	"PGDATABASE":            "DB_NAME",
+	"PGSSLMODE":             "DB_SSLMODE",
+	"PGAPPNAME":             "DB_APP_NAME",
+	"PGPATH":                "PG_PATH",
+	"PGHOST_REPLICA":        "DB_REPLICA_HOST",
+	"PGPORT_REPLICA":        "DB_REPLICA_PORT",
+	"PGDATABASE_TEMPLATE":   "DB_TEMPLATE",
+	"IMPORT_IMAGE_MAXBYTES": "IMPORT_FILE_MAXBYTES",
+	"IMPORT_IMAGE_TIMEOUT":  "IMPORT_FILE_TIMEOUT",
+	"IMPORT_IMAGE_REGEX":    "IMPORT_URL_REGEX",
 }
 
 // EnvTag returns the canonical environment variable name for a struct field, or
@@ -134,6 +134,38 @@ func (c *Configuration) Validate() error {
 	}
 	if c.Auth.JWTSecret == "" {
 		return fmt.Errorf("auth.jwt_secret must not be empty")
+	}
+	if err := c.validateManagement(); err != nil {
+		return err
+	}
+	return nil
+}
+
+// validateManagement enforces the security posture of the isolated management
+// listener:
+//   - the port must be a valid TCP port and distinct from the public server
+//     port so metrics/pprof are never reachable on the business endpoint;
+//   - require_auth without a token is rejected;
+//   - binding to 0.0.0.0 / :: is only allowed with auth (never the default).
+func (c *Configuration) validateManagement() error {
+	if !c.Management.Enabled {
+		return nil
+	}
+	mport, err := strconv.Atoi(c.Management.Port)
+	if err != nil || mport < 1 || mport > 65535 {
+		return fmt.Errorf("invalid management.port %q: must be a TCP port 1-65535", c.Management.Port)
+	}
+	if c.Server.Port != "" && c.Management.Port == c.Server.Port {
+		return fmt.Errorf("management.port must not equal server.port (%s): metrics/pprof would be exposed on the public endpoint", c.Management.Port)
+	}
+	switch strings.ToLower(c.Management.Interface) {
+	case "0.0.0.0", "::", "":
+		if !c.Management.RequireAuth {
+			return fmt.Errorf("management.interface %q requires management.require_auth=true (never expose admin/metrics without network isolation)", c.Management.Interface)
+		}
+	}
+	if c.Management.RequireAuth && c.Management.AuthToken == "" {
+		return fmt.Errorf("management.require_auth=true requires a non-empty management.auth_token")
 	}
 	return nil
 }

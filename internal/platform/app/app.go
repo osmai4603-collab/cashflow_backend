@@ -353,6 +353,10 @@ func (a *App) Bootstrap(args []string) error {
 
 	a.server = server.NewServer(a.cfg, a.router, a.healthChecker, a.workerMgr, a.logger, a.closer)
 
+	if a.cfg.Management.Enabled {
+		a.server.SetManagementHandler(httpadapter.NewManagementRouter(a.cfg, a.healthChecker, a.logger))
+	}
+
 	return nil
 }
 

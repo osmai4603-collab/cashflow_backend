@@ -1,0 +1,72 @@
+# Development-only monitoring stack: Prometheus + Grafana + dashboards +
+# Alertmanager (webhook notifications).
+#
+# Prerequisite: start the application stack first so the shared network and the
+# server container exist:
+#   docker compose up -d
+#   docker compose -f docker-compose.monitoring.yml up -d
+#
+# Prometheus scrapes http://server:8066/metrics (the isolated management
+# endpoint). Inside the container the management listener binds 0.0.0.0 with
+# auth mandatory, so Prometheus sends the same MANAGEMENT_AUTH_TOKEN bearer.
+# Grafana, Prometheus and Alertmanager UIs are published on loopback only.
+# Notifications: set ALERTMANAGER_WEBHOOK_URL to your webhook sink.
+services:
+  prometheus:
+    image: prom/prometheus:v2.53.0
+    container_name: cashflow_prometheus
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=7d
+    environment:
+      MANAGEMENT_AUTH_TOKEN: ${MANAGEMENT_AUTH_TOKEN:-change-me}
+    volumes:
+      - ./deploy/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./deploy/monitoring/prometheus-alerts.yml:/etc/prometheus/alerts/cashflow-alerts.yml:ro
+      - prometheus_data:/prometheus
+    ports:
+      - "127.0.0.1:${PROMETHEUS_PORT:-9090}:9090"
+
+  grafana:
+    image: grafana/grafana:11.1.0
+    container_name: cashflow_grafana
+    restart: unless-stopped
+    depends_on:
+      - prometheus
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - ./deploy/monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./deploy/monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    ports:
+      - "127.0.0.1:${GRAFANA_PORT:-3000}:3000"
+
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    container_name: cashflow_alertmanager
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/alertmanager/alertmanager.yml
+      - --log.level=info
+    environment:
+      ALERTMANAGER_WEBHOOK_URL: ${ALERTMANAGER_WEBHOOK_URL:-http://127.0.0.1:9099/hook}
+    volumes:
+      - ./deploy/monitoring/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - alertmanager_data:/alertmanager
+    ports:
+      - "127.0.0.1:${ALERTMANAGER_PORT:-9093}:9093"
+
+volumes:
+  prometheus_data:
+  grafana_data:
+  alertmanager_data:
+
+networks:
+  default:
+    name: cashflow-monitoring-net
+    external: true

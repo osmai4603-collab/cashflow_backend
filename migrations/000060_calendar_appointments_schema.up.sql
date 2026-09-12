@@ -3,7 +3,7 @@ CREATE TABLE IF NOT EXISTS calendar_recurrences (
     rrule VARCHAR(256) NOT NULL,
     count INT,
     until TIMESTAMPTZ,
-    company_id BIGINT NOT NULL REFERENCES companies(id),
+    company_id BIGINT NOT NULL REFERENCES res_companies(id),
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
@@ -19,11 +19,11 @@ CREATE TABLE IF NOT EXISTS calendar_events (
     video_url VARCHAR(512),
     privacy VARCHAR(32) NOT NULL DEFAULT 'public',
     show_as VARCHAR(16) NOT NULL DEFAULT 'busy',
-    user_id BIGINT NOT NULL REFERENCES users(id),
+    user_id BIGINT NOT NULL REFERENCES res_users(id),
     res_model VARCHAR(64),
     res_id BIGINT,
     recurrence_id BIGINT REFERENCES calendar_recurrences(id) ON DELETE SET NULL,
-    company_id BIGINT NOT NULL REFERENCES companies(id),
+    company_id BIGINT NOT NULL REFERENCES res_companies(id),
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     CHECK (stop_date > start_date)
@@ -35,7 +35,7 @@ CREATE INDEX IF NOT EXISTS idx_calendar_events_ref ON calendar_events(res_model,
 CREATE TABLE IF NOT EXISTS calendar_attendees (
     id BIGSERIAL PRIMARY KEY,
     event_id BIGINT NOT NULL REFERENCES calendar_events(id) ON DELETE CASCADE,
-    partner_id BIGINT REFERENCES partners(id),
+    partner_id BIGINT REFERENCES res_partners(id),
     email VARCHAR(128) NOT NULL,
     name VARCHAR(128) NOT NULL,
     status VARCHAR(32) NOT NULL DEFAULT 'needs_action',
@@ -61,14 +61,14 @@ CREATE TABLE IF NOT EXISTS appointment_types (
     assignation_method VARCHAR(32) NOT NULL DEFAULT 'round_robin',
     location VARCHAR(256),
     active BOOLEAN NOT NULL DEFAULT TRUE,
-    company_id BIGINT NOT NULL REFERENCES companies(id),
+    company_id BIGINT NOT NULL REFERENCES res_companies(id),
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE TABLE IF NOT EXISTS appointment_type_users (
     appointment_type_id BIGINT NOT NULL REFERENCES appointment_types(id) ON DELETE CASCADE,
-    user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    user_id BIGINT NOT NULL REFERENCES res_users(id) ON DELETE CASCADE,
     PRIMARY KEY (appointment_type_id, user_id)
 );
 
@@ -85,7 +85,7 @@ CREATE TABLE IF NOT EXISTS appointment_bookings (
     id BIGSERIAL PRIMARY KEY,
     appointment_type_id BIGINT NOT NULL REFERENCES appointment_types(id),
     event_id BIGINT NOT NULL REFERENCES calendar_events(id),
-    staff_id BIGINT NOT NULL REFERENCES users(id),
+    staff_id BIGINT NOT NULL REFERENCES res_users(id),
     customer_name VARCHAR(128) NOT NULL,
     customer_email VARCHAR(128) NOT NULL,
     customer_phone VARCHAR(64),

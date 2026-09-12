@@ -4,7 +4,7 @@ CREATE TABLE IF NOT EXISTS restaurant_floors (
     pos_config_id BIGINT NOT NULL REFERENCES pos_configs(id) ON DELETE CASCADE,
     sequence INT NOT NULL DEFAULT 10,
     active BOOLEAN NOT NULL DEFAULT TRUE,
-    company_id BIGINT NOT NULL REFERENCES companies(id)
+    company_id BIGINT NOT NULL REFERENCES res_companies(id)
 );
 
 CREATE TABLE IF NOT EXISTS restaurant_tables (
@@ -18,7 +18,7 @@ CREATE TABLE IF NOT EXISTS restaurant_tables (
     width NUMERIC(10,2) NOT NULL DEFAULT 100,
     height NUMERIC(10,2) NOT NULL DEFAULT 100,
     active BOOLEAN NOT NULL DEFAULT TRUE,
-    company_id BIGINT NOT NULL REFERENCES companies(id)
+    company_id BIGINT NOT NULL REFERENCES res_companies(id)
 );
 
 CREATE TABLE IF NOT EXISTS pos_kitchen_tickets (
@@ -35,7 +35,7 @@ CREATE TABLE IF NOT EXISTS pos_kitchen_tickets (
 CREATE TABLE IF NOT EXISTS pos_kitchen_ticket_lines (
     id BIGSERIAL PRIMARY KEY,
     ticket_id BIGINT NOT NULL REFERENCES pos_kitchen_tickets(id) ON DELETE CASCADE,
-    product_id BIGINT NOT NULL REFERENCES products(id),
+    product_id BIGINT NOT NULL REFERENCES product_templates(id),
     product_name VARCHAR(256) NOT NULL,
     qty NUMERIC(15,4) NOT NULL CHECK (qty > 0),
     notes TEXT

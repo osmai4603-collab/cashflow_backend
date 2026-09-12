@@ -142,5 +142,14 @@
     "websocket_keep_alive_timeout": 3600,
     "websocket_rate_limit_burst": 10,
     "websocket_rate_limit_delay": 0.2
+  },
+  "management": {
+    "enabled": true,
+    "interface": "127.0.0.1",
+    "port": "8066",
+    "metrics_enabled": true,
+    "pprof_enabled": false,
+    "require_auth": false,
+    "auth_token": ""
   }
 }

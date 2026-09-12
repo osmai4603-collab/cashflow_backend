@@ -1,0 +1,104 @@
+# Cashflow backend alerting rules.
+#
+# Calibration status legend (see docs/monitoring_operations.md -> "ضبط العتبات"):
+#   CALIBRATED  — value derived from a real measured run (baseline captured
+#                 2026-09-12; two sessions: in-memory driver 23 snapshots and
+#                 real postgres 29 snapshots; artifacts in
+#                 deploy/monitoring/baseline/).
+#   SLO-DERIVED — value derived from the service objective (availability /
+#                 latency SLO minus safety margin), used when the measured
+#                 value is so small that a pure factor of it would alert on
+#                 noise.
+#   PENDING     — not calibratable locally (needs a real DB in staging); the
+#                 value is a conservative floor that must be revisited against
+#                 the staging baseline before on-call paging is trusted.
+groups:
+  - name: cashflow_overview
+    rules:
+      # 5xx share above threshold for a sustained period.
+      # CALIBRATED (SLO-DERIVED): measured local 5xx share = 0 (strict reject,
+      # 401-only business traffic). Threshold taken from the availability SLO
+      # (99.5% over the window) instead of the measured zero: amount = 0.005.
+      - alert: High5xxShare
+        expr: |
+          sum(rate(cashflow_http_requests_total{status_class="5xx"}[5m]))
+            / clamp_min(sum(rate(cashflow_http_requests_total[5m])), 1)
+            > 0.005
+        for: 10m
+        labels:
+          severity: page
+        annotations:
+          summary: "High 5xx share"
+          description: "5xx share of HTTP traffic is above 0.5% (99.5% availability SLO) for 10 minutes."
+
+      # p95 latency above target SLO.
+      # CALIBRATED (SLO-DERIVED): measured business p95 = 0.0048s (~80x under a
+      # 500ms SLO). Alert at the latency SLO minus a 20% safety margin so the
+      # rule reacts before the SLO itself is breached: 0.500s * 0.8 = 0.4s.
+      - alert: HighLatencyP95
+        expr: |
+          histogram_quantile(0.95,
+            sum(rate(cashflow_http_request_duration_seconds_bucket[5m])) by (le))
+            > 0.4
+        for: 10m
+        labels:
+          severity: page
+        annotations:
+          summary: "p95 latency above SLO"
+          description: "p95 HTTP latency is above 400ms (500ms SLO minus 20% margin) for 10 minutes."
+
+      # Scrape target unreachable.
+      # Structural alert (no threshold to calibrate): hard critical.
+      - alert: CashflowScrapeDown
+        expr: up{job="cashflow"} == 0
+        for: 2m
+        labels:
+          severity: page
+        annotations:
+          summary: "Cashflow scrape target is down"
+          description: "Prometheus cannot reach the management endpoint of {{ $labels.instance }}."
+
+      # Connection pool saturation.
+      # CALIBRATED (real-DB run 2026-09-12): observed peak ratio = 0.84 of the
+      # 25-connection pool under hostile synthetic load (~7k rps mixed probes,
+      # sustained 10m would be a genuine saturation event). Threshold kept at
+      # 0.8 sustained so normal traffic stays clear while heavy sustained load
+      # fires. Re-validate against the staging 5-7d baseline.
+      - alert: DBPoolSaturated
+        expr: |
+          cashflow_db_pool_active_connections
+            / clamp_min(cashflow_db_pool_max_connections, 1)
+            > 0.8
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Database pool is saturated"
+          description: "Active connections are above 80% of the pool maximum for 10 minutes (measured peak 84% only under hostile load)."
+
+      # Waiters climbing (queueing for a connection).
+      # CALIBRATED (real-DB run 2026-09-12): measured waits rate peaked at
+      # ~1950/s while exhausting the 25-connection pool. Threshold of 50/s
+      # (~2.5% of that peak) fires only on sustained queueing and stays clear
+      # of routine load. Re-validate against the staging 5-7d baseline.
+      - alert: DBWaitClimbing
+        expr: rate(cashflow_db_pool_wait_count_total[10m]) > 50
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Connection acquisitions are queueing"
+          description: "Rate of connection waits is above 50/s for 10 minutes (sustained queueing; measured peak ~1950/s under pool exhaustion)."
+
+      # Sustained heap growth (possible leak).
+      # CALIBRATED: measured heap delta over the baseline run = -2.4MiB
+      # (decay, not growth). Threshold = max(|measured| * 10, 128MiB floor):
+      # only page when growth is a genuine leak-scale (>128MiB / 10min).
+      - alert: HeapGrowthAbnormal
+        expr: delta(cashflow_go_memory_alloc_bytes[10m]) > 134217728
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Unusual heap growth"
+          description: "Heap allocations grew by more than 128MiB in 10 minutes."

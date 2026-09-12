@@ -56,9 +56,25 @@ services:
       APP_NAME: odoo_go_backend
       APP_VERSION: 0.1.0
       COMPANY_MODE: single
+      MANAGEMENT_ENABLED: "true"
+      MANAGEMENT_INTERFACE: 0.0.0.0
+      MANAGEMENT_PORT: "8066"
+      MANAGEMENT_PPROF_ENABLED: "false"
+      MANAGEMENT_REQUIRE_AUTH: "true"
+      MANAGEMENT_AUTH_TOKEN: ${MANAGEMENT_AUTH_TOKEN:-change-me}
     ports:
       - "${PORT:-8070}:8070"
+      # Management is published on loopback ONLY: 127.0.0.1:8066 -> container 8066.
+      # From the host, Prometheus/Grafana reach it at http://127.0.0.1:8066/metrics.
+      # Since compose binds 0.0.0.0 inside the container, auth is mandatory there.
+      - "127.0.0.1:${MANAGEMENT_PORT:-8066}:8066"
 
 volumes:
   postgres_data:
   redis_data:
+
+networks:
+  # Named explicitly so docker-compose.monitoring.yml can join the same network
+  # to scrape http://server:8066/metrics from inside the stack.
+  default:
+    name: cashflow-monitoring-net

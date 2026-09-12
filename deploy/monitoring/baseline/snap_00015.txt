@@ -1,0 +1,80 @@
+# cashflow backend observability, scrape target: http://127.0.0.1:16666
+# HELP cashflow_process_uptime_seconds Time in seconds since the process started.
+# TYPE cashflow_process_uptime_seconds gauge
+cashflow_process_uptime_seconds 13.990068441
+# HELP cashflow_go_gc_seconds_total Cumulative seconds spent in GC stop-the-world pauses since process start.
+# TYPE cashflow_go_gc_seconds_total gauge
+cashflow_go_gc_seconds_total 0.117958394
+# HELP cashflow_go_goroutines Current number of goroutines.
+# TYPE cashflow_go_goroutines gauge
+cashflow_go_goroutines 61
+# HELP cashflow_go_heap_idle_bytes Bytes in idle (unused) spans.
+# TYPE cashflow_go_heap_idle_bytes gauge
+cashflow_go_heap_idle_bytes 1.1657216e+07
+# HELP cashflow_go_heap_inuse_bytes Bytes in in-use spans.
+# TYPE cashflow_go_heap_inuse_bytes gauge
+cashflow_go_heap_inuse_bytes 1.1976704e+07
+# HELP cashflow_go_memory_alloc_bytes Bytes allocated and still in use.
+# TYPE cashflow_go_memory_alloc_bytes gauge
+cashflow_go_memory_alloc_bytes 9.503968e+06
+# HELP cashflow_http_request_duration_seconds HTTP request latency in seconds, partitioned by method and route template.
+# TYPE cashflow_http_request_duration_seconds histogram
+cashflow_http_request_duration_seconds_bucket{method="GET",route="/api/v1/*",le="0.005"} 29829
+cashflow_http_request_duration_seconds_bucket{method="GET",route="/api/v1/*",le="0.01"} 29983
+cashflow_http_request_duration_seconds_bucket{method="GET",route="/api/v1/*",le="0.025"} 30000
+cashflow_http_request_duration_seconds_bucket{method="GET",route="/api/v1/*",le="0.05"} 30000
+cashflow_http_request_duration_seconds_bucket{method="GET",route="/api/v1/*",le="0.1"} 30000
+cashflow_http_request_duration_seconds_bucket{method="GET",route="/api/v1/*",le="0.25"} 30000
+cashflow_http_request_duration_seconds_bucket{method="GET",route="/api/v1/*",le="0.5"} 30000
+cashflow_http_request_duration_seconds_bucket{method="GET",route="/api/v1/*",le="1"} 30000
+cashflow_http_request_duration_seconds_bucket{method="GET",route="/api/v1/*",le="2.5"} 30000
+cashflow_http_request_duration_seconds_bucket{method="GET",route="/api/v1/*",le="5"} 30000
+cashflow_http_request_duration_seconds_bucket{method="GET",route="/api/v1/*",le="10"} 30000
+cashflow_http_request_duration_seconds_bucket{method="GET",route="/api/v1/*",le="+Inf"} 30000
+cashflow_http_request_duration_seconds_sum{method="GET",route="/api/v1/*"} 9.110152501999972
+cashflow_http_request_duration_seconds_count{method="GET",route="/api/v1/*"} 30000
+# HELP cashflow_http_requests_total Total number of HTTP requests processed, partitioned by method, route template and status class.
+# TYPE cashflow_http_requests_total counter
+cashflow_http_requests_total{method="GET",route="/api/v1/*",status_class="4xx"} 30000
+# HELP cashflow_http_response_size_bytes HTTP response size in bytes, partitioned by method and route template.
+# TYPE cashflow_http_response_size_bytes histogram
+cashflow_http_response_size_bytes_bucket{method="GET",route="/api/v1/*",le="64"} 0
+cashflow_http_response_size_bytes_bucket{method="GET",route="/api/v1/*",le="256"} 30000
+cashflow_http_response_size_bytes_bucket{method="GET",route="/api/v1/*",le="1024"} 30000
+cashflow_http_response_size_bytes_bucket{method="GET",route="/api/v1/*",le="4096"} 30000
+cashflow_http_response_size_bytes_bucket{method="GET",route="/api/v1/*",le="16384"} 30000
+cashflow_http_response_size_bytes_bucket{method="GET",route="/api/v1/*",le="65536"} 30000
+cashflow_http_response_size_bytes_bucket{method="GET",route="/api/v1/*",le="262144"} 30000
+cashflow_http_response_size_bytes_bucket{method="GET",route="/api/v1/*",le="1.048576e+06"} 30000
+cashflow_http_response_size_bytes_bucket{method="GET",route="/api/v1/*",le="4.194304e+06"} 30000
+cashflow_http_response_size_bytes_bucket{method="GET",route="/api/v1/*",le="+Inf"} 30000
+cashflow_http_response_size_bytes_sum{method="GET",route="/api/v1/*"} 2.7e+06
+cashflow_http_response_size_bytes_count{method="GET",route="/api/v1/*"} 30000
+# HELP cashflow_probe_duration_seconds Health probe latency in seconds, measured outside business traffic.
+# TYPE cashflow_probe_duration_seconds histogram
+cashflow_probe_duration_seconds_bucket{probe="readyz",le="0.005"} 6194
+cashflow_probe_duration_seconds_bucket{probe="readyz",le="0.01"} 7060
+cashflow_probe_duration_seconds_bucket{probe="readyz",le="0.025"} 7306
+cashflow_probe_duration_seconds_bucket{probe="readyz",le="0.05"} 7343
+cashflow_probe_duration_seconds_bucket{probe="readyz",le="0.1"} 7372
+cashflow_probe_duration_seconds_bucket{probe="readyz",le="0.25"} 7378
+cashflow_probe_duration_seconds_bucket{probe="readyz",le="0.5"} 7378
+cashflow_probe_duration_seconds_bucket{probe="readyz",le="1"} 7378
+cashflow_probe_duration_seconds_bucket{probe="readyz",le="2.5"} 7378
+cashflow_probe_duration_seconds_bucket{probe="readyz",le="5"} 7378
+cashflow_probe_duration_seconds_bucket{probe="readyz",le="10"} 7378
+cashflow_probe_duration_seconds_bucket{probe="readyz",le="+Inf"} 7378
+cashflow_probe_duration_seconds_sum{probe="readyz"} 22.99471835000005
+cashflow_probe_duration_seconds_count{probe="readyz"} 7378
+# HELP cashflow_db_pool_active_connections Number of active database connections.
+# TYPE cashflow_db_pool_active_connections gauge
+cashflow_db_pool_active_connections 3
+# HELP cashflow_db_pool_idle_connections Number of idle database connections.
+# TYPE cashflow_db_pool_idle_connections gauge
+cashflow_db_pool_idle_connections 24
+# HELP cashflow_db_pool_max_connections Maximum configured size of the database connection pool.
+# TYPE cashflow_db_pool_max_connections gauge
+cashflow_db_pool_max_connections 25
+# HELP cashflow_db_pool_wait_count_total Total number of waits for a database connection.
+# TYPE cashflow_db_pool_wait_count_total gauge
+cashflow_db_pool_wait_count_total 7491

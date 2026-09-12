@@ -1,10 +1,45 @@
 #!/bin/bash
 
 # High-performance metrics monitor for cashflow_backend
-# Usage: ./tool/monitor.sh [url] [interval]
+# Usage: ./tool/monitor.sh [url] [interval] [json|text]
+#
+#   url      default: http://127.0.0.1:8066/metrics/json (isolated management port)
+#   interval default: 0.5s
+#   mode     "json" (live dashboard) or "text" (raw Prometheus/OpenMetrics output)
+#
+# Set MONITOR_TOKEN to send a Bearer token when management.require_auth=true
+# (e.g. when running under docker-compose).
 
-URL=${1:-"http://localhost:8070/metrics"}
+URL=${1:-"http://127.0.0.1:8066/metrics/json"}
 INTERVAL=${2:-0.5}
+MODE=${3:-json}
+
+AUTH=()
+if [ -n "$MONITOR_TOKEN" ]; then
+  AUTH=(-H "Authorization: Bearer $MONITOR_TOKEN")
+fi
+
+fetch() {
+  curl -s --max-time 1 "${AUTH[@]}" "$URL"
+}
+
+# Plain text (Prometheus / OpenMetrics) repeater.
+if [ "$MODE" = "text" ]; then
+  while true; do
+    clear
+    DATA=$(fetch)
+    echo "──────────────────────────────────────────────────────────────"
+    echo "  CASHFLOW METRICS (raw exposition) — $URL"
+    echo "  $(date "+%Y-%m-%d %H:%M:%S %p")"
+    echo "──────────────────────────────────────────────────────────────"
+    if [ -z "$DATA" ]; then
+      echo -e "   \033[0;31mSERVER DOWN\033[0m — could not connect to $URL"
+    else
+      echo "$DATA"
+    fi
+    sleep "$INTERVAL"
+  done
+fi
 
 # Colors
 GREEN='\033[0;32m'
@@ -24,7 +59,7 @@ trap "tput cnorm; exit" INT TERM EXIT
 clear
 
 while true; do
-  DATA=$(curl -s --max-time 1 "$URL")
+  DATA=$(fetch)
 
   # Move cursor to top-left instead of clearing
   printf "\033[H"

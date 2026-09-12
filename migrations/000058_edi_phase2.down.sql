@@ -9,3 +9,5 @@ ALTER TABLE edi_documents DROP COLUMN IF EXISTS zatca_status;
 ALTER TABLE edi_documents DROP COLUMN IF EXISTS signature;
 ALTER TABLE edi_documents DROP COLUMN IF EXISTS previous_hash;
 ALTER TABLE edi_documents DROP COLUMN IF EXISTS uuid;
+DROP TABLE IF EXISTS edi_documents;
+DROP TABLE IF EXISTS edi_certificates;

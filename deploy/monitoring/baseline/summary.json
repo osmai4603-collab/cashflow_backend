@@ -1,0 +1,20 @@
+{
+  "snapshots": 29,
+  "uptime_seconds": 21.659597992,
+  "business_total": 30000.0,
+  "business_rps_over_run": 1385.1,
+  "share_2xx": 0.0,
+  "share_4xx": 1.0,
+  "share_5xx": 0.0,
+  "business_p95_min_s": 0.0047,
+  "business_p95_median_s": 0.0048,
+  "business_p95_max_s": 0.0048,
+  "probe_p95_s": 0.0053,
+  "heap_delta_bytes": 4913320,
+  "goroutines_end": 12.0,
+  "pool_active_max_ratio": 0.84,
+  "pool_active_end": 1.0,
+  "pool_max_conns": 25.0,
+  "pool_waits_total": 30000,
+  "pool_waits_per_s": 1947.84
+}

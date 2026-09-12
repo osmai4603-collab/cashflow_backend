@@ -4,21 +4,11 @@ import (
 	"encoding/json"
 	"net/http"
 	"runtime"
-	"sync/atomic"
+	"strings"
 	"time"
+
+	"github.com/go-chi/chi/v5"
 )
-
-// DBStatsProvider allows different storage backends to report their pool health.
-type DBStatsProvider interface {
-	Stats() DBStats
-}
-
-type DBStats struct {
-	MaxConns    int32 `json:"max_conns"`
-	ActiveConns int32 `json:"active_conns"`
-	IdleConns   int32 `json:"idle_conns"`
-	WaitCount   int64 `json:"wait_count"`
-}
 
 type Metrics struct {
 	// System Metrics
@@ -44,30 +34,33 @@ type Metrics struct {
 	DB *DBStats `json:"db,omitempty"`
 }
 
-var (
-	startTime      = time.Now()
-	requestCount   uint64
-	status2xx      uint64
-	status4xx      uint64
-	status5xx      uint64
-	totalLatencyNs int64
-	dbProvider     DBStatsProvider
-	serverURL      string
-)
+// defaultRegistry is the process-wide single source of truth. It is safe to
+// register, gather and update concurrently once built.
+var defaultRegistry = NewRegistry()
 
-// RegisterDB registers a database stats provider (e.g., a pgxpool).
+// RegisterDB registers a database stats provider (e.g., a pgxpool) on the
+// default registry. Safe to call after startup.
 func RegisterDB(provider DBStatsProvider) {
-	dbProvider = provider
+	defaultRegistry.RegisterDB(provider)
 }
 
 // RegisterServerURL registers the advertised base URL for the server.
+// Safe to call after startup.
 func RegisterServerURL(url string) {
-	serverURL = url
+	defaultRegistry.RegisterServerURL(url)
+}
+
+// ObserveRUM records one real-user-monitoring sample into the default
+// registry. family and clientType must be from their closed sets; value must
+// be finite and non-negative. An error is returned for any violation.
+func ObserveRUM(family, clientType string, value float64) error {
+	return defaultRegistry.observeRUM(family, clientType, value)
 }
 
 type statusWriter struct {
 	http.ResponseWriter
-	status int
+	status       int
+	bytesWritten int64
 }
 
 func (w *statusWriter) WriteHeader(code int) {
@@ -75,51 +68,86 @@ func (w *statusWriter) WriteHeader(code int) {
 	w.ResponseWriter.WriteHeader(code)
 }
 
-// Middleware increments the global request counter and tracks latency/status codes.
+func (w *statusWriter) Write(p []byte) (int, error) {
+	n, err := w.ResponseWriter.Write(p)
+	w.bytesWritten += int64(n)
+	return n, err
+}
+
+// Unwrap keeps http.ResponseController and friends working through the wrapper.
+func (w *statusWriter) Unwrap() http.ResponseWriter {
+	return w.ResponseWriter
+}
+
+// routePatternFor resolves the matched route template for a request. Outside a
+// chi router has no route context; unmatched requests (e.g. 404) produce an
+// empty pattern. Both collapse onto the "unknown" label so cardinality stays
+// bounded.
+func routePatternFor(r *http.Request) string {
+	if rc := chi.RouteContext(r.Context()); rc != nil {
+		if p := rc.RoutePattern(); p != "" {
+			return p
+		}
+	}
+	return UnknownRoute
+}
+
+// Middleware records HTTP traffic into the default registry. Requests to
+// observability endpoints themselves are suppressed from business counters;
+// probes keep a dedicated latency metric so their cost does not pollute the
+// traffic histogram.
 func Middleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Suppress internal observability traffic from metrics calculation
-		if r.URL.Path == "/metrics" || r.URL.Path == "/livez" || r.URL.Path == "/readyz" {
-			next.ServeHTTP(w, r)
+	return defaultRegistry.httpMiddleware(next)
+}
+
+func (r *Registry) httpMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		switch req.URL.Path {
+		case "/metrics":
+			next.ServeHTTP(w, req)
+			return
+		case "/livez", "/readyz":
+			start := time.Now()
+			next.ServeHTTP(w, req)
+			r.ObserveProbe(strings.TrimPrefix(req.URL.Path, "/"), time.Since(start))
 			return
 		}
 
 		start := time.Now()
 		sw := &statusWriter{ResponseWriter: w, status: http.StatusOK}
 
-		atomic.AddUint64(&requestCount, 1)
+		next.ServeHTTP(sw, req)
 
-		next.ServeHTTP(sw, r)
-
-		duration := time.Since(start)
-		atomic.AddInt64(&totalLatencyNs, int64(duration))
-
-		switch {
-		case sw.status >= 500:
-			atomic.AddUint64(&status5xx, 1)
-		case sw.status >= 400:
-			atomic.AddUint64(&status4xx, 1)
-		case sw.status >= 200:
-			atomic.AddUint64(&status2xx, 1)
-		}
+		r.ObserveHTTP(
+			req.Method,
+			routePatternFor(req),
+			statusClassFor(sw.status),
+			time.Since(start),
+			sw.bytesWritten,
+		)
 	})
 }
 
-// Handler returns current system and application metrics as JSON.
+// Handler returns current system and application metrics as JSON, read from
+// the default registry.
 func Handler(w http.ResponseWriter, r *http.Request) {
+	defaultRegistry.jsonHandler(w)
+}
+
+// PrometheusHandler returns the text (exposition) handler backed by the
+// default registry, for the isolated management listener.
+func PrometheusHandler() http.Handler {
+	return defaultRegistry.PrometheusHandler()
+}
+
+func (r *Registry) jsonHandler(w http.ResponseWriter) {
 	var m runtime.MemStats
 	runtime.ReadMemStats(&m)
 
-	reqCount := atomic.LoadUint64(&requestCount)
-	latNs := atomic.LoadInt64(&totalLatencyNs)
-
-	var avgLatMs float64
-	if reqCount > 0 {
-		avgLatMs = float64(latNs) / float64(reqCount) / float64(time.Millisecond)
-	}
+	total, byClass, avgMs := r.HTTPTotals()
 
 	metrics := Metrics{
-		ServerURL:     serverURL,
+		ServerURL:     r.serverURLValue(),
 		MemoryAlloc:   m.Alloc,
 		MemoryTotal:   m.TotalAlloc,
 		MemorySys:     m.Sys,
@@ -128,17 +156,18 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		HeapInuse:     m.HeapInuse,
 		NumGoroutines: runtime.NumGoroutine(),
 		NumGC:         m.NumGC,
-		UptimeSeconds: time.Since(startTime).Seconds(),
+		UptimeSeconds: r.uptimeSeconds(),
 
-		HTTPRequests: reqCount,
-		HTTP2xx:      atomic.LoadUint64(&status2xx),
-		HTTP4xx:      atomic.LoadUint64(&status4xx),
-		HTTP5xx:      atomic.LoadUint64(&status5xx),
-		AvgLatencyMs: avgLatMs,
+		// Baseline contract: 3xx folds into the 2xx bucket.
+		HTTPRequests: total,
+		HTTP2xx:      byClass[Status2xx] + byClass[Status3xx],
+		HTTP4xx:      byClass[Status4xx],
+		HTTP5xx:      byClass[Status5xx],
+		AvgLatencyMs: avgMs,
 	}
 
-	if dbProvider != nil {
-		stats := dbProvider.Stats()
+	if p, ok := r.dbProvider.Load().(DBStatsProvider); ok && p != nil {
+		stats := p.Stats()
 		metrics.DB = &stats
 	}
 
