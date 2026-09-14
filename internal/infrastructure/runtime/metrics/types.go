@@ -1,5 +1,7 @@
 package metrics
 
+import "time"
+
 // Locked label keys for HTTP traffic metrics. These are the only label
 // dimensions allowed; route cardinality is kept bounded by normalising to
 // route templates (see RoutePattern) in P2.
@@ -85,8 +87,47 @@ type DBStatsProvider interface {
 }
 
 type DBStats struct {
-	MaxConns    int32 `json:"max_conns"`
-	ActiveConns int32 `json:"active_conns"`
-	IdleConns   int32 `json:"idle_conns"`
-	WaitCount   int64 `json:"wait_count"`
+	MaxConns          int32         `json:"max_conns"`
+	ActiveConns       int32         `json:"active_conns"`
+	IdleConns         int32         `json:"idle_conns"`
+	WaitCount         int64         `json:"wait_count"`
+	EmptyAcquireCount int64         `json:"empty_acquire_count"`
+	WaitDuration      time.Duration `json:"wait_duration_ns"`
+}
+
+// RUMSummary provides an aggregated view of real-user-monitoring metrics for JSON exposition.
+type RUMSummary struct {
+	SamplesCount uint64  `json:"samples_count"`
+	AvgTTFBMs    float64 `json:"avg_ttfb_ms,omitempty"`
+	AvgLCPMs     float64 `json:"avg_lcp_ms,omitempty"`
+	AvgINPMs     float64 `json:"avg_inp_ms,omitempty"`
+	AvgCLS       float64 `json:"avg_cls,omitempty"`
+	AvgDOMIntMs  float64 `json:"avg_dom_interactive_ms,omitempty"`
+}
+
+// HTTPErrorEvent records a single 4xx or 5xx HTTP error event for diagnostic exposition.
+type HTTPErrorEvent struct {
+	Timestamp  time.Time `json:"timestamp"`
+	Method     string    `json:"method"`
+	Path       string    `json:"path"`
+	Status     int       `json:"status"`
+	DurationMs int64     `json:"duration_ms"`
+}
+
+// ExtendedStats contains aggregated traffic, latency percentiles, probes, and RUM metrics.
+type ExtendedStats struct {
+	Total            uint64
+	ByClass          map[string]uint64
+	AvgMs            float64
+	P50Ms            float64
+	P95Ms            float64
+	P99Ms            float64
+	AvgResponseBytes float64
+	WindowSeconds    int
+	LifetimeAvgMs    float64
+	LifetimeP95Ms    float64
+	ReadyzMs         float64
+	LivezMs          float64
+	RUM              *RUMSummary
+	RecentErrors     []HTTPErrorEvent
 }

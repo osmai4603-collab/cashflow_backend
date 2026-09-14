@@ -16,7 +16,7 @@ run: build
 stop:
 	@pid=$$(pgrep -f "^(\./)?$(BINARY_NAME)"); \
 	if [ -n "$$pid" ]; then \
-		kill -SIGTERM $$pid && echo "Sent SIGTERM to server (PID $$pid)"; \
+		kill -TERM $$pid && echo "Sent SIGTERM to server (PID $$pid)"; \
 	else \
 		echo "No running server process found"; \
 	fi

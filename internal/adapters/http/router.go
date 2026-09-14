@@ -290,14 +290,27 @@ func structuredLogger(logger *slog.Logger) func(next http.Handler) http.Handler 
 				return
 			}
 
-			logger.Info("http request",
+			status := ww.Status()
+			durationMs := time.Since(start).Milliseconds()
+			reqID := middleware.GetReqID(r.Context())
+
+			attrs := []any{
 				"method", r.Method,
 				"path", r.URL.Path,
-				"status", ww.Status(),
+				"status", status,
 				"bytes", ww.BytesWritten(),
-				"duration_ms", time.Since(start).Milliseconds(),
-				"request_id", middleware.GetReqID(r.Context()),
-			)
+				"duration_ms", durationMs,
+				"request_id", reqID,
+			}
+
+			switch {
+			case status >= 500:
+				logger.Error("http request server error", attrs...)
+			case status >= 400:
+				logger.Warn("http request client error", attrs...)
+			default:
+				logger.Info("http request", attrs...)
+			}
 		})
 	}
 }

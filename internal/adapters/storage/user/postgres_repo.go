@@ -253,6 +253,7 @@ func (r *PostgresRepo) List(ctx context.Context, f *filter.Filter, page paginati
 			&u.ID,
 			&u.Login,
 			&u.Email,
+			&u.EmailNotificationsEnabled,
 			&u.Name,
 			&u.PasswordHash,
 			&u.PartnerID,

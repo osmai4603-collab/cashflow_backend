@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"cashflow_backend/internal/infrastructure/runtime/metrics"
 )
@@ -49,10 +50,12 @@ func readRequestsTotal(t *testing.T) float64 {
 func TestMetricsHandler_JSONShapeAndContentType(t *testing.T) {
 	metrics.RegisterServerURL("http://localhost:8070")
 	metrics.RegisterDB(fakeDBProvider{stats: metrics.DBStats{
-		MaxConns:    25,
-		ActiveConns: 3,
-		IdleConns:   2,
-		WaitCount:   7,
+		MaxConns:          25,
+		ActiveConns:       3,
+		IdleConns:         2,
+		WaitCount:         7,
+		EmptyAcquireCount: 1,
+		WaitDuration:      500 * time.Millisecond,
 	}})
 
 	m := snapshot(t)
@@ -101,6 +104,12 @@ func TestMetricsHandler_JSONShapeAndContentType(t *testing.T) {
 	}
 	if v := db["wait_count"].(float64); v != 7 {
 		t.Errorf("expected db.wait_count 7, got %v", v)
+	}
+	if v := db["empty_acquire_count"].(float64); v != 1 {
+		t.Errorf("expected db.empty_acquire_count 1, got %v", v)
+	}
+	if v := db["wait_duration_ns"].(float64); v != float64((500 * time.Millisecond).Nanoseconds()) {
+		t.Errorf("expected db.wait_duration_ns 500000000, got %v", v)
 	}
 }
 
@@ -181,4 +190,50 @@ func TestMiddleware_CountsBusinessRequestsByStatusClass(t *testing.T) {
 	if got := g("http_5xx_total") - before5xx; got != 1 {
 		t.Errorf("expected +1 to 5xx counters, got %v", got)
 	}
+	if got := g("http_3xx_total"); got < 1 {
+		t.Errorf("expected at least 1 redirect in http_3xx_total, got %v", got)
+	}
 }
+
+func TestMetricsHandler_ExtendedStatsAndPercentiles(t *testing.T) {
+	m := snapshot(t)
+
+	// Ensure all extended fields exist in the JSON output
+	extendedFields := []string{
+		"p50_latency_ms",
+		"p95_latency_ms",
+		"p99_latency_ms",
+		"avg_response_bytes",
+		"readyz_latency_ms",
+		"livez_latency_ms",
+		"gc_pause_seconds_total",
+		"http_3xx_total",
+		"window_seconds",
+	}
+
+	for _, field := range extendedFields {
+		if _, ok := m[field]; !ok {
+			t.Errorf("missing extended metric field %q in /metrics snapshot", field)
+		}
+	}
+}
+
+func TestMetricsHandler_RUMExposition(t *testing.T) {
+	if err := metrics.ObserveRUM("cashflow_rum_lcp", "web", 0.85); err != nil {
+		t.Fatalf("ObserveRUM: %v", err)
+	}
+
+	m := snapshot(t)
+	rum, ok := m["rum"].(map[string]interface{})
+	if !ok || rum == nil {
+		t.Fatal("expected non-nil rum object after ObserveRUM")
+	}
+
+	if count, ok := rum["samples_count"].(float64); !ok || count < 1 {
+		t.Errorf("expected samples_count >= 1, got %v", rum["samples_count"])
+	}
+	if lcp, ok := rum["avg_lcp_ms"].(float64); !ok || lcp < 800 {
+		t.Errorf("expected avg_lcp_ms around 850ms, got %v", rum["avg_lcp_ms"])
+	}
+}
+

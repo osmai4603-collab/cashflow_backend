@@ -90,6 +90,16 @@ groups:
           summary: "Connection acquisitions are queueing"
           description: "Rate of connection waits is above 50/s for 10 minutes (sustained queueing; measured peak ~1950/s under pool exhaustion)."
 
+      # Genuine pool exhaustion (callers blocked waiting for a free connection).
+      - alert: DBPoolBlocked
+        expr: rate(cashflow_db_pool_empty_acquire_count_total[5m]) > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Database pool exhaustion detected"
+          description: "Callers are being blocked waiting for a free connection (EmptyAcquireCount > 0 sustained for 5 minutes)."
+
       # Sustained heap growth (possible leak).
       # CALIBRATED: measured heap delta over the baseline run = -2.4MiB
       # (decay, not growth). Threshold = max(|measured| * 10, 128MiB floor):

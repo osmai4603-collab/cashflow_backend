@@ -12,26 +12,45 @@ import (
 
 type Metrics struct {
 	// System Metrics
-	ServerURL     string  `json:"server_url,omitempty"`
-	MemoryAlloc   uint64  `json:"memory_alloc_bytes"`
-	MemoryTotal   uint64  `json:"memory_total_bytes"`
-	MemorySys     uint64  `json:"memory_sys_bytes"`
-	HeapAlloc     uint64  `json:"heap_alloc_bytes"`
-	HeapIdle      uint64  `json:"heap_idle_bytes"`
-	HeapInuse     uint64  `json:"heap_inuse_bytes"`
-	NumGoroutines int     `json:"num_goroutines"`
-	NumGC         uint32  `json:"num_gc"`
-	UptimeSeconds float64 `json:"uptime_seconds"`
+	ServerURL           string  `json:"server_url,omitempty"`
+	MemoryAlloc         uint64  `json:"memory_alloc_bytes"`
+	MemoryTotal         uint64  `json:"memory_total_bytes"`
+	MemorySys           uint64  `json:"memory_sys_bytes"`
+	HeapAlloc           uint64  `json:"heap_alloc_bytes"`
+	HeapIdle            uint64  `json:"heap_idle_bytes"`
+	HeapInuse           uint64  `json:"heap_inuse_bytes"`
+	NumGoroutines       int     `json:"num_goroutines"`
+	NumGC               uint32  `json:"num_gc"`
+	GCPauseSecondsTotal float64 `json:"gc_pause_seconds_total"`
+	UptimeSeconds       float64 `json:"uptime_seconds"`
 
 	// HTTP Traffic Metrics
-	HTTPRequests uint64  `json:"http_requests_total"`
-	HTTP2xx      uint64  `json:"http_2xx_total"`
-	HTTP4xx      uint64  `json:"http_4xx_total"`
-	HTTP5xx      uint64  `json:"http_5xx_total"`
-	AvgLatencyMs float64 `json:"avg_latency_ms"`
+	HTTPRequests     uint64  `json:"http_requests_total"`
+	HTTP2xx          uint64  `json:"http_2xx_total"`
+	HTTP3xx          uint64  `json:"http_3xx_total"`
+	HTTP4xx          uint64  `json:"http_4xx_total"`
+	HTTP5xx          uint64  `json:"http_5xx_total"`
+	AvgLatencyMs     float64 `json:"avg_latency_ms"`
+	P50LatencyMs     float64 `json:"p50_latency_ms"`
+	P95LatencyMs     float64 `json:"p95_latency_ms"`
+	P99LatencyMs     float64 `json:"p99_latency_ms"`
+	AvgResponseBytes float64 `json:"avg_response_bytes"`
+	WindowSeconds    int     `json:"window_seconds,omitempty"`
+	LifetimeAvgMs    float64 `json:"lifetime_avg_latency_ms,omitempty"`
+	LifetimeP95Ms    float64 `json:"lifetime_p95_latency_ms,omitempty"`
+
+	// Health Probes Latency
+	ReadyzLatencyMs float64 `json:"readyz_latency_ms"`
+	LivezLatencyMs  float64 `json:"livez_latency_ms"`
 
 	// Database Metrics
 	DB *DBStats `json:"db,omitempty"`
+
+	// Real User Monitoring (optional, omitted when empty)
+	RUM *RUMSummary `json:"rum,omitempty"`
+
+	// Recent Errors (optional, omitted when empty)
+	RecentErrors []HTTPErrorEvent `json:"recent_errors,omitempty"`
 }
 
 // defaultRegistry is the process-wide single source of truth. It is safe to
@@ -48,6 +67,11 @@ func RegisterDB(provider DBStatsProvider) {
 // Safe to call after startup.
 func RegisterServerURL(url string) {
 	defaultRegistry.RegisterServerURL(url)
+}
+
+// RecordHTTPError records an HTTP error on the default registry.
+func RecordHTTPError(method, path string, status int, duration time.Duration) {
+	defaultRegistry.RecordHTTPError(method, path, status, duration)
 }
 
 // ObserveRUM records one real-user-monitoring sample into the default
@@ -118,13 +142,17 @@ func (r *Registry) httpMiddleware(next http.Handler) http.Handler {
 
 		next.ServeHTTP(sw, req)
 
+		dur := time.Since(start)
 		r.ObserveHTTP(
 			req.Method,
 			routePatternFor(req),
 			statusClassFor(sw.status),
-			time.Since(start),
+			dur,
 			sw.bytesWritten,
 		)
+		if sw.status >= 400 {
+			r.RecordHTTPError(req.Method, req.URL.Path, sw.status, dur)
+		}
 	})
 }
 
@@ -144,31 +172,45 @@ func (r *Registry) jsonHandler(w http.ResponseWriter) {
 	var m runtime.MemStats
 	runtime.ReadMemStats(&m)
 
-	total, byClass, avgMs := r.HTTPTotals()
+	stats := r.ExtendedStats()
 
 	metrics := Metrics{
-		ServerURL:     r.serverURLValue(),
-		MemoryAlloc:   m.Alloc,
-		MemoryTotal:   m.TotalAlloc,
-		MemorySys:     m.Sys,
-		HeapAlloc:     m.HeapAlloc,
-		HeapIdle:      m.HeapIdle,
-		HeapInuse:     m.HeapInuse,
-		NumGoroutines: runtime.NumGoroutine(),
-		NumGC:         m.NumGC,
-		UptimeSeconds: r.uptimeSeconds(),
+		ServerURL:           r.serverURLValue(),
+		MemoryAlloc:         m.Alloc,
+		MemoryTotal:         m.TotalAlloc,
+		MemorySys:           m.Sys,
+		HeapAlloc:           m.HeapAlloc,
+		HeapIdle:            m.HeapIdle,
+		HeapInuse:           m.HeapInuse,
+		NumGoroutines:       runtime.NumGoroutine(),
+		NumGC:               m.NumGC,
+		GCPauseSecondsTotal: float64(m.PauseTotalNs) / float64(time.Second),
+		UptimeSeconds:       r.uptimeSeconds(),
 
 		// Baseline contract: 3xx folds into the 2xx bucket.
-		HTTPRequests: total,
-		HTTP2xx:      byClass[Status2xx] + byClass[Status3xx],
-		HTTP4xx:      byClass[Status4xx],
-		HTTP5xx:      byClass[Status5xx],
-		AvgLatencyMs: avgMs,
+		HTTPRequests:     stats.Total,
+		HTTP2xx:          stats.ByClass[Status2xx] + stats.ByClass[Status3xx],
+		HTTP3xx:          stats.ByClass[Status3xx],
+		HTTP4xx:          stats.ByClass[Status4xx],
+		HTTP5xx:          stats.ByClass[Status5xx],
+		AvgLatencyMs:     stats.AvgMs,
+		P50LatencyMs:     stats.P50Ms,
+		P95LatencyMs:     stats.P95Ms,
+		P99LatencyMs:     stats.P99Ms,
+		AvgResponseBytes: stats.AvgResponseBytes,
+		WindowSeconds:    stats.WindowSeconds,
+		LifetimeAvgMs:    stats.LifetimeAvgMs,
+		LifetimeP95Ms:    stats.LifetimeP95Ms,
+
+		ReadyzLatencyMs: stats.ReadyzMs,
+		LivezLatencyMs:  stats.LivezMs,
+		RUM:             stats.RUM,
+		RecentErrors:    stats.RecentErrors,
 	}
 
 	if p, ok := r.dbProvider.Load().(DBStatsProvider); ok && p != nil {
-		stats := p.Stats()
-		metrics.DB = &stats
+		dbStats := p.Stats()
+		metrics.DB = &dbStats
 	}
 
 	w.Header().Set("Content-Type", "application/json")

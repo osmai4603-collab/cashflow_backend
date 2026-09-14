@@ -149,6 +149,12 @@ func TestRegistry_DBGaugesReflectProvider(t *testing.T) {
 	if v := gaugeValue(families, MetricDBActiveConns); v != 5 {
 		t.Errorf("expected 5 active conns, got %v", v)
 	}
+	if v := gaugeValue(families, MetricDBEmptyAcquireCount); v != 2 {
+		t.Errorf("expected 2 empty acquire count, got %v", v)
+	}
+	if v := gaugeValue(families, MetricDBWaitDuration); v != 2.5 {
+		t.Errorf("expected 2.5s wait duration, got %v", v)
+	}
 }
 
 func gaugeValue(families []*dto.MetricFamily, name string) float64 {
@@ -165,5 +171,33 @@ func gaugeValue(families []*dto.MetricFamily, name string) float64 {
 type fakeDB struct{}
 
 func (f *fakeDB) Stats() DBStats {
-	return DBStats{MaxConns: 10, ActiveConns: 5, IdleConns: 3, WaitCount: 12}
+	return DBStats{MaxConns: 10, ActiveConns: 5, IdleConns: 3, WaitCount: 12, EmptyAcquireCount: 2, WaitDuration: 2500 * time.Millisecond}
 }
+
+func TestRegistry_RecentErrorsRingBuffer(t *testing.T) {
+	reg := NewRegistry()
+
+	// Initial state must be empty
+	if errs := reg.RecentErrors(); len(errs) != 0 {
+		t.Fatalf("expected nil or empty recent errors, got %d", len(errs))
+	}
+
+	// Record 7 errors to verify ring buffer caps at maxRecentErrors (5)
+	for i := 1; i <= 7; i++ {
+		reg.RecordHTTPError("GET", "/test/error", 400+i, time.Duration(i)*time.Millisecond)
+	}
+
+	errs := reg.RecentErrors()
+	if len(errs) != 5 {
+		t.Fatalf("expected exactly 5 errors in buffer, got %d", len(errs))
+	}
+
+	// First error should be the 3rd one (status 403), last should be 7th (status 407)
+	if errs[0].Status != 403 {
+		t.Errorf("expected first error status 403, got %d", errs[0].Status)
+	}
+	if errs[4].Status != 407 {
+		t.Errorf("expected last error status 407, got %d", errs[4].Status)
+	}
+}
+

@@ -7,8 +7,6 @@ import (
 	"io"
 	"log/slog"
 	"os"
-
-	"github.com/mattn/go-isatty"
 )
 
 // =============================================================================
@@ -42,28 +40,31 @@ func LoadConfig() (*Config, error) {
 	}, nil
 }
 
-// prettyHandler is a simplified custom slog.Handler for colored terminal output.
-type prettyHandler struct {
+// initPrettyHandler is a simplified custom slog.Handler for colored terminal output.
+type initPrettyHandler struct {
 	w io.Writer
 }
 
-func (h *prettyHandler) Enabled(_ context.Context, _ slog.Level) bool { return true }
-func (h *prettyHandler) Handle(_ context.Context, r slog.Record) error {
+func (h *initPrettyHandler) Enabled(_ context.Context, _ slog.Level) bool { return true }
+func (h *initPrettyHandler) Handle(_ context.Context, r slog.Record) error {
 	timeStr := r.Time.Format("2006-01-02 03:04:05 PM")
 	fmt.Fprintf(h.w, "\033[90m%s\033[0m [%s] %s\n", timeStr, r.Level, r.Message)
 	return nil
 }
-func (h *prettyHandler) WithAttrs(attrs []slog.Attr) slog.Handler { return h }
-func (h *prettyHandler) WithGroup(name string) slog.Handler      { return h }
+func (h *initPrettyHandler) WithAttrs(attrs []slog.Attr) slog.Handler { return h }
+func (h *initPrettyHandler) WithGroup(name string) slog.Handler      { return h }
 
-// initLogger creates an environment-aware logger.
+// initPhaseLogger creates an environment-aware logger.
 // Best Practice: Colored Text for TTY, Structured JSON for Production.
-func initLogger() *slog.Logger {
+func initPhaseLogger() *slog.Logger {
 	out := os.Stderr
-	isTerminal := isatty.IsTerminal(out.Fd()) || isatty.IsCygwinTerminal(out.Fd())
+	isTerminal := false
+	if stat, err := out.Stat(); err == nil {
+		isTerminal = (stat.Mode() & os.ModeCharDevice) != 0
+	}
 
 	if isTerminal {
-		return slog.New(&prettyHandler{w: out})
+		return slog.New(&initPrettyHandler{w: out})
 	}
 
 	return slog.New(slog.NewJSONHandler(out, &slog.HandlerOptions{
@@ -85,7 +86,7 @@ type Dependencies struct {
 // InitDependencies creates all dependencies in the correct order.
 func InitDependencies(cfg *Config) (*Dependencies, error) {
 	// 1. Logger (Dual-Mode)
-	logger := initLogger()
+	logger := initPhaseLogger()
 
 	// 2. Database connection
 	db, err := sql.Open("postgres", cfg.DatabaseDSN)

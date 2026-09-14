@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
@@ -51,10 +52,12 @@ type pgxStatsProvider struct {
 func (p *pgxStatsProvider) Stats() metrics.DBStats {
 	s := p.pool.Stat()
 	return metrics.DBStats{
-		MaxConns:    s.MaxConns(),
-		ActiveConns: s.TotalConns() - s.IdleConns(),
-		IdleConns:   s.IdleConns(),
-		WaitCount:   s.AcquireCount(),
+		MaxConns:          s.MaxConns(),
+		ActiveConns:       s.TotalConns() - s.IdleConns(),
+		IdleConns:         s.IdleConns(),
+		WaitCount:         s.AcquireCount(),
+		EmptyAcquireCount: s.EmptyAcquireCount(),
+		WaitDuration:      s.AcquireDuration(),
 	}
 }
 
@@ -81,6 +84,7 @@ type App struct {
 	workerMgr         *worker.WorkerManager
 	server            *server.Server
 	closer            io.Closer
+	logCloser         io.Closer
 	notificationRelay *notificationbus.PostgresRelay
 }
 
@@ -145,6 +149,35 @@ func (h *prettyHandler) Handle(_ context.Context, r slog.Record) error {
 
 	// 4. Other Attributes
 	for _, a := range otherAttrs {
+		if a.Key == "status" {
+			var sCode int
+			switch v := a.Value.Any().(type) {
+			case int:
+				sCode = v
+			case int64:
+				sCode = int(v)
+			}
+			if sCode > 0 {
+				var sColor string
+				switch {
+				case sCode >= 500:
+					sColor = "\033[1;37;41m" // Bold White on Red Background
+				case sCode >= 400:
+					sColor = "\033[1;33m"    // Bold Yellow
+				case sCode >= 300:
+					sColor = "\033[36m"      // Cyan
+				default:
+					sColor = "\033[32m"      // Green
+				}
+				fmt.Fprintf(h.w, " %sstatus=%d\033[0m", sColor, sCode)
+				continue
+			}
+		}
+		if a.Key == "path" && r.Level >= slog.LevelWarn {
+			// Highlight path on warnings and errors
+			fmt.Fprintf(h.w, " \033[1;37mpath=%v\033[0m", a.Value.Any())
+			continue
+		}
 		fmt.Fprintf(h.w, " \033[90m%s=\033[0m%v", a.Key, a.Value.Any())
 	}
 
@@ -155,34 +188,151 @@ func (h *prettyHandler) Handle(_ context.Context, r slog.Record) error {
 func (h *prettyHandler) WithAttrs(attrs []slog.Attr) slog.Handler { return h }
 func (h *prettyHandler) WithGroup(name string) slog.Handler       { return h }
 
-func (a *App) initLogger() *slog.Logger {
-	// Standard practice: logs go to Stderr
+// multiHandler fans out log records to multiple slog handlers concurrently.
+type multiHandler struct {
+	handlers []slog.Handler
+}
+
+func (m *multiHandler) Enabled(ctx context.Context, level slog.Level) bool {
+	for _, h := range m.handlers {
+		if h.Enabled(ctx, level) {
+			return true
+		}
+	}
+	return false
+}
+
+func (m *multiHandler) Handle(ctx context.Context, r slog.Record) error {
+	var firstErr error
+	for _, h := range m.handlers {
+		if h.Enabled(ctx, r.Level) {
+			if err := h.Handle(ctx, r.Clone()); err != nil && firstErr == nil {
+				firstErr = err
+			}
+		}
+	}
+	return firstErr
+}
+
+func (m *multiHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
+	handlers := make([]slog.Handler, len(m.handlers))
+	for i, h := range m.handlers {
+		handlers[i] = h.WithAttrs(attrs)
+	}
+	return &multiHandler{handlers: handlers}
+}
+
+func (m *multiHandler) WithGroup(name string) slog.Handler {
+	handlers := make([]slog.Handler, len(m.handlers))
+	for i, h := range m.handlers {
+		handlers[i] = h.WithGroup(name)
+	}
+	return &multiHandler{handlers: handlers}
+}
+
+// minLevelHandler filters records to only pass through if level >= minLevel.
+type minLevelHandler struct {
+	handler  slog.Handler
+	minLevel slog.Level
+}
+
+func (h *minLevelHandler) Enabled(ctx context.Context, level slog.Level) bool {
+	return level >= h.minLevel && h.handler.Enabled(ctx, level)
+}
+
+func (h *minLevelHandler) Handle(ctx context.Context, r slog.Record) error {
+	if r.Level < h.minLevel {
+		return nil
+	}
+	return h.handler.Handle(ctx, r)
+}
+
+func (h *minLevelHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
+	return &minLevelHandler{handler: h.handler.WithAttrs(attrs), minLevel: h.minLevel}
+}
+
+func (h *minLevelHandler) WithGroup(name string) slog.Handler {
+	return &minLevelHandler{handler: h.handler.WithGroup(name), minLevel: h.minLevel}
+}
+
+type logCloser struct {
+	files []*os.File
+}
+
+func (lc *logCloser) Close() error {
+	var firstErr error
+	for _, f := range lc.files {
+		if f != nil {
+			_ = f.Sync()
+			if err := f.Close(); err != nil && firstErr == nil {
+				firstErr = err
+			}
+		}
+	}
+	return firstErr
+}
+
+func (a *App) initLogger() (*slog.Logger, io.Closer) {
 	out := os.Stderr
 
-	// Check if output is a terminal using standard library
 	var isTerminal bool
 	if stat, err := out.Stat(); err == nil {
 		isTerminal = (stat.Mode() & os.ModeCharDevice) != 0
 	}
 
-	// Allow forcing colors via environment variable if auto-detection fails
 	forceColor := strings.ToLower(os.Getenv("CASHFLOW_LOG_COLOR")) == "true"
 
-	if isTerminal || forceColor {
-		return slog.New(&prettyHandler{w: out})
-	}
-
-	// In non-terminal environments (Production/Docker), use standard JSON
-	opts := &slog.HandlerOptions{
+	jsonOpts := &slog.HandlerOptions{
 		Level: slog.LevelInfo,
 		ReplaceAttr: func(groups []string, attr slog.Attr) slog.Attr {
 			if attr.Key == slog.TimeKey {
-				return slog.String(slog.TimeKey, attr.Value.Time().Format("2006-01-02 03:04:05 PM"))
+				return slog.String(slog.TimeKey, attr.Value.Time().Format(time.RFC3339))
 			}
 			return attr
 		},
 	}
-	return slog.New(slog.NewJSONHandler(out, opts))
+
+	var primaryHandler slog.Handler
+	if isTerminal || forceColor {
+		primaryHandler = &prettyHandler{w: out}
+	} else {
+		primaryHandler = slog.NewJSONHandler(out, jsonOpts)
+	}
+
+	handlers := []slog.Handler{primaryHandler}
+	var files []*os.File
+
+	// File logging is enabled by default unless explicitly disabled
+	logToFile := strings.ToLower(os.Getenv("CASHFLOW_LOG_TO_FILE")) != "false"
+	logDir := os.Getenv("CASHFLOW_LOG_DIR")
+	if logDir == "" {
+		logDir = "logs"
+	}
+
+	if logToFile {
+		if err := os.MkdirAll(logDir, 0755); err == nil {
+			// 1. All logs (app.log in JSON format)
+			appLogPath := filepath.Join(logDir, "app.log")
+			if appFile, err := os.OpenFile(appLogPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644); err == nil {
+				files = append(files, appFile)
+				handlers = append(handlers, slog.NewJSONHandler(appFile, jsonOpts))
+			}
+
+			// 2. Error & Warning logs only (error.log in JSON format)
+			errLogPath := filepath.Join(logDir, "error.log")
+			if errFile, err := os.OpenFile(errLogPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644); err == nil {
+				files = append(files, errFile)
+				errHandler := slog.NewJSONHandler(errFile, jsonOpts)
+				handlers = append(handlers, &minLevelHandler{handler: errHandler, minLevel: slog.LevelWarn})
+			}
+		}
+	}
+
+	closer := &logCloser{files: files}
+	if len(handlers) == 1 {
+		return slog.New(primaryHandler), closer
+	}
+	return slog.New(&multiHandler{handlers: handlers}), closer
 }
 
 func (a *App) Bootstrap(args []string) error {
@@ -190,8 +340,10 @@ func (a *App) Bootstrap(args []string) error {
 	// PHASE 1: Initialization
 	// ─────────────────────────────────────────────────────────────────────
 
-	// 1a. Structured logger with environment-aware formatting
-	a.logger = a.initLogger()
+	// 1a. Structured logger with environment-aware formatting and file persistence
+	logger, logCloser := a.initLogger()
+	a.logger = logger
+	a.logCloser = logCloser
 
 	// Load default translations
 	if err := i18n.LoadFromDirectory("i18n"); err != nil {
@@ -385,5 +537,17 @@ func (a *App) Run() error {
 	}
 
 	a.logger.Info("service terminated successfully")
+
+	if a.logCloser != nil {
+		_ = a.logCloser.Close()
+	}
+	return nil
+}
+
+// Close flushes and closes application-level resources such as log files.
+func (a *App) Close() error {
+	if a.logCloser != nil {
+		return a.logCloser.Close()
+	}
 	return nil
 }

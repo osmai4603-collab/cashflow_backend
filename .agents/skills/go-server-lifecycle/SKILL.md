@@ -1,296 +1,341 @@
 ---
 name: go-server-lifecycle
-description: "Production-ready lifecycle management for Go HTTP services. Covers fail-fast initialization, server configuration, startup, liveness/readiness probes, graceful shutdown, drain behavior, background workers, signal handling, and runtime verification."
+description: "Production-ready lifecycle management for Go HTTP services. Covers synchronous pre-binding (net.Listen), fail-fast initialization, dual-server architecture (public vs management isolation), strict server timeouts, health probe semantics (/livez and /readyz), probe log suppression, coordinated non-blocking startup, POSIX signal handling, two-stage traffic drain, graceful teardown (http.Server.Shutdown), background worker supervision, and reverse-order cleanup."
 ---
 
 # Go Server Lifecycle Management Skill
 
 This skill defines a production-ready lifecycle for Go HTTP services. It is intentionally
-framework-agnostic, but it assumes a standard architecture with a composition root,
-application/services layer, HTTP adapter layer, infrastructure integration, and a runtime
-control layer for health, workers, and graceful shutdown.
+framework-agnostic and abstracted from internal business logic and deep telemetry, reflecting modern
+cloud-native architectures with a composition root, HTTP adapter layer, infrastructure integration,
+and a runtime control layer for health, workers, isolated management, and graceful shutdown.
 
-The guidance below is designed for real services that must survive startup failures,
-traffic spikes, shutdown signals, and deployment rollouts without leaving requests hanging
-or leaving background workers running in the background.
+The guidance below is designed for services that must survive startup failures,
+traffic spikes, deployment rollouts, and OS termination signals without leaving requests hanging,
+dropping ingress connections, or orphaning background workers.
 
 ## Production Principles
 
 A correctly managed Go server is not just a server that boots. It is a service that:
 
 - fails fast when required configuration or dependencies are invalid
-- exposes correct liveness and readiness semantics
-- starts background work only after the app is ready
-- handles OS termination signals reliably
-- drains traffic before shutting down
-- closes resources in a safe order
-- logs and surfaces failures in a way that supports operations
-- **exposes deep observability signals for runtime monitoring**
-- **provides human-friendly logs during development without sacrificing production structure**
+- **binds listeners synchronously before claiming readiness or launching workers**
+- **enforces security isolation between public business routes and internal management endpoints**
+- exposes correct, isolated liveness (`/livez`) and readiness (`/readyz`) semantics
+- starts background work only after the app and dependencies are ready
+- handles OS termination signals reliably using POSIX-compliant patterns (`kill -TERM`, `signal.NotifyContext`)
+- drains traffic cleanly before shutting down (two-stage drain)
+- coordinates teardown across multiple servers and workers concurrently
+- closes resources in a strict reverse order
+- routes HTTP process log levels dynamically by status code (5xx -> ERROR, 4xx -> WARN) with high-contrast terminal styling
+- persists structured JSON logs to rotating files while providing human-friendly colored terminal output
+- suppresses 200 OK logs on health probes to eliminate log noise and disk inflation
 
 ## Official Sources & References
 
 - [`net/http.Server`](https://pkg.go.dev/net/http#Server)
+- [`net.Listen`](https://pkg.go.dev/net#Listen)
 - [`Server.Shutdown`](https://pkg.go.dev/net/http#Server.Shutdown)
 - [`os/signal`](https://pkg.go.dev/os/signal)
 - [`context`](https://pkg.go.dev/context)
 - [`sync.WaitGroup`](https://pkg.go.dev/sync#WaitGroup)
-- [`go-chi/chi/v5`](https://github.com/go-chi/chi)
+- [`log/slog`](https://pkg.go.dev/log/slog)
 
 ---
 
-## Architectural Context
+## Architectural Context: Dual-Server Topology & Security Isolation
 
-The following layering is a common and safe pattern for Go services:
-
-- composition/bootstrap layer: config loading, logger setup, dependency wiring,
-  lifecycle orchestration
-- domain layer: business rules and core entities
-- application/use-case layer: orchestration and service logic
-- adapter/HTTP layer: router, middleware, handlers, request validation, JSON response
-- infrastructure layer: database access, queues, cache, SMTP, storage, external APIs
-- runtime services: health checks, worker manager, metrics, shutdown coordinator
-
-The key invariant is simple:
-
-- the domain layer must not depend on transport, DB driver internals, or HTTP-specific concerns
-- the server lifecycle sits outside the business logic and coordinates runtime behavior
-- startup, readiness, and shutdown are operational concerns and should be explicit, not implicit
-
-A typical production layout is:
+In high-reliability Go services, public API traffic and operational management
+must be physically isolated on distinct ports and listeners:
 
 ```text
-┌────────────────────────────────────────────────────────────────────┐
-│                      Composition / Bootstrap                        │
-│  config, env, logger, signal handling, dependency wiring           │
-├────────────────────────────────────────────────────────────────────┤
-│                   HTTP / Adapter Layer                              │
-│  router, middleware, handlers, JSON serialization, request timeout │
-├────────────────────────────────────────────────────────────────────┤
-│                  Application / Use Case Layer                      │
-│  orchestration, validation, domain services, business rules       │
-├────────────────────────────────────────────────────────────────────┤
-│                        Domain Layer                                  │
-│  entities, interfaces, core behaviors                              │
-├────────────────────────────────────────────────────────────────────┤
-│                    Infrastructure Layer                              │
-│  DB, queue, email, cache, storage, external services               │
-└────────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────────┐
+│                         Composition / Bootstrap                          │
+│  config, logger, synchronous pre-binding, signal handling, coordination  │
+├────────────────────────────────────┬─────────────────────────────────────┤
+│  - Public Server (e.g. :8070)      │    Management Server (e.g. :8066)   │
+│  - Business APIs (/api/v1/*)       │  - Management Endpoints             │
+│  - Public Probes (/livez, /readyz) │  - Diagnostic Endpoints             │
+│  - 404 for Operational Endpoints   │  - Bearer Token Auth on 0.0.0.0     │
+│  - User authentication & limits    │                                     │
+├────────────────────────────────────┴─────────────────────────────────────┤
+│                       Application / Use Case Layer                       │
+├──────────────────────────────────────────────────────────────────────────┤
+│                               Domain Layer                               │
+├──────────────────────────────────────────────────────────────────────────┤
+│                           Infrastructure Layer                           │
+│  PostgreSQL pool, background workers, queues, email, external adapters   │
+└──────────────────────────────────────────────────────────────────────────┘
+```
+
+The key invariants are:
+
+- **Security Isolation**: Operational and diagnostic endpoints are blocked on the public port (return 404).
+- **Synchronous Pre-Binding**: Ports are reserved synchronously in the main thread before starting background work.
+- **Unified Coordination**: Startup, drain, and shutdown coordinate both servers together cleanly.
+
+---
+
+## Eight-Phase Operational Lifecycle
+
+The server lifecycle should be treated as an ordered operational flow:
+
+```text
+Phase 1: Initialization  → validate config, initialize logger, connect infrastructure (fail fast)
+Phase 2: Pre-Binding     → synchronously bind TCP listeners (net.Listen); fail fast on port conflict
+Phase 3: Configuration   → configure server timeouts, isolate public and management routers
+Phase 4: Startup         → start both servers on pre-bound listeners, launch background workers, set ready
+Phase 5: Serving         → accept traffic, answer probes (/livez, /readyz), process requests
+Phase 6: Drain           → mark not-ready, stop receiving new ingress traffic, wait drain period
+Phase 7: Teardown        → call http.Server.Shutdown on both servers concurrently, wait for in-flight work
+Phase 8: Cleanup         → stop background workers, close database pools and storage, flush logs
 ```
 
 ---
 
-## Seven-Phase Lifecycle
+## Step 1: Fail-Fast Initialization & Multi-Target Logging
 
-The lifecycle should be treated as an ordered operational flow.
+The process should be built in a strict order, starting with an environment-aware structured logger supporting multi-target output (terminal + files).
 
-```text
-Phase 1: Initialization  → validate config, initialize logger, open dependencies
-Phase 2: Configuration   → set server timeouts, define middleware, register observability providers
-Phase 3: Startup         → start server in goroutine, initialize workers, expose readiness
-Phase 4: Serving         → accept traffic, answer probes, process requests
-Phase 5: Drain           → set not-ready, stop sending new traffic, give ingress time to react
-Phase 6: Graceful Shutdown → call http.Server.Shutdown with timeout and wait for in-flight work
-Phase 7: Cleanup         → stop workers, close DB/storage clients, flush logs, exit cleanly
-```
+### 1. Multi-Target Structured Logging (Terminal + File Persistence)
 
-This flow must be deterministic and explicit. The service should never appear “running” before readiness is complete, and it should never terminate abruptly without a drain or shutdown phase.
+A production service needs structured `JSON` logs persisted to disk for auditing and post-mortems, while developers need human-friendly colored logs in terminal sessions:
 
----
-
-## Step 1: Fail-Fast Initialization & Dual-Mode Logging
-
-The process should be built in a strict order, starting with a structured logger that is environment-aware.
-
-### Professional Structured Logging
-
-A production service needs `JSON` logs, but developers need readable logs. Use a "Dual-Mode" pattern:
-
-- **Terminal Mode**: Use a custom `slog.Handler` (Pretty Handler) for colored, human-friendly output.
-- **Production Mode**: Fallback to standard `JSONHandler`.
-- **Formatting**: Always include a consistent time format (e.g., `2006-01-02 03:04:05 PM`).
-
-Example `initLogger` pattern:
+- **Terminal Output**: When running in a terminal (or when forced via `CASHFLOW_LOG_COLOR=true`), use a custom `prettyHandler` with high-contrast ANSI colors.
+- **File Persistence (`logs/app.log`)**: Persist all events formatted as newline-delimited JSON.
+- **Error Log File (`logs/error.log`)**: Filter and duplicate warnings and errors (`Level >= WARN`) to a dedicated file for rapid troubleshooting.
+- **Lifecycle Flush**: Log files must be flushed (`Sync()`) and closed during Phase 8 (Cleanup).
 
 ```go
-func initLogger() *slog.Logger {
+func initLogger() (*slog.Logger, io.Closer) {
     out := os.Stderr
-    isTerminal := isatty.IsTerminal(out.Fd())
-    
-    if isTerminal {
-        // Return custom handler with colors and AM/PM time
-        return slog.New(&prettyHandler{w: out})
+    var writers []io.Writer
+    var closers []io.Closer
+
+    isTerminal := isatty.IsTerminal(out.Fd()) || os.Getenv("CASHFLOW_LOG_COLOR") == "true"
+
+    if os.Getenv("LOG_TO_FILE") == "true" || !isTerminal {
+        _ = os.MkdirAll("logs", 0755)
+        appLog, err := os.OpenFile("logs/app.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+        if err == nil {
+            writers = append(writers, appLog)
+            closers = append(closers, appLog)
+        }
     }
-    
-    // Production JSON
-    return slog.New(slog.NewJSONHandler(out, &slog.HandlerOptions{
-        ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
-            if a.Key == slog.TimeKey {
-                return slog.String(slog.TimeKey, a.Value.Time().Format("2006-01-02 03:04:05 PM"))
-            }
-            return a
-        },
-    }))
+    // Combine terminal pretty printing with structured file logging
+    ...
+}
+```
+
+### 2. HTTP Status-Aware Dynamic Log Level Routing
+
+Never log all HTTP requests at `INFO`. Errors become invisible in high-throughput environments when drowned in thousands of 200 OK entries:
+
+- **Server Errors (`Status >= 500`)**: Log explicitly as **`logger.Error("http request server error", ...)`**.
+- **Client Errors (`Status 400..499`)**: Log explicitly as **`logger.Warn("http request client error", ...)`**.
+- **Success & Redirects (`Status < 400`)**: Log as **`logger.Info("http request", ...)`**.
+
+### 3. High-Contrast ANSI Terminal Status Highlighting
+
+In terminal sessions, give status codes immediate visual distinction:
+- `5xx`: Bold White text on Red Background (`\033[1;37;41mstatus=500\033[0m`).
+- `4xx`: Bold Yellow (`\033[1;33mstatus=404\033[0m`) with bold white request path.
+- `3xx`: Cyan (`\033[36mstatus=301\033[0m`).
+- `2xx`: Green (`\033[32mstatus=200\033[0m`).
+
+### 4. Health Probe Log Suppression
+
+Continuous liveness and readiness probe polling (`/livez`, `/readyz`) generated by Kubernetes or load balancers must **not** pollute terminal output or inflate disk logs:
+- **Suppress** probe logs when `status < 400`.
+- **Emit immediately** as `WARN` or `ERROR` if a probe fails (`status >= 400`), indicating database or service degradation.
+
+---
+
+## Step 2: Synchronous Listener Pre-Binding (Fail-Fast)
+
+> [!CAUTION]
+> **Never call `srv.ListenAndServe()` inside an asynchronous goroutine.**
+> If the port is already occupied (`bind: address already in use`), an asynchronous server
+> will fail late while the app has already initialized databases, started workers, or claimed readiness!
+
+Bind all network listeners synchronously in the main thread first:
+
+```go
+// 1. Bind public listener synchronously
+pubLn, err := net.Listen("tcp", cfg.PublicAddress())
+if err != nil {
+    return fmt.Errorf("bind public %s: %w", cfg.PublicAddress(), err)
+}
+
+// 2. Bind management listener synchronously
+mgmtLn, err := net.Listen("tcp", cfg.ManagementAddress())
+if err != nil {
+    pubLn.Close() // Rollback immediately
+    return fmt.Errorf("bind management %s: %w", cfg.ManagementAddress(), err)
 }
 ```
 
 ---
 
-## Step 2: Configure the HTTP server with Strict Timeouts
+## Step 3: Configure HTTP Servers with Strict Timeouts
 
-A production-ready `http.Server` must always set timeouts. The zero-value server is not safe for production.
+Zero-value `http.Server` configurations are vulnerable to slowloris attacks and resource exhaustion.
+Configure strict timeouts on both public and management servers:
 
-Recommended defaults:
-
-| Field | Recommended value | Purpose |
-|:---|:---:|:---|
-| `ReadTimeout` | 5s | Maximum time to read a request |
-| `ReadHeaderTimeout` | 2s | Protect against slowloris and stalled headers |
-| `WriteTimeout` | 10s | Maximum time to write a response |
-| `IdleTimeout` | 120s | Idle keep-alive timeout |
-| `MaxHeaderBytes` | 1 MB | Prevent oversized header flooding |
+| Field | Recommended Value | Purpose |
+| :--- | :---: | :--- |
+| `ReadTimeout` | 5s–15s | Maximum time to read the full request body |
+| `ReadHeaderTimeout` | 2s | Protect against stalled headers and slowloris attacks |
+| `WriteTimeout` | 10s–30s | Maximum time to write the response |
+| `IdleTimeout` | 120s | Idle keep-alive duration before closing connection |
+| `MaxHeaderBytes` | 1 MB | Prevent oversized header memory flooding |
 
 ---
 
-## Step 3: Use Chi with Observability Middleware
+## Step 4: Security Isolation & Endpoint Separation
 
-Use `go-chi/chi/v5` with a middleware stack that captures traffic quality and performance.
+Isolate operational management endpoints from public business traffic:
+
+### 1. Public Router (`:8070`)
+- Serves business APIs under `/api/v1/*` behind authentication and rate-limiting.
+- Exposes basic Kubernetes probes (`/livez` and `/readyz`).
+- **Strict 404 Isolation**: Requests to operational and diagnostic routes on the public port **must return 404**.
+
+### 2. Management Router (`:8066`)
+- Exposes internal operational endpoints.
+- Diagnostic suites (e.g. pprof, enabled conditionally).
+- **Authentication**: When binding to `0.0.0.0`, require Bearer token authentication.
+
+---
+
+## Step 5: Coordinated Non-Blocking Startup
+
+Launch both pre-bound servers using a `sync.WaitGroup` and monitor errors on an error channel:
 
 ```go
-r := chi.NewRouter()
+var wg sync.WaitGroup
+errCh := make(chan error, 2)
 
-r.Use(middleware.RequestID)
-r.Use(metrics.Middleware) // Track status codes (2xx, 4xx, 5xx) and latency
-r.Use(middleware.Logger)
-r.Use(middleware.Recoverer)
-```
-
-### Observability Standards
-
-- **Log Suppression**: Suppress logs for healthy observability probes (`/metrics`, `/livez`, `/readyz`) to reduce noise in logs.
-- **Latency Tracking**: Track average response time in milliseconds.
-- **Traffic Quality**: Distinguish between successful requests and errors.
-
----
-
-## Step 4: Implement Liveness, Readiness, and Metrics Correctly
-
-Health and metrics endpoints are operational API contracts.
-
-| Probe | Purpose | Rules |
-|:---|:---|:---|
-| `/livez` | process health | process-level only; no external deps |
-| `/readyz` | traffic readiness | verify required dependencies (DB, etc.) |
-| `/metrics` | runtime telemetry | expose CPU, Mem, Goroutines, HTTP stats, and DB pool stats |
-
-### Database Pool Monitoring
-
-If using a connection pool (like `pgxpool`), export its stats:
-- `ActiveConns`: Current busy connections.
-- `MaxConns`: Configured limit.
-- `WaitCount`: Total connections that had to wait for a slot (indicates saturation).
-
----
-
-## Step 5: Start the HTTP Server in a Non-Blocking Way
-
-The server must start in a goroutine so the main control loop can watch for signals.
-
-```go
-errCh := make(chan error, 1)
-
+// Start Public Server
+wg.Add(1)
 go func() {
-    if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-        errCh <- err
+    defer wg.Done()
+    if err := publicServer.Serve(pubLn); err != nil && !errors.Is(err, http.ErrServerClosed) {
+        errCh <- fmt.Errorf("public server error: %w", err)
+    }
+}()
+
+// Start Management Server
+wg.Add(1)
+go func() {
+    defer wg.Done()
+    if err := mgmtServer.Serve(mgmtLn); err != nil && !errors.Is(err, http.ErrServerClosed) {
+        errCh <- fmt.Errorf("management server error: %w", err)
     }
 }()
 ```
 
 ---
 
-## Step 6: Handle Signals with `signal.NotifyContext`
+## Step 6: Signal Handling, Two-Stage Drain & POSIX Compliance
 
-Use `signal.NotifyContext` as the primary shutdown trigger.
+Handle termination signals cleanly without dropping active requests:
 
 ```go
 ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 defer stop()
 ```
 
----
+When a shutdown signal arrives:
 
-## Step 7: Drain Before Shutdown
+1. **Mark Not Ready**: Flip readiness probe to false (`readyz` returns 503).
+2. **Drain Wait**: Sleep for a configured drain duration (e.g., 5s) allowing Ingress / Load Balancers to re-route incoming traffic.
 
-When the service receives a termination signal, it must stop accepting new traffic before stopping the listener.
-
-1. mark readiness as false.
-2. wait for a configured drain period.
-3. begin `http.Server.Shutdown`.
-
----
-
-## Step 8: Graceful Shutdown, Not Forced Close
-
-The server must use `http.Server.Shutdown`, not `Close`, for normal teardown.
+### POSIX-Compliant Termination in Scripts
+> [!IMPORTANT]
+> When orchestrating servers via `Makefile` or shell scripts running under `/bin/sh`, **never use `kill -SIGTERM`**. Many minimal Linux environments (like Dash or Alpine `/bin/sh`) do not recognize the `SIG` prefix and will fail with `Illegal option -S`.
+> Always use standard POSIX format: **`kill -TERM $$pid`** or **`kill -15 $$pid`**.
 
 ---
 
-## Step 9: Worker Lifecycle Management
+## Step 7: Coordinated Graceful Teardown
 
-Background workers should be treated as part of the application lifecycle.
-- Start only after dependencies are ready.
-- Stop before closing DB/storage dependencies.
-- Use `sync.WaitGroup` to wait for clean exit.
+Shut down both servers concurrently with a bounded context timeout:
+
+```go
+shutdownCtx, cancel := context.WithTimeout(context.Background(), cfg.ShutdownTimeout)
+defer cancel()
+
+var shutdownWg sync.WaitGroup
+shutdownWg.Add(2)
+
+go func() {
+    defer shutdownWg.Done()
+    _ = publicServer.Shutdown(shutdownCtx)
+}()
+
+go func() {
+    defer shutdownWg.Done()
+    _ = mgmtServer.Shutdown(shutdownCtx)
+}()
+
+shutdownWg.Wait() // Wait for active requests to drain
+wg.Wait()         // Wait for Serve() goroutines to exit cleanly
+```
 
 ---
 
-## Step 10: Cleanup in Reverse Order
+## Step 8: Worker Lifecycle Management
 
-Cleanup should be deterministic and in strict reverse order of construction.
+Background workers must be strictly coordinated with the application lifecycle:
 
-1. Stop HTTP server.
-2. Stop background workers.
-3. Close DB pools and storage clients.
-4. Flush logs.
+- **Start Condition**: Launch workers only after databases are connected and readiness is confirmed.
+- **Stop Condition**: Stop background workers before closing database pools.
+- **Context Cancellation**: Pass a cancellable context to all worker loops and wait on a `sync.WaitGroup`.
 
 ---
 
-## Step 11: Runtime Monitoring Dashboard
+## Step 9: Cleanup in Reverse Order
 
-For production-ready operations, provide a real-time monitor (e.g., `make monitor`) that scans the `/metrics` endpoint and renders:
-- **System Health**: CPU, Memory, Goroutines.
-- **Traffic Health**: Success rate, 4xx/5xx counts, Avg Latency.
-- **Database Health**: Pool saturation and wait counts.
-- **Alerting**: Use color-coded indicators (Red for 5xx errors, Yellow for high latency).
+Teardown must execute deterministically in exact reverse order of initialization:
+
+1. Stop HTTP servers (`publicServer` and `mgmtServer`).
+2. Stop background worker loops and wait for completion.
+3. Close database connection pools (`dbPool.Close()`).
+4. Close external messaging, cache, and audit clients.
+5. **Flush and Sync Logs**: Sync file buffers to disk (`logFile.Sync()`), close file descriptors (`logFile.Close()`), and exit cleanly.
 
 ---
 
 ## Anti-Patterns to Avoid
 
 | Anti-Pattern | Why It's Wrong | Correct Approach |
-|:---|:---|:---|
-| `go run` in Production | Signal handling fails; messy exit codes | Build binary, then execute |
-| JSON logs in Development | Hard for humans to debug | Use environment-aware "Pretty Logger" |
-| Logging every `/metrics` hit | Floods logs with noise | Suppress healthy probe logs |
-| Missing DB pool metrics | Blind to connection leaks or saturation | Export `pgxpool` stats |
-| Zero-value `http.Server{}` | Resource exhaustion vulnerability | Set all 4 timeouts |
-| Using `Close()` for shutdown | Terminates in-flight requests abruptly | Use `srv.Shutdown(ctx)` |
+| :--- | :--- | :--- |
+| `go run` in Production | Signal handling fails; wraps binary and swallows signals | Build binary (`go build`), then execute |
+| Blind `srv.ListenAndServe()` | If port is busy, app fails after initializing DB and workers | Synchronous `net.Listen` pre-binding in main thread |
+| Exposing management publicly | Leaks internal system endpoints and operational control | Isolate to management port; return 404 publicly |
+| Mingling probes with business traffic | Probes create massive log noise | Suppress 200 OK logs on `/livez` and `/readyz` |
+| Unconditional `logger.Info` for all HTTP | 4xx client errors and 5xx crashes blend invisibly into logs | Route 5xx to `ERROR`, 4xx to `WARN`, with ANSI contrast |
+| Using `kill -SIGTERM` in POSIX scripts | Fails with `Illegal option -S` under `/bin/sh` or Dash | Use POSIX-compliant `kill -TERM $$pid` or `kill -15` |
+| Calling `Close()` on shutdown | Terminates in-flight requests abruptly | Use `srv.Shutdown(ctx)` with a drain period |
 
 ---
 
 ## Production Verification Checklist
 
 ```text
-[ ] Required dependencies fail fast
-[ ] Server timeouts are explicit and non-zero
-[ ] Signal.NotifyContext handles SIGINT and SIGTERM
-[ ] Liveness and Readiness are separate and correct
-[ ] /metrics exposes CPU, Memory, Goroutines, GC, and HTTP stats
-[ ] DB pool stats (Active, Max, Wait) are exported to /metrics
-[ ] Logs are colored in terminal and JSON in production
-[ ] Logs for healthy /metrics and /readyz probes are suppressed
-[ ] Drain phase is implemented before shutdown
-[ ] Cleanup order is reverse of creation
-[ ] `make monitor` renders live metrics with status indicators
+[ ] Configuration & environment variables fail fast on missing required keys
+[ ] Listeners are pre-bound synchronously via net.Listen before any goroutine starts
+[ ] Server timeouts (Read, ReadHeader, Write, Idle, MaxHeaderBytes) are explicit and non-zero
+[ ] Dual-server isolation: Public (8070) returns 404 for operational management routes
+[ ] Management server (8066) enforces Bearer token auth when bound to 0.0.0.0
+[ ] Multi-target logging: colored ANSI for terminal, structured JSON for rotating files
+[ ] HTTP log routing emits 5xx as ERROR and 4xx as WARN; probes suppressed on 200 OK
+[ ] Liveness (/livez) and Readiness (/readyz) semantics are isolated and correct
+[ ] Signal.NotifyContext handles SIGINT and SIGTERM gracefully using POSIX kill -TERM
+[ ] Readiness probe marks false before beginning http.Server.Shutdown (drain phase)
+[ ] Both servers shut down concurrently and cleanly without hanging goroutines
+[ ] Background workers stop before closing database connections
+[ ] Resource cleanup follows exact reverse order of construction (including logfile Sync)
 [ ] All tests pass with race detector: go test -v -race ./...
 ```

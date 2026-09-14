@@ -1,7 +1,10 @@
 package metrics
 
 import (
+	"math"
 	"runtime"
+	"sort"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -27,6 +30,8 @@ const (
 	MetricDBActiveConns       = "cashflow_db_pool_active_connections"
 	MetricDBIdleConns         = "cashflow_db_pool_idle_connections"
 	MetricDBWaitCount         = "cashflow_db_pool_wait_count_total"
+	MetricDBEmptyAcquireCount = "cashflow_db_pool_empty_acquire_count_total"
+	MetricDBWaitDuration      = "cashflow_db_pool_wait_duration_seconds_total"
 )
 
 // Registry is the single source of truth for runtime, HTTP and database
@@ -45,6 +50,12 @@ type Registry struct {
 	httpBytes     *prometheus.HistogramVec
 	probeDuration *prometheus.HistogramVec
 	rum           map[string]*prometheus.HistogramVec
+
+	window *WindowTracker
+	probes *ProbeTracker
+
+	errorsMu     sync.RWMutex
+	recentErrors []HTTPErrorEvent
 }
 
 // NewRegistry builds an empty registry pre-wired with the cashflow metric
@@ -54,6 +65,8 @@ func NewRegistry() *Registry {
 	r := &Registry{
 		raw:       prometheus.NewRegistry(),
 		startTime: time.Now(),
+		window:    NewWindowTracker(),
+		probes:    NewProbeTracker(),
 	}
 	r.serverURL.Store("")
 
@@ -130,6 +143,8 @@ func NewRegistry() *Registry {
 		dbGauge(MetricDBActiveConns, "Number of active database connections.", func(s DBStats) float64 { return float64(s.ActiveConns) }),
 		dbGauge(MetricDBIdleConns, "Number of idle database connections.", func(s DBStats) float64 { return float64(s.IdleConns) }),
 		dbGauge(MetricDBWaitCount, "Total number of waits for a database connection.", func(s DBStats) float64 { return float64(s.WaitCount) }),
+		dbGauge(MetricDBEmptyAcquireCount, "Total times the pool was exhausted and a caller had to wait.", func(s DBStats) float64 { return float64(s.EmptyAcquireCount) }),
+		dbGauge(MetricDBWaitDuration, "Total time spent waiting for a database connection in seconds.", func(s DBStats) float64 { return s.WaitDuration.Seconds() }),
 	}
 	for _, vec := range r.rum {
 		collectors = append(collectors, vec)
@@ -168,12 +183,18 @@ func (r *Registry) ObserveHTTP(method, route, statusClass string, duration time.
 	r.httpRequests.WithLabelValues(method, route, statusClass).Inc()
 	r.httpDuration.WithLabelValues(method, route).Observe(duration.Seconds())
 	r.httpBytes.WithLabelValues(method, route).Observe(float64(bytes))
+	if r.window != nil {
+		r.window.Observe(duration, bytes)
+	}
 }
 
 // ObserveProbe records the latency of a health probe (livez/readyz) outside
 // the business traffic histogram.
 func (r *Registry) ObserveProbe(probe string, duration time.Duration) {
 	r.probeDuration.WithLabelValues(probe).Observe(duration.Seconds())
+	if r.probes != nil {
+		r.probes.Observe(probe, duration)
+	}
 }
 
 // Gather returns the current metrics in the OpenMetrics DTO shape.
@@ -181,27 +202,73 @@ func (r *Registry) Gather() ([]*dto.MetricFamily, error) {
 	return r.raw.Gather()
 }
 
-// HTTPTotals aggregates the labelled HTTP families back into the legacy
-// flat counters (total, per status class, average latency in ms).
-func (r *Registry) HTTPTotals() (total uint64, byClass map[string]uint64, avgMs float64) {
-	byClass = map[string]uint64{
-		Status2xx: 0,
-		Status3xx: 0,
-		Status4xx: 0,
-		Status5xx: 0,
+type histBucket struct {
+	upperBound float64
+	count      float64
+}
+
+func calculateQuantile(q float64, totalCount float64, buckets []histBucket) float64 {
+	if totalCount <= 0 || len(buckets) == 0 {
+		return 0
+	}
+	rank := q * totalCount
+	var prevBound float64
+	var prevCount float64
+
+	for _, b := range buckets {
+		if rank <= b.count {
+			countDiff := b.count - prevCount
+			if countDiff <= 0 {
+				return b.upperBound
+			}
+			fraction := (rank - prevCount) / countDiff
+			return prevBound + fraction*(b.upperBound-prevBound)
+		}
+		prevBound = b.upperBound
+		prevCount = b.count
+	}
+	return buckets[len(buckets)-1].upperBound
+}
+
+// ExtendedStats gathers and computes detailed traffic statistics including
+// status classes, latency percentiles, average response size, probe latencies,
+// and RUM metrics.
+func (r *Registry) ExtendedStats() ExtendedStats {
+	stats := ExtendedStats{
+		ByClass: map[string]uint64{
+			Status2xx: 0,
+			Status3xx: 0,
+			Status4xx: 0,
+			Status5xx: 0,
+		},
 	}
 
-	var sum, count float64
 	families, err := r.raw.Gather()
 	if err != nil {
-		return 0, byClass, 0
+		return stats
 	}
+
+	var latSum, latCount float64
+	latBucketMap := make(map[float64]float64)
+
+	var bytesSum, bytesCount float64
+
+	var readyzSum, readyzCount float64
+	var livezSum, livezCount float64
+
+	var rumCount uint64
+	var ttfbSum, ttfbCount float64
+	var lcpSum, lcpCount float64
+	var inpSum, inpCount float64
+	var clsSum, clsCount float64
+	var domSum, domCount float64
+
 	for _, f := range families {
 		switch f.GetName() {
 		case MetricHTTPRequests:
 			for _, m := range f.GetMetric() {
 				v := uint64(m.GetCounter().GetValue())
-				total += v
+				stats.Total += v
 				var cls string
 				for _, lp := range m.GetLabel() {
 					if lp.GetName() == LabelStatusClass {
@@ -211,23 +278,197 @@ func (r *Registry) HTTPTotals() (total uint64, byClass map[string]uint64, avgMs 
 				if cls == "" {
 					cls = Status2xx
 				}
-				byClass[cls] += v
+				stats.ByClass[cls] += v
 			}
 		case MetricHTTPRequestDuration:
 			for _, m := range f.GetMetric() {
-				sum += m.GetHistogram().GetSampleSum()
-				count += float64(m.GetHistogram().GetSampleCount())
+				h := m.GetHistogram()
+				latSum += h.GetSampleSum()
+				latCount += float64(h.GetSampleCount())
+				for _, b := range h.GetBucket() {
+					if !math.IsInf(b.GetUpperBound(), 0) {
+						latBucketMap[b.GetUpperBound()] += float64(b.GetCumulativeCount())
+					}
+				}
+			}
+		case MetricHTTPResponseSize:
+			for _, m := range f.GetMetric() {
+				h := m.GetHistogram()
+				bytesSum += h.GetSampleSum()
+				bytesCount += float64(h.GetSampleCount())
+			}
+		case MetricProbeDuration:
+			for _, m := range f.GetMetric() {
+				var probe string
+				for _, lp := range m.GetLabel() {
+					if lp.GetName() == LabelProbe {
+						probe = lp.GetValue()
+					}
+				}
+				h := m.GetHistogram()
+				cnt := float64(h.GetSampleCount())
+				if probe == ProbeReadyz {
+					readyzSum += h.GetSampleSum()
+					readyzCount += cnt
+				} else if probe == ProbeLivez {
+					livezSum += h.GetSampleSum()
+					livezCount += cnt
+				}
+			}
+		case MetricRUMTTFB:
+			for _, m := range f.GetMetric() {
+				h := m.GetHistogram()
+				ttfbSum += h.GetSampleSum()
+				ttfbCount += float64(h.GetSampleCount())
+				rumCount += h.GetSampleCount()
+			}
+		case MetricRUMLCP:
+			for _, m := range f.GetMetric() {
+				h := m.GetHistogram()
+				lcpSum += h.GetSampleSum()
+				lcpCount += float64(h.GetSampleCount())
+				rumCount += h.GetSampleCount()
+			}
+		case MetricRUMINP:
+			for _, m := range f.GetMetric() {
+				h := m.GetHistogram()
+				inpSum += h.GetSampleSum()
+				inpCount += float64(h.GetSampleCount())
+				rumCount += h.GetSampleCount()
+			}
+		case MetricRUMCLS:
+			for _, m := range f.GetMetric() {
+				h := m.GetHistogram()
+				clsSum += h.GetSampleSum()
+				clsCount += float64(h.GetSampleCount())
+				rumCount += h.GetSampleCount()
+			}
+		case MetricRUMDOMInteractive:
+			for _, m := range f.GetMetric() {
+				h := m.GetHistogram()
+				domSum += h.GetSampleSum()
+				domCount += float64(h.GetSampleCount())
+				rumCount += h.GetSampleCount()
 			}
 		}
 	}
-	if count > 0 {
-		avgMs = sum / count * 1000
+
+	if latCount > 0 {
+		stats.LifetimeAvgMs = latSum / latCount * 1000
+
+		var sortedBuckets []histBucket
+		for bound, count := range latBucketMap {
+			sortedBuckets = append(sortedBuckets, histBucket{upperBound: bound, count: count})
+		}
+		sort.Slice(sortedBuckets, func(i, j int) bool {
+			return sortedBuckets[i].upperBound < sortedBuckets[j].upperBound
+		})
+
+		stats.LifetimeP95Ms = calculateQuantile(0.95, latCount, sortedBuckets) * 1000
 	}
-	return total, byClass, avgMs
+
+	stats.WindowSeconds = DefaultWindowSeconds
+	if r.window != nil {
+		win := r.window.Snapshot()
+		stats.AvgMs = win.AvgMs
+		stats.P50Ms = win.P50Ms
+		stats.P95Ms = win.P95Ms
+		stats.P99Ms = win.P99Ms
+		stats.AvgResponseBytes = win.AvgResponseBytes
+	} else {
+		if latCount > 0 {
+			stats.AvgMs = stats.LifetimeAvgMs
+			stats.P95Ms = stats.LifetimeP95Ms
+		}
+		if bytesCount > 0 {
+			stats.AvgResponseBytes = bytesSum / bytesCount
+		}
+	}
+
+	if r.probes != nil {
+		stats.ReadyzMs, stats.LivezMs = r.probes.LatenciesMs()
+	}
+	if stats.ReadyzMs == 0 && readyzCount > 0 {
+		stats.ReadyzMs = readyzSum / readyzCount * 1000
+	}
+	if stats.LivezMs == 0 && livezCount > 0 {
+		stats.LivezMs = livezSum / livezCount * 1000
+	}
+
+	if rumCount > 0 {
+		rum := &RUMSummary{
+			SamplesCount: rumCount,
+		}
+		if ttfbCount > 0 {
+			rum.AvgTTFBMs = ttfbSum / ttfbCount * 1000
+		}
+		if lcpCount > 0 {
+			rum.AvgLCPMs = lcpSum / lcpCount * 1000
+		}
+		if inpCount > 0 {
+			rum.AvgINPMs = inpSum / inpCount * 1000
+		}
+		if clsCount > 0 {
+			rum.AvgCLS = clsSum / clsCount
+		}
+		if domCount > 0 {
+			rum.AvgDOMIntMs = domSum / domCount * 1000
+		}
+		stats.RUM = rum
+	}
+
+	stats.RecentErrors = r.RecentErrors()
+
+	return stats
 }
+
+// HTTPTotals aggregates the labelled HTTP families back into the legacy
+// flat counters (total, per status class, average latency in ms).
+func (r *Registry) HTTPTotals() (total uint64, byClass map[string]uint64, avgMs float64) {
+	s := r.ExtendedStats()
+	return s.Total, s.ByClass, s.AvgMs
+}
+
 
 // uptimeSeconds mirrors the uptime gauge for the JSON endpoint without
 // triggering an extra gather.
 func (r *Registry) uptimeSeconds() float64 {
 	return time.Since(r.startTime).Seconds()
 }
+
+const maxRecentErrors = 5
+
+// RecordHTTPError records a single 4xx or 5xx HTTP error in the ring buffer.
+func (r *Registry) RecordHTTPError(method, path string, status int, duration time.Duration) {
+	r.errorsMu.Lock()
+	defer r.errorsMu.Unlock()
+
+	ev := HTTPErrorEvent{
+		Timestamp:  time.Now(),
+		Method:     method,
+		Path:       path,
+		Status:     status,
+		DurationMs: duration.Milliseconds(),
+	}
+
+	if len(r.recentErrors) >= maxRecentErrors {
+		copy(r.recentErrors, r.recentErrors[1:])
+		r.recentErrors[len(r.recentErrors)-1] = ev
+	} else {
+		r.recentErrors = append(r.recentErrors, ev)
+	}
+}
+
+// RecentErrors returns a snapshot of the most recent HTTP error events.
+func (r *Registry) RecentErrors() []HTTPErrorEvent {
+	r.errorsMu.RLock()
+	defer r.errorsMu.RUnlock()
+
+	if len(r.recentErrors) == 0 {
+		return nil
+	}
+	out := make([]HTTPErrorEvent, len(r.recentErrors))
+	copy(out, r.recentErrors)
+	return out
+}
+
