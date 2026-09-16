@@ -12,7 +12,7 @@ func RegisterRoutes(r chi.Router, h *Handler, authorizers ...auth.Authorizer) {
 	if len(authorizers) > 0 {
 		authorizer = authorizers[0]
 	}
-	variant := func(action auth.Action) chi.Router { return withAccess(r, authorizer, "product.product", action) }
+	variant := func(vr chi.Router, action auth.Action) chi.Router { return withAccess(vr, authorizer, "product.product", action) }
 	// Product Templates
 	r.Route("/products", func(pr chi.Router) {
 		withAccess(pr, authorizer, "product.template", auth.ActionCreate).Post("/", h.CreateProduct)
@@ -26,8 +26,8 @@ func RegisterRoutes(r chi.Router, h *Handler, authorizers ...auth.Authorizer) {
 
 	// Standalone Variants
 	r.Route("/variants", func(vr chi.Router) {
-		variant(auth.ActionRead).Get("/{id}", h.GetVariant)
-		variant(auth.ActionUnlink).Delete("/{id}", h.DeleteVariant)
+		variant(vr, auth.ActionRead).Get("/{id}", h.GetVariant)
+		variant(vr, auth.ActionUnlink).Delete("/{id}", h.DeleteVariant)
 	})
 
 	// Product Categories

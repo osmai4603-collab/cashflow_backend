@@ -109,6 +109,39 @@ func TestFSLoyaltySchemaComplete(t *testing.T) {
 	}
 }
 
+// TestFSBankStatementACLSeeded verifies the ACL migration that closes the
+// account.bank.statement gap: group 1 (accountant) can read/create/update but
+// not delete, group 2 (manager) keeps full access.
+func TestFSBankStatementACLSeeded(t *testing.T) {
+	up, err := FS.ReadFile("000070_seed_bank_statement_acl.up.sql")
+	if err != nil {
+		t.Fatalf("missing ACL migration: %v", err)
+	}
+	upStr := string(up)
+
+	for _, want := range []string{
+		"res_group_permissions",
+		"'account.bank.statement'",
+		"can_read",
+		"can_create",
+		"can_update",
+		"can_delete",
+	} {
+		if !strings.Contains(upStr, want) {
+			t.Errorf("up migration is missing %s", want)
+		}
+	}
+
+	down, err := FS.ReadFile("000070_seed_bank_statement_acl.down.sql")
+	if err != nil {
+		t.Fatalf("missing down migration: %v", err)
+	}
+	downStr := string(down)
+	if !strings.Contains(downStr, "account.bank.statement") {
+		t.Error("down migration must remove the account.bank.statement ACL rows")
+	}
+}
+
 // TestFSLoyaltyACLNamed matches the ACL migration file that seeds permissions.
 func TestFSLoyaltyACLNamed(t *testing.T) {
 	up, err := FS.ReadFile("000041_seed_loyalty_acl.up.sql")

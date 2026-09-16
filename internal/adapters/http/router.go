@@ -84,6 +84,11 @@ func NewRouterWithHandlers(
 
 	// Global Middlewares
 	r.Use(middleware.RequestID)
+	// Rewrite requests with a trailing slash to their canonical route so
+	// clients are not forced to strip them manually (e.g. /partners/suppliers/).
+	// Registered trailing-slash routes (e.g. /api/v1/) keep working because chi
+	// matches both variants.
+	r.Use(middleware.StripSlashes)
 	r.Use(metrics.Middleware)
 	if proxyMode {
 		// Reverse proxy mode: trust X-Forwarded-For / X-Real-IP (Odoo --proxy-mode).
@@ -285,8 +290,9 @@ func structuredLogger(logger *slog.Logger) func(next http.Handler) http.Handler 
 
 			next.ServeHTTP(ww, r)
 
+			isProbe := r.URL.Path == "/livez" || r.URL.Path == "/readyz"
 			// Suppress logging for observability probes unless there is an error (status >= 400)
-			if (r.URL.Path == "/livez" || r.URL.Path == "/readyz") && ww.Status() < 400 {
+			if isProbe && ww.Status() < 400 {
 				return
 			}
 
@@ -302,8 +308,19 @@ func structuredLogger(logger *slog.Logger) func(next http.Handler) http.Handler 
 				"duration_ms", durationMs,
 				"request_id", reqID,
 			}
+			if cause := response.TakeError(r); cause != nil {
+				attrs = append(attrs, "error", cause.Error())
+			}
 
 			switch {
+			case isProbe && status == http.StatusServiceUnavailable:
+				// A 503 on /readyz during an expected drain is not a fault;
+				// log it at DEBUG to avoid flooding the error log.
+				logger.Debug("http probe not ready", attrs...)
+			case isProbe && status >= 500:
+				logger.Error("http probe server error", attrs...)
+			case isProbe:
+				logger.Debug("http probe", attrs...)
 			case status >= 500:
 				logger.Error("http request server error", attrs...)
 			case status >= 400:

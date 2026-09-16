@@ -46,3 +46,52 @@ func TestTranslationString_GetLocalized(t *testing.T) {
 		t.Errorf("GetLocalized with no context = %q, want %q", got, "Hello")
 	}
 }
+
+func TestTranslationString_Scan_AcceptsByteSliceAndString(t *testing.T) {
+	t.Run("nil value", func(t *testing.T) {
+		var ts TranslationString
+		if err := ts.Scan(nil); err != nil {
+			t.Fatalf("scan nil: %v", err)
+		}
+		if ts != "" {
+			t.Errorf("expected empty string, got %q", ts)
+		}
+	})
+
+	t.Run("[]byte JSONB map", func(t *testing.T) {
+		var ts TranslationString
+		if err := ts.Scan([]byte(`{"en_US":"New","ar_SA":"جديد"}`)); err != nil {
+			t.Fatalf("scan []byte: %v", err)
+		}
+		if string(ts) != "New" {
+			t.Errorf("expected en_US default New, got %q", ts)
+		}
+	})
+
+	t.Run("string JSONB map", func(t *testing.T) {
+		var ts TranslationString
+		if err := ts.Scan(`{"en_US":"Won"}`); err != nil {
+			t.Fatalf("scan string: %v", err)
+		}
+		if string(ts) != "Won" {
+			t.Errorf("expected Won, got %q", ts)
+		}
+	})
+
+	t.Run("plain string", func(t *testing.T) {
+		var ts TranslationString
+		if err := ts.Scan("Qualified"); err != nil {
+			t.Fatalf("scan plain string: %v", err)
+		}
+		if string(ts) != "Qualified" {
+			t.Errorf("expected Qualified, got %q", ts)
+		}
+	})
+
+	t.Run("unsupported type", func(t *testing.T) {
+		var ts TranslationString
+		if err := ts.Scan(42); err == nil {
+			t.Fatal("expected error for unsupported scan type")
+		}
+	})
+}

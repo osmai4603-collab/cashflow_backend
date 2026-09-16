@@ -103,6 +103,14 @@ func (w *statusWriter) Unwrap() http.ResponseWriter {
 	return w.ResponseWriter
 }
 
+// Flush implements http.Flusher so streaming handlers (e.g. SSE) keep working
+// through the middleware. It delegates to the underlying writer when supported.
+func (w *statusWriter) Flush() {
+	if f, ok := w.ResponseWriter.(http.Flusher); ok {
+		f.Flush()
+	}
+}
+
 // routePatternFor resolves the matched route template for a request. Outside a
 // chi router has no route context; unmatched requests (e.g. 404) produce an
 // empty pattern. Both collapse onto the "unknown" label so cardinality stays

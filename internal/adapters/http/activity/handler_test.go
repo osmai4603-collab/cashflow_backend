@@ -17,6 +17,7 @@ import (
 	userstorage "cashflow_backend/internal/adapters/storage/user"
 	"cashflow_backend/internal/domain/activity"
 	"cashflow_backend/internal/platform/auth"
+	"cashflow_backend/internal/platform/notificationbus"
 	activityusecase "cashflow_backend/internal/usecase/activity"
 
 	"github.com/go-chi/chi/v5"
@@ -40,6 +41,24 @@ func setupTestServer() (*chi.Mux, *activitystorage.MemoryRepo) {
 	r := chi.NewRouter()
 	activityhttp.RegisterRoutes(r, h)
 	return r, repo
+}
+
+// newTestHandlerWithBus builds a streaming-ready handler backed by a real
+// notification bus for the SSE end-to-end tests.
+func newTestHandlerWithBus(_ *testing.T, bus *notificationbus.Bus) http.Handler {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	repo := activitystorage.NewMemoryRepo()
+	userRepo := userstorage.NewMemoryRepo()
+	mock := &mockBus{}
+
+	uc := activityusecase.NewUseCase(repo, repo, repo, repo, repo, repo, repo, mock, userRepo)
+	h := activityhttp.NewHandler(uc, logger, bus)
+
+	r := chi.NewRouter()
+	r.Route("/api/v1", func(r chi.Router) {
+		activityhttp.RegisterRoutes(r, h)
+	})
+	return r
 }
 
 func withAuth(req *http.Request, userID, companyID int64) *http.Request {

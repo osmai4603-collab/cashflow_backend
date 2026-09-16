@@ -748,8 +748,8 @@ func (r *PostgresRepo) GetMoveWithLines(ctx context.Context, id int64) (*account
 	linesQuery := `
 		SELECT id, move_id, account_id, partner_id, product_id, name,
 		       quantity, price_unit, discount, debit, credit, balance,
-		       tax_ids, tax_amount, reconcile, reconciled, amount_residual,
-		       matching_number, statement_line_id, display_type, cogs_origin_id, is_landed_costs_line, created_at, updated_at
+		       COALESCE(tax_ids, '{}') AS tax_ids, tax_amount, reconcile, reconciled, amount_residual,
+		       matching_number, statement_line_id, COALESCE(display_type, '') AS display_type, cogs_origin_id, is_landed_costs_line, created_at, updated_at
 		FROM account_move_lines
 		WHERE move_id = $1
 		ORDER BY id ASC
@@ -914,8 +914,8 @@ func (r *PostgresRepo) ListMoves(ctx context.Context, f *filter.Filter, page pag
 // scanMoveLineColumns lists the persisted move-line columns in scan order.
 const moveLineColumns = `id, move_id, account_id, partner_id, product_id, name,
 		quantity, price_unit, discount, debit, credit, balance,
-		tax_ids, tax_amount, reconcile, reconciled, amount_residual,
-		matching_number, statement_line_id, display_type, cogs_origin_id, created_at, updated_at`
+		COALESCE(tax_ids, '{}') AS tax_ids, tax_amount, reconcile, reconciled, amount_residual,
+		matching_number, statement_line_id, COALESCE(display_type, '') AS display_type, cogs_origin_id, created_at, updated_at`
 
 func (r *PostgresRepo) GetMoveLineByID(ctx context.Context, id int64) (*accounting.AccountMoveLine, error) {
 	query := `

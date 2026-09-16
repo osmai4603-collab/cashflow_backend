@@ -125,9 +125,14 @@ func (t *TranslationString) Scan(value interface{}) error {
 		*t = ""
 		return nil
 	}
-	bytes, ok := value.([]byte)
-	if !ok {
-		return errors.New("type assertion to []byte failed")
+	var bytes []byte
+	switch v := value.(type) {
+	case []byte:
+		bytes = v
+	case string:
+		bytes = []byte(v)
+	default:
+		return errors.New("unsupported type for TranslationString scan")
 	}
 	if len(bytes) == 0 || string(bytes) == "null" {
 		*t = ""

@@ -15,12 +15,17 @@ func (s *SlogAuthorizationSink) RecordAuthorizationDecision(decision Authorizati
 	if s == nil || s.logger == nil {
 		return
 	}
-	s.logger.Info(decision.Event,
+	attrs := []any{
 		"user_id", decision.UserID,
 		"company_id", decision.CompanyID,
 		"model", decision.Model,
 		"action", decision.Action,
 		"allowed", decision.Allowed,
 		"reason", decision.Reason,
-	)
+	}
+	if decision.Allowed {
+		s.logger.Info(decision.Event, attrs...)
+		return
+	}
+	s.logger.Warn(decision.Event, attrs...)
 }

@@ -34,15 +34,17 @@ func (p *Permission) Validate() error {
 }
 
 // Allows checks whether the permission grants an action.
+// Odoo vocabulary (write/unlink) is treated as an alias for the same privileges
+// as the CRUD vocabulary (update/delete) so callers can use either term.
 func (p *Permission) Allows(action string) bool {
 	switch strings.ToLower(strings.TrimSpace(action)) {
 	case "read":
 		return p.CanRead
 	case "create":
 		return p.CanCreate
-	case "update":
+	case "update", "write":
 		return p.CanUpdate
-	case "delete":
+	case "delete", "unlink":
 		return p.CanDelete
 	default:
 		return false

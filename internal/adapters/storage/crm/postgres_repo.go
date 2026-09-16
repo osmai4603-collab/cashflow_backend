@@ -92,10 +92,15 @@ func (r *PostgresRepo) CreateLead(ctx context.Context, lead *crm.Lead) error {
 func (r *PostgresRepo) GetLeadByID(ctx context.Context, id int64) (*crm.Lead, error) {
 	query := `
 		SELECT 
-			id, name, type, partner_id, partner_name, contact_name, email_from, phone,
+			id, name, type, partner_id,
+			COALESCE(partner_name, '') AS partner_name,
+			COALESCE(contact_name, '') AS contact_name,
+			COALESCE(email_from, '') AS email_from,
+			COALESCE(phone, '') AS phone,
 			stage_id, salesperson_id, expected_revenue, prorated_revenue, probability,
-			source, priority, lost_reason_id, lost_feedback, date_deadline, date_closed,
-			date_conversion, notes, company_id, active, created_at, updated_at, created_by, updated_by
+			COALESCE(source, '') AS source, priority, lost_reason_id,
+			COALESCE(lost_feedback, '') AS lost_feedback, date_deadline, date_closed,
+			date_conversion, COALESCE(notes, '') AS notes, company_id, active, created_at, updated_at, created_by, updated_by
 		FROM crm_leads
 		WHERE id = $1
 	`
@@ -217,10 +222,15 @@ func (r *PostgresRepo) ListLeads(ctx context.Context, f *filter.Filter, page pag
 
 	dataQuery := fmt.Sprintf(`
 		SELECT 
-			id, name, type, partner_id, partner_name, contact_name, email_from, phone,
+			id, name, type, partner_id,
+			COALESCE(partner_name, '') AS partner_name,
+			COALESCE(contact_name, '') AS contact_name,
+			COALESCE(email_from, '') AS email_from,
+			COALESCE(phone, '') AS phone,
 			stage_id, salesperson_id, expected_revenue, prorated_revenue, probability,
-			source, priority, lost_reason_id, lost_feedback, date_deadline, date_closed,
-			date_conversion, notes, company_id, active, created_at, updated_at, created_by, updated_by
+			COALESCE(source, '') AS source, priority, lost_reason_id,
+			COALESCE(lost_feedback, '') AS lost_feedback, date_deadline, date_closed,
+			date_conversion, COALESCE(notes, '') AS notes, company_id, active, created_at, updated_at, created_by, updated_by
 		FROM crm_leads
 		%s
 		ORDER BY %s %s
@@ -272,7 +282,8 @@ func (r *PostgresRepo) CreateStage(ctx context.Context, stage *crm.Stage) error 
 
 func (r *PostgresRepo) GetStageByID(ctx context.Context, id int64) (*crm.Stage, error) {
 	query := `
-		SELECT id, name, sequence, is_won, is_closed, fold, requirements, company_id, active, created_at, updated_at, created_by, updated_by
+		SELECT id, name, sequence, is_won, is_closed, COALESCE(fold, false) AS fold,
+		       COALESCE(requirements, '') AS requirements, company_id, active, created_at, updated_at, created_by, updated_by
 		FROM crm_stages
 		WHERE id = $1
 	`
@@ -332,7 +343,8 @@ func (r *PostgresRepo) DeleteStage(ctx context.Context, id int64) error {
 
 func (r *PostgresRepo) ListStages(ctx context.Context) ([]crm.Stage, error) {
 	query := `
-		SELECT id, name, sequence, is_won, is_closed, fold, requirements, company_id, active, created_at, updated_at
+		SELECT id, name, sequence, is_won, is_closed, COALESCE(fold, false) AS fold,
+		       COALESCE(requirements, '') AS requirements, company_id, active, created_at, updated_at
 		FROM crm_stages
 		WHERE active = true
 		ORDER BY sequence ASC, id ASC
@@ -359,7 +371,8 @@ func (r *PostgresRepo) ListStages(ctx context.Context) ([]crm.Stage, error) {
 
 func (r *PostgresRepo) GetWonStage(ctx context.Context) (*crm.Stage, error) {
 	query := `
-		SELECT id, name, sequence, is_won, is_closed, fold, requirements, company_id, active, created_at, updated_at
+		SELECT id, name, sequence, is_won, is_closed, COALESCE(fold, false) AS fold,
+		       COALESCE(requirements, '') AS requirements, company_id, active, created_at, updated_at
 		FROM crm_stages
 		WHERE active = true AND is_won = true
 		ORDER BY sequence ASC LIMIT 1
@@ -380,7 +393,8 @@ func (r *PostgresRepo) GetWonStage(ctx context.Context) (*crm.Stage, error) {
 
 func (r *PostgresRepo) GetInitialStage(ctx context.Context) (*crm.Stage, error) {
 	query := `
-		SELECT id, name, sequence, is_won, is_closed, fold, requirements, company_id, active, created_at, updated_at
+		SELECT id, name, sequence, is_won, is_closed, COALESCE(fold, false) AS fold,
+		       COALESCE(requirements, '') AS requirements, company_id, active, created_at, updated_at
 		FROM crm_stages
 		WHERE active = true AND is_won = false AND is_closed = false
 		ORDER BY sequence ASC LIMIT 1
@@ -575,10 +589,15 @@ func (r *PostgresRepo) GetPipeline(ctx context.Context, salespersonID *int64) ([
 	for i, stage := range stages {
 		baseQ := `
 			SELECT 
-				id, name, type, partner_id, partner_name, contact_name, email_from, phone,
+				id, name, type, partner_id,
+				COALESCE(partner_name, '') AS partner_name,
+				COALESCE(contact_name, '') AS contact_name,
+				COALESCE(email_from, '') AS email_from,
+				COALESCE(phone, '') AS phone,
 				stage_id, salesperson_id, expected_revenue, prorated_revenue, probability,
-				source, priority, lost_reason_id, lost_feedback, date_deadline, date_closed,
-				date_conversion, notes, company_id, active, created_at, updated_at
+				COALESCE(source, '') AS source, priority, lost_reason_id,
+				COALESCE(lost_feedback, '') AS lost_feedback, date_deadline, date_closed,
+				date_conversion, COALESCE(notes, '') AS notes, company_id, active, created_at, updated_at
 			FROM crm_leads
 			WHERE stage_id = $1 AND type = 'opportunity' AND active = true
 		`

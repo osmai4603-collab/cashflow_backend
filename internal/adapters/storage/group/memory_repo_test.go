@@ -86,3 +86,46 @@ func TestMemoryRepoCheckAccessUsesImpliedGroups(t *testing.T) {
 		t.Fatal("expected inherited permission to be allowed")
 	}
 }
+
+func TestMemoryRepoCheckAccessActionAliases(t *testing.T) {
+	ctx := context.Background()
+	repo := NewMemoryRepo()
+
+	g := &domaingroup.Group{Name: "Finance"}
+	if err := repo.Create(ctx, g); err != nil {
+		t.Fatalf("create group: %v", err)
+	}
+	perm := &domaingroup.Permission{
+		GroupID:   g.ID,
+		Model:     "account.bank.statement",
+		CanRead:   true,
+		CanCreate: true,
+		CanUpdate: true,
+		CanDelete: false,
+	}
+	if err := repo.CreatePermission(ctx, perm); err != nil {
+		t.Fatalf("create permission: %v", err)
+	}
+	if err := repo.AssignUserToGroup(ctx, 30, g.ID); err != nil {
+		t.Fatalf("assign user: %v", err)
+	}
+
+	for _, action := range []string{"read", "create", "update", "write"} {
+		allowed, err := repo.CheckAccess(ctx, 30, "account.bank.statement", action)
+		if err != nil {
+			t.Fatalf("check access(%s): %v", action, err)
+		}
+		if !allowed {
+			t.Errorf("expected action %q to be allowed via aliasing", action)
+		}
+	}
+	for _, action := range []string{"delete", "unlink"} {
+		allowed, err := repo.CheckAccess(ctx, 30, "account.bank.statement", action)
+		if err != nil {
+			t.Fatalf("check access(%s): %v", action, err)
+		}
+		if allowed {
+			t.Errorf("expected action %q to be denied (can_delete=false)", action)
+		}
+	}
+}

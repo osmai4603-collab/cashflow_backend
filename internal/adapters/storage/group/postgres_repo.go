@@ -303,7 +303,12 @@ func (r *PostgresRepo) CheckAccess(ctx context.Context, userID int64, model, act
 		SELECT 1
 		FROM effective_groups groups
 		JOIN res_group_permissions p ON p.group_id = groups.group_id
-		WHERE p.active = true AND LOWER(p.model) = LOWER($2) AND ((LOWER($3) = 'read' AND p.can_read) OR (LOWER($3) = 'create' AND p.can_create) OR (LOWER($3) = 'update' AND p.can_update) OR (LOWER($3) = 'delete' AND p.can_delete))
+		WHERE p.active = true AND LOWER(p.model) = LOWER($2) AND (
+			(LOWER($3) = 'read' AND p.can_read) OR
+			(LOWER($3) = 'create' AND p.can_create) OR
+			(LOWER($3) IN ('update', 'write') AND p.can_update) OR
+			(LOWER($3) IN ('delete', 'unlink') AND p.can_delete)
+		)
 	)`
 	var exists bool
 	if err := r.pool.QueryRow(ctx, query, userID, model, action).Scan(&exists); err != nil {

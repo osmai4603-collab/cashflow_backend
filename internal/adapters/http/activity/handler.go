@@ -198,17 +198,26 @@ func (h *Handler) StreamNotifications(w http.ResponseWriter, r *http.Request) {
 	events, unsubscribe := h.bus.Subscribe(claims.UserID)
 	defer unsubscribe()
 
-	flusher, ok := w.(http.Flusher)
-	if !ok {
-		response.Error(w, platformerrors.Internal("streaming is not supported", nil))
-		return
+	// Prefer http.ResponseController (Go 1.20+) which walks the Unwrap chain to
+	// reach the underlying flusher, falling back to the legacy type assertion
+	// for writers that only expose http.Flusher directly.
+	var flush func()
+	if f, ok := w.(http.Flusher); ok {
+		flush = f.Flush
+	} else {
+		rc := http.NewResponseController(w)
+		if err := rc.Flush(); err != nil {
+			response.Error(w, platformerrors.Internal("streaming is not supported", err))
+			return
+		}
+		flush = func() { _ = rc.Flush() }
 	}
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write([]byte(": connected\n\n"))
-	flusher.Flush()
+	flush()
 
 	encoder := json.NewEncoder(w)
 	for {
@@ -228,7 +237,7 @@ func (h *Handler) StreamNotifications(w http.ResponseWriter, r *http.Request) {
 			if _, err := w.Write([]byte("\n")); err != nil {
 				return
 			}
-			flusher.Flush()
+			flush()
 		}
 	}
 }
