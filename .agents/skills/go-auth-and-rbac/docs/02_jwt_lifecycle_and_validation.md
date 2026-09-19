@@ -1,78 +1,79 @@
-# JWT Lifecycle, Cryptographic Validation & Refresh Tokens
+# دورة حياة JWT والتحقق التشفيري ورموز التجديد في Go
 
-JSON Web Tokens (JWT) are a compact, URL-safe means of representing claims to be transferred between parties. In Go services, improper token parsing or signature handling is a frequent vector for authentication bypass.
-
----
-
-## 1. Cryptographic Security Standards
-
-1. **Explicit Algorithm Enforcement**:
-   Always whitelist acceptable algorithms (`HS256`, `RS256`, `EdDSA`). Reject tokens using the `none` algorithm or mismatched keys (e.g. attempting to verify an HMAC signature using an RSA public key).
-2. **Signature Verification**:
-   Signatures must be validated using cryptographic primitives with sufficient entropy:
-   - For HMAC: Secret key length $\ge 256$ bits (32 bytes).
-   - For RSA: Key size $\ge 2048$ bits.
-   - For ECDSA: P-256 or P-384 curves.
-3. **Claims Verification**:
-   - `exp` (Expiration Time): Enforce strict expiration. Do not allow indefinitely valid tokens.
-   - `nbf` (Not Before) & `iat` (Issued At): Reject future-dated tokens allowing for small clock skew ($\le 60$ seconds).
-   - `iss` (Issuer): Ensure token was minted by the authorized identity authority.
-   - `aud` (Audience): Ensure token was intended for this specific service.
+تعد رموز JSON Web Tokens (JWT) وسيلة مدمجة وآمنة في الروابط لنقل الادعاءات بين الأطراف. في خدمات Go، يمثل الفحص غير الصحيح للرمز أو المعالجة الخاطئة للتوقيع ثغرة متكررة لتجاوز المصادقة.
 
 ---
 
-## 2. Token Lifecycle: Access vs Refresh Tokens
+## 1. المعايير الأمنية التشفيرية
 
-| Attribute | Access Token | Refresh Token |
+1. **الفرض الصريح للخوارزمية المعتمدة**:
+   حدد دائماً قائمة بيضاء للخوارزميات المقبولة (`HS256`, `RS256`, `EdDSA`). ارفض فوراً أي رمز يستخدم خوارزمية `none` أو يستخدم مفتاحاً غير مطابق (مثل محاولة فحص توقيع HMAC باستخدام مفتاح RSA العام).
+2. **التحقق من التوقيع الرياضي**:
+   يجب التحقق من التوقيع باستخدام دوال تشفيرية ذات عشوائية وتشتت كافٍ:
+   - لـ HMAC: طول المفتاح السري $\ge 256$ بت (32 بايت).
+   - لـ RSA: طول المفتاح $\ge 2048$ بت.
+   - لـ ECDSA: منحنيات P-256 أو P-384.
+3. **التحقق من صحة الادعاءات (Claims Verification)**:
+   - `exp` (تاريخ الانتهاء): فرض انتهاء صلاحية صارم، وعدم السماح برموز دائمة الصلاحية.
+   - `nbf` و `iat`: رفض الرموز المؤرخة في المستقبل مع السماح بهامش زمني طفيف ($\le 60$ ثانية).
+   - `iss` (المصدر): التأكد من صدور الرمز من خادم الهوية المعتمد.
+   - `aud` (الجمهور): التأكد من أن الرمز مخصص لهذه الخدمة تحديداً.
+
+---
+
+## 2. دورة حياة الرموز: رموز الوصول مقابل رموز التجديد
+
+| الخاصية | رمز الوصول (Access Token) | رمز التجديد (Refresh Token) |
 | :--- | :--- | :--- |
-| **Lifespan** | Short (10 to 15 minutes) | Long (7 to 30 days) |
-| **Storage** | Memory / In-flight Authorization Header | Secure HttpOnly, SameSite=Strict Cookie |
-| **Payload** | Rich claims (User ID, Company ID, Roles) | Opaque identifier or minimal cryptographically signed ID |
-| **Revocation** | Difficult without distributed blocklist | Checked against database/cache on every refresh |
-| **Rotation** | Generated upon refresh | Rotated on every use (Refresh Token Rotation - RTR) |
+| **العمر الافتراضي** | قصير (10 إلى 15 دقيقة) | طويل (7 إلى 30 يوماً) |
+| **مكان التخزين** | في الذاكرة / ترويسة Authorization | ملف تعريف ارتباط HttpOnly مشفر مع SameSite=Strict |
+| **الحمولة** | ادعاءات غنية (معرف المستخدم، الشركة، الأدوار) | معرف مبهم أو رمز موقع بأقل قدر من البيانات |
+| **إمكانية الإلغاء** | صعبة بدون قائمة حظر موزعة | فحص مباشر مقابل قاعدة البيانات/الكاش عند كل تجديد |
+| **التدوير** | يصدر عند كل عملية تجديد | يُدوّر مع كل استخدام (Refresh Token Rotation - RTR) |
 
 ---
 
-## 3. JWT Claims Structure
+## 3. هيكل ادعاءات JWT المعياري
 
-Standardized claim structure for multi-tenant Go services:
+هيكل ادعاءات قياسي للخدمات متعددة المستأجرين في Go:
 
 ```go
 package auth
 
 import (
-	"time"
+ "time"
 )
 
-// AppClaims represents the standard token claims structure.
+// AppClaims يمثل الهيكل القياسي لادعاءات الرمز
 type AppClaims struct {
-	Subject   string   `json:"sub"`        // User ID
-	CompanyID string   `json:"company_id"` // Multi-tenant company/tenant ID
-	Email     string   `json:"email"`      // User email
-	Roles     []string `json:"roles"`      // Assigned roles (e.g. ["admin", "accountant"])
-	IssuedAt  int64    `json:"iat"`        // Unix timestamp
-	ExpiresAt int64    `json:"exp"`        // Unix timestamp
-	Issuer    string   `json:"iss"`        // Originating auth service
+ Subject   string   `json:"sub"`        // معرف المستخدم
+ CompanyID string   `json:"company_id"` // معرف الشركة/المستأجر
+ Email     string   `json:"email"`      // البريد الإلكتروني للمستخدم
+ Roles     []string `json:"roles"`      // الأدوار المسندة (مثل ["admin", "accountant"])
+ IssuedAt  int64    `json:"iat"`        // وقت الإصدار بتوقيت Unix
+ ExpiresAt int64    `json:"exp"`        // وقت الانتهاء بتوقيت Unix
+ Issuer    string   `json:"iss"`        // جهة إصدار الرمز
 }
 
-// Valid performs standard validation checks.
+// Valid ينفذ فحوصات التحقق القياسية
 func (c *AppClaims) Valid(now time.Time) bool {
-	if c.ExpiresAt <= now.Unix() {
-		return false
-	}
-	if c.CompanyID == "" || c.Subject == "" {
-		return false
-	}
-	return true
+ if c.ExpiresAt <= now.Unix() {
+  return false
+ }
+ if c.CompanyID == "" || c.Subject == "" {
+  return false
+ }
+ return true
 }
 ```
 
 ---
 
-## 4. Refresh Token Rotation (RTR) & Reuse Detection
+## 4. تدوير رموز التجديد (RTR) واكتشاف إعادة الاستخدام
 
-To prevent compromised refresh tokens from granting infinite access:
-1. When a client presents `RefreshToken_A`, the server validates it.
-2. The server issues a new pair: `AccessToken_2` and `RefreshToken_B`.
-3. `RefreshToken_A` is marked as revoked/consumed.
-4. **Reuse Detection**: If `RefreshToken_A` is ever presented again, the system detects a token reuse breach and **invalidates all active sessions** for that user immediately.
+لمنع رموز التجديد المسروقة من منح وصول دائم غير مقيد:
+
+1. عندما يقدم العميل `RefreshToken_A`، يتحقق الخادم من صحته.
+2. يصدر الخادم زوجاً جديداً: `AccessToken_2` و `RefreshToken_B`.
+3. يتم تعليم `RefreshToken_A` كرمز ملغى أو مستهلك.
+4. **اكتشاف إعادة الاستخدام (Reuse Detection)**: إذا قُدّم `RefreshToken_A` مرة أخرى لاحقاً، يكتشف النظام فوراً حدوث اختراق ويقوم **بإلغاء كافة الجلسات النشطة** لهذا المستخدم فوراً.

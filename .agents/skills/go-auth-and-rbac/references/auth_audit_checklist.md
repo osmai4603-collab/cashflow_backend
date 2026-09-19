@@ -1,55 +1,55 @@
-# Authentication, RBAC & Multi-Tenancy Audit Checklist
+# قائمة التدقيق الأمني للمصادقة وتعدد المستأجرين و RBAC
 
-Use this checklist during architecture reviews and code audits to ensure compliance with security and multi-tenancy standards.
-
----
-
-## 1. Multi-Tenant Isolation (BOLA / IDOR Defense)
-
-- [ ] Is `company_id` / `tenant_id` extracted exclusively from validated token/session claims?
-- [ ] Is `company_id` injected into `context.Context` via an unexported key?
-- [ ] Does every SQL query modifying or reading tenant resources include `WHERE company_id = $tenant`?
-- [ ] Are route identifiers (e.g. `/invoices/{id}`) checked against the caller's tenant in the DB query?
-- [ ] Are cross-company foreign keys protected by composite foreign key constraints?
-- [ ] Is database Row-Level Security (RLS) considered or enabled for critical tables?
+تُستخدم قائمة التحقق هذه أثناء المراجعات المعمارية وتدقيق الكود لضمان الامتثال لمعايير الأمان وتعدد المستأجرين.
 
 ---
 
-## 2. JWT & Token Lifecycle
+## 1. عزل المستأجرين المتعددين (مكافحة ثغرات BOLA / IDOR)
 
-- [ ] Is the signing algorithm explicitly verified (e.g. whitelist `HS256` or `RS256`)?
-- [ ] Is `alg: "none"` explicitly rejected?
-- [ ] Are HMAC keys at least 32 bytes (256 bits) of cryptographically secure random entropy?
-- [ ] Is token expiration (`exp`) strictly enforced with no leeway beyond clock skew ($\le 60$s)?
-- [ ] Are access tokens short-lived ($\le 15$ minutes)?
-- [ ] Are refresh tokens rotated upon use (Refresh Token Rotation)?
-- [ ] Does the system detect refresh token reuse and immediately invalidate all user sessions?
-
----
-
-## 3. RBAC & Authorization
-
-- [ ] Are route endpoints protected by permission-checking middleware (`RequirePermission`)?
-- [ ] Are domain/use-case operations verifying ownership and contextual business rules?
-- [ ] Is permission matching hierarchical or wildcard-enabled (`invoices:*`)?
-- [ ] Do unauthorized requests return `401 Unauthorized` (when unauthenticated) vs `403 Forbidden` (when authenticated but lacking permissions)?
-- [ ] Are permission changes or role revocations reflected immediately or upon token refresh?
+- [ ] هل يتم استخراج معرف الشركة `company_id` / `tenant_id` حصرياً من ادعاءات التوكن أو الجلسة الموثقة؟
+- [ ] هل يُحقن `company_id` في `context.Context` عبر نوع مفتاح خاص غير مصدّر؟
+- [ ] هل يتضمن كل استعلام SQL لقراءة أو تعديل موارد المستأجر شرط `WHERE company_id = $tenant`؟
+- [ ] هل يتم التحقق من معرفات المسارات (مثل `/invoices/{id}`) مقابل مستأجر المتصل في استعلام قاعدة البيانات مباشرة؟
+- [ ] هل المفاتيح الأجنبية محمية بقيود مفاتيح مركبة تضمن عدم التداخل بين الشركات؟
+- [ ] هل تم تفعيل أو دراسة أمان مستوى السطر (RLS) في قاعدة البيانات للجداول الحساسة؟
 
 ---
 
-## 4. Rate Limiting & Brute Force Defense
+## 2. دورة حياة JWT والتحقق التشفيري
 
-- [ ] Are authentication endpoints (`/login`, `/refresh`, `/reset-password`) protected by rate limiters?
-- [ ] Is rate limiting enforced by both IP address and user identifier (email/username)?
-- [ ] Are 429 responses returning standard `Retry-After` headers?
-- [ ] Does password verification use constant-time comparisons (`bcrypt.CompareHashAndPassword`) to prevent timing attacks?
-- [ ] Does failed login attempt accounting trigger graduated backoff or account lockout after threshold?
+- [ ] هل يتم التحقق الصريح من خوارزمية التوقيع (قائمة بيضاء مثل `HS256` أو `RS256`)؟
+- [ ] هل يتم الرفض الصريح والمطلق لخوارزمية `alg: "none"`؟
+- [ ] هل يبلغ طول مفاتيح HMAC ما لا يقل عن 32 بايت (256 بت) من العشوائية التشفيرية الآمنة؟
+- [ ] هل يتم فرض انتهاء صلاحية التوكن (`exp`) بصرامة ودون تجاوز هامش التوقيت ($\le 60$ ثانية)؟
+- [ ] هل رموز الوصول قصيرة الأجل ($\le 15$ دقيقة)؟
+- [ ] هل يتم تدوير رموز التجديد مع كل استخدام (Refresh Token Rotation)؟
+- [ ] هل يكتشف النظام إعادة استخدام رموز التجديد المسروقة ويلغي كافة جلسات المستخدم فوراً؟
 
 ---
 
-## 5. Network & HTTP Security
+## 3. التحكم بالوصول القائم على الأدوار (RBAC) والتفويض
 
-- [ ] Are HTTPS and HSTS (`Strict-Transport-Security`) enforced?
-- [ ] Are standard security headers (`X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`) present on all responses?
-- [ ] Is CORS strictly configured without wildcard (`*`) when credentials are supported?
-- [ ] Are sensitive cookies marked `Secure`, `HttpOnly`, and `SameSite=Lax` or `Strict`?
+- [ ] هل كافة المسارات محمية بوسيط فحص الصلاحيات (`RequirePermission`)؟
+- [ ] هل تتحقق حالات استخدام المجال من ملكية الكيان وقواعد الأعمال السياقية؟
+- [ ] هل تدعم مطابقة الصلاحيات الأنماط الهرمية والعامة (`invoices:*`)؟
+- [ ] هل تُرجع الطلبات غير المصرح لها `401 Unauthorized` (عند غياب المصادقة) مقابل `403 Forbidden` (عند ثبوت الهوية مع نقص الصلاحيات)؟
+- [ ] هل تنعكس تعديلات الصلاحيات أو إلغاء الأدوار فورياً أو عند تجديد التوكن؟
+
+---
+
+## 4. تحديد المعدل ومكافحة هجمات التخمين
+
+- [ ] هل مسارات المصادقة (`/login`, `/refresh`, `/reset-password`) محمية بمحددات المعدل؟
+- [ ] هل يُفرض تحديد المعدل حسب عنوان IP واسم المستخدم/البريد الإلكتروني معاً؟
+- [ ] هل استجابات 429 ترفق ترويسة `Retry-After` القياسية؟
+- [ ] هل يتم فحص كلمة المرور في زمن ثابت (`bcrypt.CompareHashAndPassword`) لمنع هجمات التوقيت؟
+- [ ] هل تفعل المحاولات الفاشلة تأخيراً تصاعدياً أو قفلاً مؤقتاً للحساب بعد تجاوز الحد المسموح؟
+
+---
+
+## 5. أمان الشبكة وترويسات HTTP
+
+- [ ] هل يتم فرض HTTPS وسياسة HSTS (`Strict-Transport-Security`)؟
+- [ ] هل ترويسات الأمان القياسية (`X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`) مضافة لكافة الردود؟
+- [ ] هل تم ضبط سياسات CORS بدقة ودون استخدام العلامة العامة (`*`) عند دعم بيانات الاعتماد؟
+- [ ] هل ملفات تعريف الارتباط الحساسة معلّمة بـ `Secure` و `HttpOnly` و `SameSite=Lax` أو `Strict`؟

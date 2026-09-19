@@ -1,84 +1,81 @@
 ---
 name: go-auth-and-rbac
-description: "Production-ready authentication, role-based access control (RBAC), multi-tenant company isolation, and security middleware standards for Go HTTP backends. Covers JWT validation, context-scoped tenant propagation, BOLA/IDOR prevention, and endpoint rate limiting."
+description: "معايير إنتاجية للمصادقة والتحكم بالوصول القائم على الأدوار (RBAC) وعزل الشركات والمستأجرين ووسطاء الأمان في خلفيات Go لـ HTTP. تغطي التحقق من JWT، تمرير هوية المستأجر عبر السياق، منع ثغرات BOLA/IDOR، وتحديد معدل استهلاك الواجهات."
 ---
 
-# Go Authentication, RBAC & Multi-Tenancy Skill
+# مهارة المصادقة، والتحكم بالوصول RBAC، وتعدد المستأجرين في Go
 
-This skill defines production standards for identity verification, permission enforcement, and
-multi-tenant data isolation in Go services. It guarantees that user sessions are cryptographically
-validated, tenant boundaries (`company_id`) are impenetrable, and sensitive endpoints are protected
-against authorization bypass (BOLA/IDOR) and brute force attacks.
+تحدد هذه المهارة المعايير الإنتاجية الصارمة للتحقق من الهوية، وفرض الصلاحيات، وعزل بيانات الشركات والمستأجرين في خدمات **Go**. تضمن المهارة التحقق التشفيري الرياضي من جلسات المستخدمين، وحصانة حدود المستأجرين (`company_id`) ضد الاختراق، وحماية المسارات الحساسة ضد تجاوز الصلاحيات (BOLA/IDOR) وهجمات التخمين (Brute-Force).
 
 ---
 
-## Production Security Principles
+## المبادئ الأمنية للبيئات الإنتاجية
 
-1. **Context-Scoped Multi-Tenant Isolation**:
-   In multi-company architectures, every authenticated request must resolve the tenant (`company_id`) from the verified token/session and store it in the Go `context.Context`. Repositories must unconditionally scope every database query by `company_id` to prevent Broken Object-Level Authorization (BOLA/IDOR).
-2. **Cryptographically Sound JWT Handling**:
-   Validate JWT signatures, expiration (`exp`), issuer (`iss`), and audience (`aud`). Never accept `alg: none`. Enforce minimum signing secret lengths ($\ge 32$ bytes).
-3. **Decoupled RBAC Guards**:
-   Authorization is enforced in two places:
-   - **Route Middleware**: High-level gating (e.g. requiring `role:manager` or `perm:invoices:write`).
-   - **Domain / Use Case**: Low-level policy checks (e.g. "a manager can only approve invoices within their assigned company").
-4. **Rate Limiting on Authentication Endpoints**:
-   Login, password reset, and token refresh endpoints must enforce token-bucket or sliding-window rate limiting by client IP and account username to prevent brute-force attacks.
-5. **Secure Headers & Strict CORS**:
-   All HTTP responses must set modern security headers (`X-Content-Type-Options`, `X-Frame-Options`, `Content-Security-Policy`, `Strict-Transport-Security`).
+1. **عزل المستأجرين الموجه بالسياق (Context-Scoped Isolation)**:
+   في المعماريات متعددة الشركات، يجب أن يستخرج كل طلب موثق معرف الشركة (`company_id`) من الرمز أو الجلسة الموثقة ويحقنه في `context.Context`. ويجب على مستودعات البيانات تقييد كل استعلام إجبارياً بقيد `company_id` لمنع ثغرات BOLA/IDOR.
+2. **التعامل التشفيري الصارم مع رموز JWT**:
+   التحقق من توقيع JWT، وتاريخ الانتهاء (`exp`)، والمصدر (`iss`)، والجمهور (`aud`). حظر خوارزمية `alg: none` تماماً، وفرض مفاتيح سرية بطول لا يقل عن 32 بايت.
+3. **حراس RBAC المستقلون على مستويين**:
+   يُفرض التفويض في موضعين محددين:
+   - **وسيط المسار (Route Middleware)**: حراسة خشنة للمسار (مثل اشتراط دور `role:manager` أو صلاحية `perm:invoices:write`).
+   - **طبقة المجال والتطبيق (Domain/Use Case)**: فحص السياسات الدقيقة (مثل "المدير يعتمد فقط فواتير الشركة المسندة إليه").
+4. **تحديد المعدل على مسارات المصادقة (Rate Limiting)**:
+   مسارات تسجيل الدخول واستعادة كلمة المرور وتجديد التوكن يجب أن تطبق تحديداً للمعدل (Token-Bucket أو Sliding-Window) حسب عنوان IP واسم الحساب لمنع هجمات التخمين.
+5. **ترويسات الأمان الصارمة وسياسات CORS**:
+   يجب أن تُرفق جميع استجابات HTTP بترويسات الأمان الحديثة (`X-Content-Type-Options`, `X-Frame-Options`, `Content-Security-Policy`, `Strict-Transport-Security`).
 
 ---
 
-## Architecture: The Security & Tenant Chain
+## المخطط المعماري: سلسلة الأمان وعزل المستأجر
 
 ```text
 ┌──────────────────────────────────────────────────────────────────────────┐
-│                         Incoming HTTP Request                            │
+│                          طلب HTTP الشبكي القادم                          │
 │           Authorization: Bearer <token> ─── Origin Header                │
 └────────────────────────────────────┬─────────────────────────────────────┘
                                      ▼
 ┌──────────────────────────────────────────────────────────────────────────┐
-│                       Security Middlewares Chain                         │
+│                         سلسلة وسائط الأمان                               │
 │  Security Headers ─── CORS ─── Rate Limiter (IP/User) ─── JWT Validator  │
 └────────────────────────────────────┬─────────────────────────────────────┘
                                      ▼
 ┌──────────────────────────────────────────────────────────────────────────┐
-│                        Context Tenant Injection                          │
+│                         حقن المستأجر في السياق                           │
 │     ctx = WithTenant(ctx, claims.CompanyID, claims.UserID, claims.Roles) │
 └────────────────────────────────────┬─────────────────────────────────────┘
                                      ▼
 ┌──────────────────────────────────────────────────────────────────────────┐
-│                           RBAC Permission Guard                          │
+│                           حارس صلاحيات RBAC                              │
 │     RequiresPermission(ctx, "finance:invoices:create")                   │
 └────────────────────────────────────┬─────────────────────────────────────┘
                                      ▼
 ┌──────────────────────────────────────────────────────────────────────────┐
-│                  Repository Layer (Automatic Scoping)                    │
+│                     طبقة المستودعات (التقييد التلقائي)                    │
 │     SELECT * FROM invoices WHERE id = $1 AND company_id = $2             │
 └──────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## Anti-Patterns to Avoid
+## الأنماط المضادة الشائعة (Anti-Patterns to Avoid)
 
-| Anti-Pattern | Why It Fails in Production | Correct Approach |
+| النمط المضاد | سبب الفشل في الإنتاج | الحل الهندسي المعتمد |
 | :--- | :--- | :--- |
-| `company_id` from Query String | Attacker can manipulate the parameter to access other companies' data | Extract `company_id` strictly from authenticated JWT claims |
-| `SELECT * WHERE id = $1` without tenant | BOLA/IDOR vulnerability: users can read competitors' invoices | Always append `AND company_id = $tenantID` |
-| Long-lived access tokens | Stolen token grants indefinite access | Use short-lived access tokens (15m) + secure refresh tokens |
-| Ignoring `err` on JWT verify | Forged tokens pass as valid | Strict verification of algorithm, signature, and expiration |
-| Hardcoded JWT secrets in code | Secrets get committed to version control | Load from environment variables and validate secret length |
+| قراءة `company_id` من معلمات الرابط (Query String) | يتيح للمهاجم التلاعب بالمعامل للوصول لبيانات شركات أخرى | استخراج `company_id` حصرياً من ادعاءات توكن JWT الموثق |
+| استعلام `SELECT * WHERE id = $1` دون قيد الشركة | ثغرة BOLA/IDOR: تمكّن المستخدمين من قراءة فواتير المنافسين | إضافة شرط إلزامي دائماً `AND company_id = $tenantID` |
+| رموز وصول طويلة الأجل | الرمز المسروق يمنح وصولاً غير محدود | استخدام رموز وصول قصيرة (15 دقيقة) مع رموز تجديد آمنة |
+| تجاهل الخطأ `err` عند التحقق من JWT | تمرير الرموز المزورة والمنتهية كرموز صحيحة | فحص صارم للخوارزمية والتوقيع والانتهاء الزمني |
+| كتابة المفاتيح السرية في الكود المصدري | تسريب المفاتيح في أنظمة التحكم بالإصدار | جلب المفاتيح من متغيرات البيئة مع التحقق من طولها |
 
 ---
 
-## Auth & Security Verification Checklist
+## قائمة التحقق الأمني للإنتاج (Verification Checklist)
 
 ```text
-[ ] All tenant-scoped database queries explicitly filter by company_id
-[ ] JWT tokens enforce HMAC-SHA256 or RSA with minimum 32-byte secret
-[ ] Expired tokens return 401 Unauthorized immediately
-[ ] Role and permission checks occur before executing business logic
-[ ] Sensitive routes (login, token) have IP-based rate limiting
-[ ] Security headers (X-Frame-Options, HSTS, X-Content-Type-Options) are set
+[ ] كافة استعلامات قاعدة البيانات للمستأجرين مقيدة صراحة بشرط company_id
+[ ] رموز JWT تفرض خوارزمية HMAC-SHA256 أو RSA مع مفتاح بطول لا يقل عن 32 بايت
+[ ] الرموز منتهية الصلاحية تُرجع 401 Unauthorized فوراً
+[ ] فحص الأدوار والصلاحيات يتم قبل تنفيذ منطق الأعمال
+[ ] المسارات الحساسة (الدخول، التوكن) محمية بمحددات المعدل حسب الـ IP
+[ ] ترويسات الأمان (X-Frame-Options, HSTS, X-Content-Type-Options) مضافة لجميع الردود
 ```

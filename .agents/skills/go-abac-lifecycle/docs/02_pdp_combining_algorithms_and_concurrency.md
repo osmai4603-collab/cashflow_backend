@@ -1,50 +1,50 @@
-# PDP Combining Algorithms and High-Concurrency Evaluation in Go
+# خوارزميات دمج القرارات في PDP والتقييم عالي التزامن في Go
 
-This document details the architecture and implementation of the **Policy Decision Point (PDP)** in Go, focusing on combining algorithms, thread safety, lock-free evaluation, and zero-downtime policy hot-reloading.
+توضح هذه الوثيقة المعمارية الهندسية والتطبيقية لـ **نقطة اتخاذ القرار (Policy Decision Point - PDP)** في لغة Go، مع التركيز على خوارزميات دمج السياسات، أمان التزامن (Thread Safety)، التقييم بدون أقفال (Lock-Free)، والتحديث اللحظي للسياسات دون انقطاع الخدمة (Zero-Downtime Hot-Reloading).
 
 ---
 
-## 1. The Role of the Policy Decision Point (PDP)
+## 1. دور نقطة اتخاذ القرار (PDP)
 
-The PDP is the mathematical engine of an ABAC system. Given an `EvaluationContext` $(S, R, A, E)$ and a collection of active policy rules $\{R_1, R_2, \dots, R_n\}$, the PDP evaluates applicable rules and combines their outputs into a single, definitive decision: **Permit** or **Deny**.
+نقطة اتخاذ القرار (PDP) هي المحرك الرياضي لنظام ABAC. بناءً على `EvaluationContext` الرباعي $(S, R, A, E)$ ومجموعة قواعد السياسات النشطة $\{R_1, R_2, \dots, R_n\}$، تقوم الـ PDP بتقييم القواعد السارية ودمج مخرجاتها في قرار نهائي حاسم: **سماح (Permit)** أو **منع (Deny)**.
 
 ```text
                ┌────────────────────────────────────────┐
-               │    Incoming Evaluation Context (C)     │
+               │         سياق التقييم القادم            │
                │        (Subject, Resource, ...)        │
                └───────────────────┬────────────────────┘
                                    │
                                    ▼
                ┌────────────────────────────────────────┐
-               │         Active Policy Rules            │
+               │          قواعد السياسات النشطة          │
                │   Rule 1 ───▶ Rule 2 ───▶ Rule 3 ...   │
                └───────────────────┬────────────────────┘
                                    │
                                    ▼
                ┌────────────────────────────────────────┐
-               │         Combining Algorithm            │
+               │           خوارزمية دمج القرارات        │
                │   (Deny-Overrides / Permit-Overrides)  │
                └───────────────────┬────────────────────┘
                                    │
                                    ▼
                ┌────────────────────────────────────────┐
-               │             Final Decision             │
-               │         Permit  OR  Strict Deny        │
+               │              القرار النهائي            │
+               │         سماح (Permit) أم منع (Deny)    │
                └────────────────────────────────────────┘
 ```
 
 ---
 
-## 2. Policy Combining Algorithms
+## 2. خوارزميات دمج السياسات (Policy Combining Algorithms)
 
-When multiple rules target the same request, conflicts can occur (e.g., Rule A allows, but Rule B forbids). The PDP resolves these conflicts using a deterministic **Combining Algorithm**.
+عندما تنطبق أكثر من قاعدة على نفس الطلب، قد تنشأ تعارضات (مثال: القاعدة أ تسمح، بينما القاعدة ب تمنع). يحل محرك PDP هذه التعارضات باستخدام **خوارزمية دمج حتمية**.
 
-### 2.1 Deny-Overrides (Financial & High-Security Standard)
+### 2.1 خوارزمية تغليب المنع (Deny-Overrides - المعيار المالي والأمني الصارم)
 
-- **Rule**: If **any** applicable rule evaluates to `Deny`, the overall decision is immediately and strictly `Deny`.
-- **Condition for Permit**: Access is granted if and only if at least one applicable rule evaluates to `Permit`, and **no** applicable rule evaluates to `Deny`.
-- **Default Fallback**: If no rules are applicable, the decision is `Deny` (Default Deny).
-- **Use Case**: Core financial ledgers, critical infrastructure, data exfiltration defense.
+- **القاعدة**: إذا انتهت **أي** قاعدة سارية إلى المنع `Deny`، فإن القرار الإجمالي يكون فورياً وقطعياً هو **المنع (Deny)**.
+- **شرط السماح**: يُمنح الوصول فقط وفقط إذا انتهت قاعدة سارية واحدة على الأقل إلى السماح `Permit`، ولم تنته **أي** قاعدة سارية أخرى إلى المنع.
+- **الخيار الافتراضي**: في حال عدم وجود أي قواعد سارية، فالقرار هو **المنع الافتراضي (Default Deny)**.
+- **حالات الاستخدام**: الدفاتر المالية، العمليات المصرفية، حماية تسريب البيانات الحساسة.
 
 ```go
 func evaluateDenyOverrides(rules []PolicyRule, ctx EvaluationContext) (Decision, string) {
@@ -72,26 +72,26 @@ func evaluateDenyOverrides(rules []PolicyRule, ctx EvaluationContext) (Decision,
 }
 ```
 
-### 2.2 Permit-Overrides
+### 2.2 خوارزمية تغليب السماح (Permit-Overrides)
 
-- **Rule**: If **any** applicable rule evaluates to `Permit`, the decision is `Permit`, even if other rules evaluate to `Deny`.
-- **Condition for Deny**: Access is denied if all applicable rules evaluate to `Deny`, or if no rules apply.
-- **Use Case**: Public read endpoints with emergency bypass grants, open collaboration portals.
+- **القاعدة**: إذا انتهت **أي** قاعدة سارية إلى السماح `Permit`، فالقرار النهائي هو **السماح**، حتى لو انتهت قواعد أخرى إلى المنع.
+- **شرط المنع**: يُرفض الوصول إذا انتهت كافة القواعد السارية إلى المنع، أو لم تنطبق أي قاعدة.
+- **حالات الاستخدام**: مسارات القراءة العامة، استثناءات الطوارئ، وبوابات التعاون المفتوحة.
 
-### 2.3 First-Applicable
+### 2.3 خوارزمية القاعدة الأولى المنطبقة (First-Applicable)
 
-- **Rule**: The rules are evaluated sequentially in order of registration. The decision of the first rule whose `Target(ctx)` matches and produces a `Permit` or `Deny` is adopted immediately.
-- **Use Case**: Firewall-style ordered rule chains where performance requires short-circuit evaluation.
+- **القاعدة**: يتم تقييم القواعد بالتسلسل وفق ترتيب تسجيلها. أول قاعدة ينطبق شرطها `Target(ctx)` وتنتج سماحاً أو منعاً يتم تبني قرارها فوراً وقطع مسار التقييم.
+- **حالات الاستخدام**: جدران الحماية وقوائم التصفية التتابعية التي تتطلب قطعاً سريعاً (Short-Circuit) لتوفير المعالجة.
 
 ---
 
-## 3. Thread-Safe In-Memory Caching & Hot-Reloading
+## 3. التخزين المؤقت في الذاكرة والتحديث الحي المتزامن
 
-Because authorization checks sit directly in the critical request path, network calls or disk reads to fetch policies on every request introduce intolerable latency. Policies must reside in-memory.
+نظراً لوقوع فحص الصلاحيات مباشرة في المسار الحرج لكل طلب، فإن الاستعلام من الشبكة أو القرص لقراءة السياسات يسبب تأخيراً غير مقبول. يجب أن تعيش السياسات دائماً في الذاكرة الحية (In-Memory).
 
-### 3.1 Pattern A: Read-Heavy Concurrent Scalability with `sync.RWMutex`
+### 3.1 النمط أ: القراءة المتزامنة الكثيفة باستخدام `sync.RWMutex`
 
-For systems where policies are reloaded periodically or via administrative mutations:
+للأنظمة التي تُحدّث سياساتها دورياً أو عبر واجهات الإدارة:
 
 ```go
 type Engine struct {
@@ -117,7 +117,7 @@ func (e *Engine) Evaluate(ctx EvaluationContext) (Decision, string) {
     }
 }
 
-// ReloadRules atomically swaps the active policy rule set under a write lock.
+// ReloadRules يستبدل القواعد النشطة ذرياً تحت قفل الكتابة
 func (e *Engine) ReloadRules(newRules []PolicyRule) {
     e.mu.Lock()
     defer e.mu.Unlock()
@@ -126,9 +126,9 @@ func (e *Engine) ReloadRules(newRules []PolicyRule) {
 }
 ```
 
-### 3.2 Pattern B: Lock-Free Atomic State Swapping with `sync/atomic`
+### 3.2 النمط ب: الاستبدال الذري الخالي من الأقفال عبر `sync/atomic`
 
-For ultra-high throughput environments (hundreds of thousands of requests per second), read locks can incur CPU cache-line bouncing. Using `atomic.Pointer` provides zero read synchronization overhead:
+للبيئات ذات الإنتاجية الفائقة (مئات آلاف الطلبات في الثانية)، قد تسبب أقفال القراءة تنازعاً في الذاكرة المؤقتة للمعالج (CPU Cache Bouncing). يوفر استخدام `atomic.Pointer` صفراً من عبء المزامنة في مسار القراءة:
 
 ```go
 import "sync/atomic"
@@ -152,11 +152,10 @@ func NewAtomicEngine(alg CombiningAlgorithm, rules []PolicyRule) *AtomicEngine {
 }
 
 func (e *AtomicEngine) Evaluate(ctx EvaluationContext) (Decision, string) {
-    snap := e.snapshot.Load() // Atomic pointer load: 0 lock contention
+    snap := e.snapshot.Load() // قراءة ذرية بدون أقفال نهائياً
     switch snap.algorithm {
     case DenyOverrides:
         return evaluateDenyOverrides(snap.rules, ctx)
-    // ...
     }
     return DecisionDeny, "unknown algorithm"
 }
@@ -171,8 +170,8 @@ func (e *AtomicEngine) SwapPolicies(newAlg CombiningAlgorithm, newRules []Policy
 
 ---
 
-## 4. Performance Guidelines: Sub-Microsecond Evaluation
+## 4. إرشادات الأداء: تقييم في زمن يقل عن الميكروثانية
 
-1. **Avoid Heap Allocations in Rules**: Do not allocate new slices or maps inside `rule.Evaluate()`. Pass references or use existing struct fields.
-2. **Pre-Filter Targets**: Implement `rule.Target(ctx) bool` as a cheap, early-exit check (e.g., checking `ctx.Resource.Type == "invoice"`) before running complex multi-attribute comparisons.
-3. **Validate with `-race`**: Always run tests with `go test -race` to verify that concurrent evaluation and policy reloading never race on shared state.
+1. **تجنب حجز الذاكرة في الـ Heap أثناء التقييم**: لا تقم بإنشاء شرائح (Slices) أو خرائط جديدة داخل دالة `rule.Evaluate()`.
+2. **الترشيح المسبق للأهداف**: صمم دالة `rule.Target(ctx) bool` كفحص أولي سريع ورخيص (مثل التحقق من `ctx.Resource.Type == "invoice"`) قبل خوض المقارنات المعقدة للسمات.
+3. **التحقق المستمر بـ `-race`**: شغّل دائماً الاختبارات عبر `go test -race` لضمان عدم وجود أي سباق بيانات بين القراءة المتزامنة وتحديث السياسات.

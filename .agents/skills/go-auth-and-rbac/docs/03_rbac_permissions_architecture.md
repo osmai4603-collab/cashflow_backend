@@ -1,87 +1,87 @@
-# Role-Based Access Control (RBAC) & Fine-Grained Permissions
+# التحكم بالوصول القائم على الأدوار (RBAC) والصلاحيات الدقيقة في Go
 
-Role-Based Access Control (RBAC) maps identities to roles, and roles to specific functional permissions. In a clean Go architecture, authorization must be decoupled from business logic while remaining auditable.
+يربط نموذج التحكم بالوصول القائم على الأدوار (RBAC) بين الهويات والأدوار، وبين الأدوار وصلاحيات تشغيلية محددة. في المعمارية النظيفة لـ Go، يجب فصل التفويض تماماً عن منطق الأعمال مع الحفاظ على قابلية التدقيق الأمني.
 
 ---
 
-## 1. Roles vs Permissions
+## 1. الأدوار مقابل الصلاحيات (Roles vs Permissions)
 
-A common mistake is checking roles directly in business code (e.g. `if user.Role == "admin"`). This leads to brittle code when new roles (e.g. `auditor`, `finance_manager`) are introduced.
+أحد الأخطاء الشائعة هو فحص الأدوار مباشرة في كود الأعمال (مثل `if user.Role == "admin"`). هذا يخلق كوداً هشاً يتطلب تعديلات مستمرة عند إضافة أدوار جديدة (مثل `auditor`, `finance_manager`).
 
-- **Permissions (Actions)**: Atomic capabilities, e.g., `invoices:create`, `invoices:approve`, `reports:export`.
-- **Roles (Bundles)**: Logical collections of permissions assigned to users, e.g.:
+- **الصلاحيات (Permissions - العمليات)**: إمكانات ذرية محددة، مثل: `invoices:create`, `invoices:approve`, `reports:export`.
+- **الأدوار (Roles - الحزم)**: مجموعات منطقية من الصلاحيات تُسند للمستخدمين، مثل:
   - `Admin`: `["*"]`
   - `Accountant`: `["invoices:create", "invoices:read", "invoices:update"]`
   - `Auditor`: `["invoices:read", "reports:read"]`
 
 ---
 
-## 2. Two-Tier Authorization Architecture
+## 2. معمارية التفويض على مستويين (Two-Tier Authorization)
 
-Production Go applications enforce authorization at two distinct checkpoints:
+تفرض تطبيقات Go الإنتاجية التفويض عند نقطتي فحص متميزتين:
 
 ```text
 ┌────────────────────────────────────────────────────────┐
-│ 1. Endpoint / Middleware Tier (Coarse-Grained Guard)   │
-│    "Does the caller have permission to call POST /api?"│
+│ 1. مستوى المسار والوسيط (حارس خشن عند النقل)           │
+│    "هل يملك المتصل صلاحية استدعاء POST /api؟"           │
 │    RequiresPermission("invoices:create")               │
 └───────────────────────────┬────────────────────────────┘
                             │
                             ▼
 ┌────────────────────────────────────────────────────────┐
-│ 2. Domain / Usecase Tier (Fine-Grained Policy Guard)   │
-│    "Can this user approve an invoice exceeding $50k?"  │
+│ 2. مستوى المجال وحالة الاستخدام (حارس سياسة دقيق)       │
+│    "هل يستطيع هذا المستخدم اعتماد فاتورة تتجاوز $50k؟" │
 │    policy.CanApproveAmount(user, invoice.Amount)       │
 └────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## 3. Route Guard Middleware Pattern
+## 3. نمط وسيط حراسة المسار (Route Guard Middleware)
 
-Route middleware should be concise and easily composable with the standard `net/http` handler signature.
+يجب أن يكون وسيط المسار موجزاً وقابلاً للتركيب بسهولة مع توقيع `net/http` القياسي:
 
 ```go
-// RequirePermission creates an HTTP middleware that checks if the caller possesses the required permission.
+// RequirePermission ينشئ وسيط HTTP يتحقق من امتلاك المتصل للصلاحية المطلوبة
 func RequirePermission(authorizer Authorizer, requiredPerm string) func(http.Handler) http.Handler {
- return func(next http.Handler) http.Handler {
-  return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-   tenant, err := auth.FromContext(r.Context())
-   if err != nil {
-    http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
-    return
-   }
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			tenant, err := auth.FromContext(r.Context())
+			if err != nil {
+				http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
+				return
+			}
 
-   if !authorizer.HasPermission(tenant.Roles, requiredPerm) {
-    http.Error(w, `{"error":"forbidden","message":"insufficient permissions"}`, http.StatusForbidden)
-    return
-   }
+			if !authorizer.HasPermission(tenant.Roles, requiredPerm) {
+				http.Error(w, `{"error":"forbidden","message":"صلاحيات غير كافية"}`, http.StatusForbidden)
+				return
+			}
 
-   next.ServeHTTP(w, r)
-  })
- }
+			next.ServeHTTP(w, r)
+		})
+	}
 }
 ```
 
 ---
 
-## 4. Wildcard Matching & Hierarchies
+## 4. مطابقة الأنماط والهياكل الهرمية (Wildcard Matching)
 
-Support hierarchical permission matching using colons (`:`), such as:
+دعم مطابقة الصلاحيات الهرمية باستخدام النقطتين الرأسيتين (`:`):
 
-- `*` matches everything.
-- `invoices:*` matches `invoices:read`, `invoices:create`, `invoices:approve`.
-- `invoices:read` matches only `invoices:read`.
+- `*` يطابق كافة العمليات والصلاحيات.
+- `invoices:*` يطابق `invoices:read`، و `invoices:create`، و `invoices:approve`.
+- `invoices:read` يطابق فقط `invoices:read`.
 
 ```go
 func MatchPermission(grantedPattern, required string) bool {
- if grantedPattern == "*" || grantedPattern == required {
-  return true
- }
- if strings.HasSuffix(grantedPattern, ":*") {
-  prefix := strings.TrimSuffix(grantedPattern, ":*")
-  return strings.HasPrefix(required, prefix+":")
- }
- return false
+	if grantedPattern == "*" || grantedPattern == required {
+		return true
+	}
+	if strings.HasSuffix(grantedPattern, ":*") {
+		prefix := strings.TrimSuffix(grantedPattern, ":*")
+		return strings.HasPrefix(required, prefix+":")
+	}
+	return false
 }
 ```

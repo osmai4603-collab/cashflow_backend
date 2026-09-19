@@ -1,57 +1,57 @@
-# Architectural Placement and Protocol Leakage Prevention
+# التموضع المعماري ومنع تسريب البروتوكولات (Architectural Placement & Protocol Leakage)
 
-This document details the architectural positioning of the Transport Layer within Hexagonal (Ports & Adapters) and Clean Architecture in Go, focusing on the root causes and mitigation of **Protocol Leakage**.
+توثق هذه الصفحة التموضع المعماري لطبقة النقل (Transport Layer) ضمن المعمارية السداسية (الموانئ والمحولات Ports & Adapters) والمعمارية النظيفة (Clean Architecture) في Go، مع التركيز على الأسباب الجذرية وسبل معالجة **تسريب البروتوكولات (Protocol Leakage)**.
 
 ---
 
-## 1. Architectural Positioning: The Driving Adapter Boundary
+## 1. التموضع المعماري: حدود محول القيادة (Driving Adapter Boundary)
 
-In modern software architecture, the transport layer is classified strictly as a **Driving (Primary) Adapter**.
+في المعماريات البرمجية الحديثة، تُصنف طبقة النقل حصرياً وبصرامة على أنها **محول قيادة / محول أولي (Driving / Primary Adapter)**.
 
 ```text
        ┌────────────────────────────────────────────────────────┐
-       │                   Driving Adapters                     │
+       │                   محولات القيادة (Driving Adapters)    │
        │                                                        │
-       │   HTTP Handlers (REST/JSON)   gRPC Services (Protobuf) │
+       │   معالجات HTTP (REST/JSON)    خدمات gRPC (Protobuf)     │
        │   └── http.Handler            └── gRPC Server/Stream   │
        │              │                            │            │
        └──────────────┼────────────────────────────┼────────────┘
                       ▼                            ▼
        ┌────────────────────────────────────────────────────────┐
-       │                 Application Ingress Ports              │
+       │                 موانئ دخول التطبيق (Application Ports) │
        │                                                        │
        │       type UseCase interface { ... }                   │
-       │       Pure DTOs (Data Transfer Objects)                │
+       │       كائنات نقل البيانات النقية (Pure DTOs)            │
        └──────────────────────────┬─────────────────────────────┘
                                   ▼
        ┌────────────────────────────────────────────────────────┐
-       │             Core Application & Domain Engine           │
+       │             قلب التطبيق ومحرك النطاق (Core Domain)     │
        │                                                        │
-       │       Entities, Aggregate Roots, Domain Services       │
+       │       الكيانات، الجذور المجمعة، خدمات النطاق           │
        └────────────────────────────────────────────────────────┘
 ```
 
-### The Inward Dependency Rule
+### قاعدة التبعية الداخلية الصارمة (The Inward Dependency Rule)
 
-Dependencies must point strictly **inward**:
+يجب أن تتجه التبعيات البرمجية دوماً وبشكل قاطع نحو **الداخل**:
 
-1. External network protocols depend on Transport Adapters.
-2. Transport Adapters depend on Application Ports (`UseCase` interfaces) and Application DTOs.
-3. Use Cases depend on Domain Entities and Driven Ports (Repositories, External Gateways).
-4. **The Application and Domain layers must NEVER depend on the Transport layer, `net/http`, or `google.golang.org/grpc`.**
+1. تعتمد بروتوكولات الشبكة الخارجية على محولات النقل (Transport Adapters).
+2. تعتمد محولات النقل على موانئ التطبيق (واجهات `UseCase`) وكائنات نقل البيانات (`DTOs`).
+3. تعتمد حالات الاستخدام على كيانات النطاق والموانئ المقادة (Driven Ports مثل المستودعات وبوابات الخدمات الخارجية).
+4. **يُحظر تماماً على طبقتي التطبيق والنطاق الاعتماد على طبقة النقل أو استيراد `net/http` أو `google.golang.org/grpc`.**
 
 ---
 
-## 2. What is Protocol Leakage?
+## 2. ما هو تسريب البروتوكولات (Protocol Leakage)؟
 
-Protocol Leakage occurs when concepts, abstractions, types, or paradigms specific to a transport protocol cross the boundary into application use cases, domain services, or entities.
+يحدث تسريب البروتوكولات عندما تعبر المفاهيم أو التجريدات أو الأنواع أو الأنماط الخاصة ببروتوكول نقل شبكي معين حدود النظام لتتغلغل داخل حالات استخدام التطبيق، أو خدمات النطاق، أو الكيانات.
 
-### Common Manifestations of Leakage
+### المظاهر الشائعة لتسريب البروتوكولات
 
-#### Leak 1: Passing `*http.Request` or `http.ResponseWriter` into Business Services
+#### المظهر الأول: تمرير `*http.Request` أو `http.ResponseWriter` إلى خدمات الأعمال
 
 ```go
-// ANTI-PATTERN: Leaks HTTP into the application layer!
+// نمط مضاد (ANTI-PATTERN): يسرب بروتوكول HTTP إلى طبقة التطبيق!
 func (s *OrderService) CreateOrder(w http.ResponseWriter, r *http.Request) {
     userID := r.Header.Get("X-User-ID")
     var req CreateOrderPayload
@@ -61,51 +61,51 @@ func (s *OrderService) CreateOrder(w http.ResponseWriter, r *http.Request) {
 }
 ```
 
-**Why this is catastrophic:**
+**لماذا يُعد هذا كارثياً؟**
 
-- It is impossible to call `CreateOrder` from a gRPC service, CLI command, or background worker without constructing synthetic `http.Request` and dummy `httptest.ResponseRecorder` objects.
-- Unit tests require mocking entire HTTP requests, setting headers, cookies, URL paths, and body streams.
-- The service becomes responsible for status codes, content-types, and network serialization instead of business invariants.
+- يستحيل استدعاء `CreateOrder` من خدمة gRPC أو أمر CLI أو عامل خلفي (Background Worker) دون بناء كائنات `http.Request` مصطنعة وكائنات وهمية من `httptest.ResponseRecorder`.
+- تتطلب اختبارات الوحدة (Unit Tests) محاكاة طلبات HTTP كاملة، وإعداد الترويسات وملفات تعريف الارتباط ومسارات URL وتدفقات نص الطلب.
+- تصبح الخدمة مسؤولة عن رموز الحالة وتنسيقات المحتوى والتسلسل الشبكي بدلاً من حماية قواعد النطاق الأساسية.
 
-#### Leak 2: Passing Generated Protobuf Structs into Core Domain Entities
+#### المظهر الثاني: تمرير هياكل Protobuf المولدة إلى كيانات النطاق الأساسية
 
 ```go
-// ANTI-PATTERN: Leaks Protobuf generators into domain entities!
+// نمط مضاد (ANTI-PATTERN): يسرب مولدات Protobuf إلى كيانات النطاق!
 func (s *OrderService) ProcessOrder(ctx context.Context, pb *orderpb.OrderRequest) (*orderpb.OrderResponse, error) {
-    // Directly manipulating protobuf internal mutexes, unknown fields, and getters
+    // التلاعب المباشر بأقفال Protobuf الداخلية، الحقول المجهولة، والدوال المساعدة
 }
 ```
 
-**Why this is catastrophic:**
+**لماذا يُعد هذا كارثياً؟**
 
-- Protobuf generated structs contain code-generated state (`state protoimpl.MessageState`, `sizeCache`, `unknownFields`) and lack rich domain methods or encapsulation.
-- Domain rules become entangled with Protobuf field tagging and default zero-value representations (e.g., Protobuf cannot distinguish between an unset string and an empty string `""` without optional wrappers).
-- HTTP endpoints must convert JSON to Protobuf structures just to invoke the usecase, creating unnecessary serialization overhead.
+- تحتوي هياكل Protobuf المولدة على حالات داخلية خاصة بالمولد (`state protoimpl.MessageState`، `sizeCache`، `unknownFields`) وتفتقر إلى أساليب النطاق الغنية أو الكبسلة.
+- تتشابك قواعد النطاق مع وسوم حقول Protobuf والتمثيل الافتراضي للقيم الصفرية (على سبيل المثال، لا يستطيع Protobuf التمييز بين حقل نصي غير معين ونص فارغ `""` بدون أغلفة اختيارية).
+- تضطر نقاط نهاية HTTP لتحويل JSON إلى هياكل Protobuf لمجرد استدعاء حالة الاستخدام، مما يولد عبئاً حسابياً غير ضروري في التسلسل والفك.
 
 ---
 
-## 3. Comparison of Architectural Patterns
+## 3. مقارنة الأنماط المعمارية للتعامل مع الدخول المتعدد
 
-| Architecture Pattern | How it Operates | Architectural Pros | Architectural Cons & Cost | Recommended Usage |
+| النمط المعماري | آلية العمل | المزايا المعمارية | العيوب والتكلفة | الاستخدام الموصى به |
 | :--- | :--- | :--- | :--- | :--- |
-| **1. Go kit (Endpoint + Transport)** | Divides service into (Transport -> Endpoint -> Service). Each operation is `type Endpoint func(ctx, req any) (resp any, err error)`. | Strong separation; middleware is completely reusable across protocols. | High boilerplate overhead: requires custom Decoder and Encoder functions per operation. | High-scale, complex multi-protocol distributed systems. |
-| **2. Dual Driving Adapters** | Separate `http.Handler` and `grpc.Server` in `internal/transport/` calling the same `UseCase` interface. | Simple, idiomatic Go; easy to understand and maintain without third-party frameworks. | Risk of duplicating metadata extraction, auth checks, and validation across adapters. | Standard production microservices and modular monoliths. |
-| **3. Unified TransportContext & Pre-Handling Pipeline (This Architecture)** | Introduces a common `TransportContext` interface and a unified 6-stage pipeline prior to use-case invocation. | Single source of truth for auth, tracing, logging, and metadata. Fully protocol-agnostic use cases. | Requires designing a clean `TransportContext` interface. | **Enterprise systems requiring robust HTTP & gRPC dual ingress.** |
-| **4. ConnectRPC** | Schema-first RPC framework that compiles Protobuf into standard `http.Handler` conforming endpoints (supporting gRPC, gRPC-Web, and JSON). | Exceptional performance; 100% compliant with standard library `net/http`; single server. | Vendor lock-in to ConnectRPC toolchain and generated code. | Greenfield projects wanting Protobuf-first contracts with standard HTTP. |
-| **5. gRPC-Gateway** | Reverse-proxy server that translates incoming HTTP/REST JSON calls into internal gRPC calls. | Single source of truth (`.proto` file); automated OpenAPI documentation. | Extra network or in-memory RPC hop; difficult to customize complex HTTP-specific headers/caching. | Legacy gRPC services needing secondary REST endpoints. |
+| **1. Go kit (Endpoint + Transport)** | يقسم الخدمة إلى (Transport -> Endpoint -> Service). كل عملية هي `type Endpoint func(ctx, req any) (resp any, err error)`. | فصل قوي جداً؛ البرمجيات الوسيطة قابلة لإعادة الاستخدام عبر كافة البروتوكولات. | كثرة الكود المتكرر (Boilerplate): يتطلب دوال فك تشفير وترميز مخصصة لكل عملية. | الأنظمة الموزعة المعقدة وعالية النطاق ومتعددة البروتوكولات. |
+| **2. المحولات المزدوجة المستقلة (Dual Driving Adapters)** | فصل `http.Handler` و `grpc.Server` في `internal/transport/` يستدعيان نفس واجهة `UseCase`. | بساطة وكود اصطلاحي في Go؛ سهل الفهم والصيانة بدون أطر خارجية. | خطر تكرار منطق استخراج البيانات الوصفية، والتحقق من الهوية، والتحقق النحوي. | الخدمات المصغرة القياسية والتطبيقات أحادية النواة المعيارية (Modular Monoliths). |
+| **3. سياق النقل الموحد وخط المعالجة المسبقة (هذه المعمارية)** | واجهة `TransportContext` موحدة وخط أنابيب حتمي من 6 مراحل قبل استدعاء حالات الاستخدام. | مصدر واحد للحقيقة للمصادقة والتتبع والتسجيل والبيانات الوصفية؛ حالات استخدام محايدة تماماً. | يتطلب تصميماً دقيقاً لواجهة `TransportContext` ومحولات البروتوكولات. | **الأنظمة المؤسسية التي تتطلب دخولاً مزدوجاً وقوياً عبر HTTP و gRPC.** |
+| **4. ConnectRPC** | إطار RPC قائم على المخططات يحول Protobuf إلى نقاط نهاية متوافقة مع `http.Handler` القياسي. | أداء استثنائي؛ متوافق 100% مع `net/http`؛ خادم شبكي واحد. | الارتباط بأدوات ConnectRPC والكود المولد الخاص بها. | المشاريع الحديثة التي تفضل عقود Protobuf أولاً مع دعم HTTP القياسي. |
+| **5. gRPC-Gateway** | خادم وكيل عكسي يترجم طلبات HTTP/REST JSON الواردة إلى استدعاءات gRPC داخلية. | مصدر واحد للحقيقة (ملف `.proto`)؛ توثيق OpenAPI تلقائي. | قفزة شبكية أو استدعاء RPC إضافي في الذاكرة؛ صعوبة تخصيص ترويسات HTTP المعقدة والتخزين المؤقت. | خدمات gRPC القائمة التي تحتاج نقاط نهاية REST ثانوية. |
 
 ---
 
-## 4. The Unified Transport Boundary: How Ingress Works
+## 4. حدود النقل الموحدة: كيف يعمل الدخول الشبكي
 
-To eliminate protocol leakage while preventing code duplication across HTTP and gRPC, the Transport Layer defines:
+للقضاء على تسريب البروتوكولات مع منع تكرار الكود البرمجي عبر HTTP و gRPC، تعرف طبقة النقل الآتي:
 
-1. **The Ingress Envelope (`TransportContext`)**: A lightweight abstraction implemented by both HTTP and gRPC wrappers that normalizes headers, client IP, user agent, and security identity.
-2. **The Pre-Handling Pipeline**: A deterministic series of cross-cutting interceptors executing before any domain handler runs.
-3. **Pure Use Cases**: Business operations that accept a standard `context.Context` and a plain Go DTO (Data Transfer Object), returning a domain result or a domain error.
+1. **غلاف الدخول (`TransportContext`)**: تجريد خفيف الوزن تحققه أغلفة HTTP و gRPC يطبع الترويسات، وعنوان IP للعميل، وبصمة المتصفح، والهوية الأمنية المعتمدة.
+2. **خط أنابيب المعالجة المسبقة (Pre-Handling Pipeline)**: سلسلة حتمية من المعترضات العرضية التي تنفذ قبل تشغيل أي معالج نطاق.
+3. **حالات الاستخدام النقية (Pure Use Cases)**: عمليات الأعمال التي تقبل `context.Context` قياسياً وكائن نقل بيانات Go بسيط (DTO)، وتعيد نتيجة النطاق أو خطأ النطاق.
 
 ```text
-Incoming HTTP Request ──> HTTPTransportContext ──┐
-                                                 ├──> PreHandlingPipeline ──> UseCase(ctx, DTO)
-Incoming gRPC Call    ──> GRPCTransportContext ──┘
+طلب HTTP الوارد   ──> HTTPTransportContext ──┐
+                                             ├──> PreHandlingPipeline ──> UseCase(ctx, DTO)
+استدعاء gRPC الوارد ──> GRPCTransportContext ──┘
 ```

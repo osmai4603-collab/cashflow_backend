@@ -1,12 +1,12 @@
-# Unified TransportContext and Collision-Free Context Keying
+# سياق النقل الموحد ومفاتيح السياق الآمنة من التصادم (Unified TransportContext & Context Keys)
 
-This document outlines the engineering specification for the `TransportContext` interface, concrete implementations for HTTP and gRPC, and the mechanics of type-safe, unexported context propagation in Go.
+توضح هذه الوثيقة المواصفات الهندسية لواجهة `TransportContext`، والتطبيقات الفعلية لبروتوكولي HTTP و gRPC، وآلية تمرير البيانات داخل السياق عبر مفاتيح خاصة غير مصدرة ومحمية من التصادم في Go.
 
 ---
 
-## 1. The `TransportContext` Interface Design
+## 1. تصميم واجهة `TransportContext`
 
-The `TransportContext` interface provides a normalized, protocol-neutral view of an incoming network request. It enables security validators, telemetry injectors, and rate limiters to inspect incoming requests without importing `net/http` or `google.golang.org/grpc/metadata`.
+توفر واجهة `TransportContext` منظوراً موحداً ومحايداً للبروتوكولات لفحص ومعالجة طلب الشبكة الوارد. يتيح ذلك لمدققي الأمان، ومحقني بيانات القياس عن بُعد، ومحددي معدل الطلبات فحص الطلبات الواردة دون الحاجة لاستيراد `net/http` أو `google.golang.org/grpc/metadata`.
 
 ```go
 package transport
@@ -14,39 +14,39 @@ package transport
 import "context"
 
 type TransportContext interface {
- // Protocol identifies whether the request arrived via HTTP or gRPC.
+ // Protocol يحدد ما إذا كان الطلب قد وصل عبر HTTP أو gRPC.
  Protocol() TransportProtocol
 
- // Context returns the standard Go context carrying deadlines and cancellation signals.
+ // Context يعيد سياق Go القياسي الحامل للمهل وإشارات الإلغاء.
  Context() context.Context
 
- // RequestID returns the distributed trace / correlation identifier.
+ // RequestID يعيد معرف التتبع والارتباط الموزع.
  RequestID() string
 
- // ClientIP returns the canonical remote IP address after resolving proxy headers.
+ // ClientIP يعيد عنوان IP القياسي للعميل بعد فحص ترويسات الوكيل المعتمدة.
  ClientIP() string
 
- // UserAgent returns the client software signature.
+ // UserAgent يعيد بصمة برنامج العميل.
  UserAgent() string
 
- // Header retrieves a normalized, case-insensitive metadata value.
+ // Header يسترجع قيمة البيانات الوصفية بشكل غير حساس لحالة الأحرف.
  Header(key string) string
 
- // Principal returns the authenticated caller identity, if resolved.
+ // Principal يعيد الهوية الأمنية المعتمدة للمتصل في حال التحقق منها.
  Principal() (*SecurityPrincipal, bool)
 
- // SetPrincipal stores the authenticated identity after successful verification.
+ // SetPrincipal يحفظ الهوية الأمنية المعتمدة بعد نجاح التحقق.
  SetPrincipal(principal *SecurityPrincipal)
 }
 ```
 
 ---
 
-## 2. Concrete Ingress Implementations
+## 2. التطبيقات الملموسة لحدود الدخول (Concrete Ingress Implementations)
 
-### 2.1 HTTP Transport Context (`httpTransportContext`)
+### 2.1 سياق نقل HTTP (`httpTransportContext`)
 
-The HTTP implementation wraps standard `http.ResponseWriter` and `*http.Request`:
+يغلف تطبيق HTTP كائني `http.ResponseWriter` و `*http.Request` القياسيين:
 
 ```go
 package transport
@@ -84,7 +84,7 @@ func (h *httpTransportContext) RequestID() string {
 }
 
 func (h *httpTransportContext) ClientIP() string {
- // 1. Check standard proxy headers (Forwarded, X-Forwarded-For, X-Real-IP)
+ // 1. فحص ترويسات الوكيل القياسية (Forwarded، X-Forwarded-For، X-Real-IP)
  if xff := h.req.Header.Get("X-Forwarded-For"); xff != "" {
   parts := strings.Split(xff, ",")
   return strings.TrimSpace(parts[0])
@@ -93,7 +93,7 @@ func (h *httpTransportContext) ClientIP() string {
   return strings.TrimSpace(xrip)
  }
 
- // 2. Fall back to direct TCP RemoteAddr
+ // 2. الرجوع لعنوان TCP المباشر RemoteAddr في حال غياب الترويسات
  host, _, err := net.SplitHostPort(h.req.RemoteAddr)
  if err != nil {
   return h.req.RemoteAddr
@@ -122,9 +122,9 @@ func (h *httpTransportContext) SetPrincipal(principal *SecurityPrincipal) {
 }
 ```
 
-### 2.2 gRPC Transport Context (`grpcTransportContext`)
+### 2.2 سياق نقل gRPC (`grpcTransportContext`)
 
-The gRPC implementation wraps `context.Context`, `metadata.MD`, and `peer.Peer`:
+يغلف تطبيق gRPC كائنات `context.Context` و `metadata.MD` و `peer.Peer`:
 
 ```go
 package transport
@@ -170,7 +170,7 @@ func (g *grpcTransportContext) RequestID() string {
 }
 
 func (g *grpcTransportContext) ClientIP() string {
- // 1. Inspect metadata for proxy forwarding
+ // 1. فحص البيانات الوصفية لترويسات تمرير الوكيل
  if vals := g.md.Get("x-forwarded-for"); len(vals) > 0 {
   parts := strings.Split(vals[0], ",")
   return strings.TrimSpace(parts[0])
@@ -179,7 +179,7 @@ func (g *grpcTransportContext) ClientIP() string {
   return strings.TrimSpace(vals[0])
  }
 
- // 2. Extract TCP peer from context
+ // 2. استخراج النظير الشبكي TCP peer من سياق الاتصال
  if p, ok := peer.FromContext(g.ctx); ok && p.Addr != nil {
   host, _, err := net.SplitHostPort(p.Addr.String())
   if err == nil {
@@ -198,7 +198,7 @@ func (g *grpcTransportContext) UserAgent() string {
 }
 
 func (g *grpcTransportContext) Header(key string) string {
- // gRPC metadata keys are strictly lowercase
+ // مفاتيح البيانات الوصفية في gRPC تتطلب أحرفاً صغيرة دائماً
  vals := g.md.Get(strings.ToLower(key))
  if len(vals) > 0 {
   return vals[0]
@@ -221,17 +221,17 @@ func (g *grpcTransportContext) SetPrincipal(principal *SecurityPrincipal) {
 
 ---
 
-## 3. Collision-Free Context Keying Architecture
+## 3. معمارية مفاتيح السياق الآمنة من التصادم (Collision-Free Context Keying)
 
-In Go, `context.Context` stores values as an association between `any` key and `any` value. If two packages use a string `"user_id"` or an exported integer as a key, one will overwrite the other, causing silent bugs or security vulnerabilities.
+في لغة Go، يخزن `context.Context` القيم كارتباط بين مفتاح من نوع `any` وقيمة من نوع `any`. إذا استخدمت حزمتان مختلفتان مفتاحاً نصياً مثل `"user_id"` أو عدداً صحيحاً مصدراً، فإن إحداهما ستستبدل بيانات الأخرى دون سابق إنذار، مما يؤدي إلى أخطاء برمجية خفية أو ثغرات أمنية خطيرة.
 
-### The Unexported Type Idiom
+### النمط الاصطلاحي للأنواع غير المصدرة (Unexported Type Idiom)
 
-To ensure mathematical impossibility of collisions:
+لضمان استحالة التصادم رياضياً وبرمجياً:
 
-1. Define an unexported custom type: `type contextKey int` or `type contextKey struct{}`.
-2. Declare unexported constants or variables of that type.
-3. Expose only typed getter and setter helper functions.
+1. تعريف نوع مخصص غير مصدر: `type contextKey int` أو `type contextKey struct{}`.
+2. الإعلان عن ثوابت أو متغيرات غير مصدرة من ذلك النوع.
+3. كشف دوال مساعدة موجهة النوع (Typed Getters/Setters) فقط للقراءة والكتابة.
 
 ```go
 package transport
@@ -264,7 +264,7 @@ func GetPrincipal(ctx context.Context) (*SecurityPrincipal, bool) {
 }
 ```
 
-### Memory Allocation Considerations
+### اعتبارات تخصيص الذاكرة والأداء
 
-- `TransportInfo` is a compact 4-field struct (~64 bytes). It is copied directly into `context.WithValue` with negligible heap allocation.
-- `SecurityPrincipal` is stored as a pointer `*SecurityPrincipal`. This ensures zero copy overhead across middleware chains and prevents stale identity states.
+- `TransportInfo` هو هيكل مدمج من 4 حقول (~64 بايت). يتم نسخه مباشرة داخل `context.WithValue` بتكلفة تخصيص ذاكرة مهملة.
+- `SecurityPrincipal` يتم تخزينه كمؤشر `*SecurityPrincipal`. يضمن ذلك انعدام تكلفة النسخ عبر سلاسل البرمجيات الوسيطة ويمنع تضارب حالات الهوية.

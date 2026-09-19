@@ -1,110 +1,110 @@
-# High-Throughput Thread-Safe Caching & Zero-Downtime Hot-Reload
+# التخزين المؤقت المتزامن عالي الأداء والتحديث اللحظي في Go
 
-Authorization evaluations happen on almost every incoming request. Querying a relational database on each evaluation is an anti-pattern that creates a bottleneck. This document explains how to implement sub-microsecond in-memory caching with zero-downtime hot-reloading in Go.
+يتم فحص الصلاحيات وتقييمها مع كل طلب شبكي قادم تقريباً. إن استعلام قاعدة البيانات العلائقية في كل فحص هو نمط مضاد يخلق عنق زجاجة حاد. توضح هذه الوثيقة كيفية تطبيق تخزين مؤقت في الذاكرة بزمن استجابة أقل من الميكروثانية مع دعم التحديث اللحظي للسياسات دون أي توقف في الخدمة (Zero-Downtime Hot-Reloading).
 
 ---
 
-## 1. Concurrency Patterns: `sync.RWMutex` vs `atomic.Pointer`
+## 1. أنماط التزامن: المقارنة بين `sync.RWMutex` و `atomic.Pointer`
 
-Depending on the write frequency of role definitions, Go offers two idiomatic concurrency models:
+اعتماداً على معدل تعديل تعريفات الأدوار، توفر Go نمطين اصطلاحيين لإدارة التزامن:
 
 ```text
-Pattern A: sync.RWMutex (High Concurrency, Periodic Updates)
+النمط أ: قفل القراءة والكتابة sync.RWMutex (تزامن مرتفع مع تحديثات دورية)
 ┌────────────────────────────────────────────────────────┐
-│ Multiple Reader Goroutines (RLock) ────► Shared Memory  │
-│ Single Writer Goroutine (Lock) ────────► Shared Memory  │
+│ مسارات قراءة متعددة (RLock) ─────────► ذاكرة مشتركة     │
+│ مسار كتابة مفرد (Lock) ──────────────► ذاكرة مشتركة     │
 └────────────────────────────────────────────────────────┘
 
-Pattern B: atomic.Pointer (Read-Heavy, Zero Lock Contention)
+النمط ب: المؤشرات الذرية atomic.Pointer (قراءة كثيفة خالية من تنازع الأقفال)
 ┌────────────────────────────────────────────────────────┐
-│ Readers ───────────────────────────────► Snapshot A    │
-│ Writer prepares new Snapshot B in memory               │
-│ Writer atomically swaps pointer: Snapshot A ──► B      │
+│ مسارات القراءة ───────────────────────► لقطة الذاكرة أ   │
+│ مسار الكتابة يجهز لقطة جديدة ب في الذاكرة             │
+│ مسار الكتابة يستبدل المؤشر ذرياً: أ ────► ب            │
 └────────────────────────────────────────────────────────┘
 ```
 
-### Pattern A: `sync.RWMutex` (Standard In-Memory Engine)
+### النمط أ: استخدام `sync.RWMutex` (المحرك القياسي المدمج)
 
 ```go
 type Engine struct {
- mu          sync.RWMutex
- rolePerms   map[Role]map[Permission]bool
- inheritance map[Role][]Role
+	mu          sync.RWMutex
+	rolePerms   map[Role]map[Permission]bool
+	inheritance map[Role][]Role
 }
 
 func (e *Engine) HasPermission(roles []Role, required Permission) bool {
- e.mu.RLock()
- defer e.mu.RUnlock()
- // Read-safe traversal
- return e.evaluate(roles, required)
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	// قراءة محمية ومتزامنة
+	return e.evaluate(roles, required)
 }
 ```
 
-### Pattern B: Lock-Free Snapshot Swap via `atomic.Pointer`
+### النمط ب: الاستبدال الذري الخالي من الأقفال عبر `atomic.Pointer`
 
-For ultra-high-throughput architectures ($> 100,000\text{ req/s}$) where write contention during policy reload is unacceptable, use Go 1.19+ `sync/atomic.Pointer`:
+للأنظمة ذات الإنتاجية الفائقة (أكثر من $100,000\text{ طلب/ثانية}$) حيث يكون التنازع على الأقفال أثناء تحديث السياسات غير مقبول، يتم استخدام `sync/atomic.Pointer`:
 
 ```go
 package rbac
 
 import (
- "sync/atomic"
+	"sync/atomic"
 )
 
 type PolicySnapshot struct {
- RolePerms   map[Role]map[Permission]bool
- Inheritance map[Role][]Role
+	RolePerms   map[Role]map[Permission]bool
+	Inheritance map[Role][]Role
 }
 
 type AtomicEngine struct {
- current atomic.Pointer[PolicySnapshot]
+	current atomic.Pointer[PolicySnapshot]
 }
 
 func NewAtomicEngine(initial *PolicySnapshot) *AtomicEngine {
- e := &AtomicEngine{}
- e.current.Store(initial)
- return e
+	e := &AtomicEngine{}
+	e.current.Store(initial)
+	return e
 }
 
-// HasPermission performs zero-lock evaluation
+// HasPermission يقيم الصلاحيات بصفر أقفال
 func (e *AtomicEngine) HasPermission(roles []Role, required Permission) bool {
- snap := e.current.Load()
- if snap == nil {
-  return false // Default Deny
- }
- return evaluateSnapshot(snap, roles, required)
+	snap := e.current.Load()
+	if snap == nil {
+		return false // المنع الافتراضي Default Deny
+	}
+	return evaluateSnapshot(snap, roles, required)
 }
 
-// Reload replaces the entire policy snapshot atomically without blocking any readers
+// Reload يستبدل كامل لقطة السياسات ذرياً دون حظر أي من مسارات القراءة
 func (e *AtomicEngine) Reload(newSnapshot *PolicySnapshot) {
- e.current.Store(newSnapshot)
+	e.current.Store(newSnapshot)
 }
 ```
 
 ---
 
-## 2. Dynamic Hot-Reloading Triggering Strategies
+## 2. استراتيجيات إطلاق التحديث اللحظي (Hot-Reloading Triggers)
 
-In production, policies change when admins add permissions or modify roles. The in-memory cache should reload without service restarts:
+في البيئات الإنتاجية، تتغير السياسات عندما يقوم المسؤولون بإضافة صلاحيات أو تعديل أدوار. يجب أن يُعاد تحميل الذاكرة الحية دون الحاجة لإعادة تشغيل الخدمة:
 
-1. **Database Change CDC / Polling**:
-   A background worker queries the `roles` and `permissions` tables every $N$ seconds, compares an updated version timestamp, and rebuilds the in-memory snapshot.
-2. **In-Process or Distributed Pub/Sub Notification**:
-   When an admin executes a policy change via the management API, a message is published to an internal notification channel or Redis/NATS topic (`rbac.policy.updated`), prompting all server instances to trigger a cache reload.
-3. **POSIX SIGHUP Reload**:
-   Listening for `syscall.SIGHUP` to trigger a reload from a local configuration file:
+1. **الاستقصاء الدوري ومراقبة التغيير (CDC / Polling)**:
+   يقوم عامل خلفي (Worker) بالاستعلام عن جداول `roles` و `permissions` كل $N$ ثانية، ومقارنة الطابع الزمني لآخر تحديث، ثم إعادة بناء لقطة الذاكرة.
+2. **ناقل الرسائل والأحداث الموزعة (Pub/Sub Notification)**:
+   عندما يقوم المسؤول بتعديل سياسة عبر لوحة التحكم، يتم بث رسالة عبر قناة إشعارات داخلية أو موضوع في Redis/NATS (`rbac.policy.updated`)، مما يدفع كافة مثيلات الخوادم لتحديث لقطة الذاكرة المؤقتة فورياً.
+3. **إشارات نظام التشغيل (POSIX SIGHUP Reload)**:
+   الاستماع لإشارة `syscall.SIGHUP` لإعادة قراءة ملفات التكوين محلياً:
 
 ```go
 func ListenForPolicyReloadSignal(engine *AtomicEngine, loader func() (*PolicySnapshot, error)) {
- c := make(chan os.Signal, 1)
- signal.Notify(c, syscall.SIGHUP)
- go func() {
-  for range c {
-   newSnap, err := loader()
-   if err == nil {
-    engine.Reload(newSnap)
-   }
-  }
- }()
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, syscall.SIGHUP)
+	go func() {
+		for range c {
+			newSnap, err := loader()
+			if err == nil {
+				engine.Reload(newSnap)
+			}
+		}
+	}()
 }
 ```

@@ -1,25 +1,25 @@
-# Audit Trail, Observability & Revocation Strategies
+# مسارات التدقيق الأمني، المراقبة، واستراتيجيات إلغاء الصلاحيات في Go
 
-Access control is not a static check; it requires continuous accountability and lifecycle maintenance. This document details structured audit trails, observability metrics, and session revocation mechanisms in Go.
+التحكم بالوصول ليس فحصاً استاتيكياً منفرداً، بل يتطلب مسؤولة ومتابعة دورية مستمرة. توضح هذه الوثيقة سجلات التدقيق الأمني المهيكلة، ومقاييس المراقبة اللحظية، وآليات إبطال الجلسات والصلاحيات في لغة Go.
 
 ---
 
-## 1. Tamper-Evident Audit Logging with `log/slog`
+## 1. سجلات التدقيق الأمني غير القابلة للتلاعب عبر `log/slog`
 
-Every authorization decision must produce an immutable audit trail suitable for ingest into SIEM systems (e.g., Elastic, Splunk, CloudWatch).
+يجب أن ينتج عن كل قرار تفويض مسار تدقيق غير قابل للتعديل وجاهز للابتلاع المباشر في أنظمة SIEM (مثل Elastic, Splunk, CloudWatch).
 
-### Audit Event Attributes
+### سمات حدث التدقيق الأمني (Audit Event Attributes)
 
-- `timestamp`: RFC 3339 nano format.
-- `event_type`: `authz.decision`.
-- `subject_id`: Unique identifier of the authenticated principal.
-- `tenant_id`: Company or organization identifier.
-- `roles`: Snapshot of assigned roles evaluated.
-- `permission`: Target permission required.
-- `decision`: `permit` or `deny`.
-- `reason`: Machine-readable reason code (e.g., `role_unmatched`, `ssd_conflict`, `token_expired`).
-- `client_ip`: Originating client IP.
-- `latency_us`: Duration of the PDP evaluation in microseconds.
+- `timestamp`: الطابع الزمني بصيغة RFC 3339 nano.
+- `event_type`: نوع الحدث `authz.decision`.
+- `subject_id`: المعرف الفريد للفاعل الموثق.
+- `tenant_id`: معرف المنظمة أو الشركة المستأجرة.
+- `roles`: لقطة للأدوار المقيمة لحظة القرار.
+- `permission`: الصلاحية المطلوبة للعملية.
+- `decision`: القرار النهائي `permit` (سماح) أو `deny` (منع).
+- `reason`: كود سبب مقروء آلياً (مثل `role_unmatched`, `ssd_conflict`, `token_expired`).
+- `client_ip`: عنوان IP للمتصل.
+- `latency_us`: زمن تقييم المحرك بالميكروثانية.
 
 ```go
 func LogAudit(logger *slog.Logger, subject Subject, perm Permission, decision string, reason string, latency time.Duration, ip, path string) {
@@ -45,35 +45,35 @@ func LogAudit(logger *slog.Logger, subject Subject, perm Permission, decision st
 
 ---
 
-## 2. Real-Time Observability & OpenMetrics Counters
+## 2. المراقبة اللحظية ومقاييس OpenMetrics
 
-Instrumenting authorization helps detect brute-force attacks and privilege escalation attempts.
+تساعد مراقبة عمليات التفويض على كشف هجمات التخمين ومحاولات تصعيد الامتيازات (Privilege Escalation):
 
-### Key Metrics
+### المقاييس الجوهرية
 
-1. `authz_evaluations_total{decision="permit|deny", permission="...", tenant="..."}`: Counter tracking access decisions.
-2. `authz_evaluation_duration_seconds`: Histogram tracking PDP decision latency (SLO: p99 < 500µs).
-3. `authz_active_roles_gauge`: Total count of active roles registered in the in-memory engine.
+1. `authz_evaluations_total{decision="permit|deny", permission="...", tenant="..."}`: عداد يتتبع قرارات الوصول مقسمة بالقرار والمستأجر والصلاحية.
+2. `authz_evaluation_duration_seconds`: مدرج تكراري لزمن اتخاذ القرار في PDP (مستوى الخدمة المستهدف SLO: p99 < 500µs).
+3. `authz_active_roles_gauge`: إجمالي عدد الأدوار النشطة المسجلة في محرك الذاكرة الحية.
 
 ---
 
-## 3. Session & Role Revocation Strategies
+## 3. استراتيجيات إلغاء الصلاحيات وإبطال الجلسات
 
-A critical problem in distributed RBAC is **Privilege Latency**: when a user's role is revoked in the database, when does their active token stop working?
+أحد التحديات المعمارية في الأنظمة الموزعة هو **التأخر الزمني لتطبيق إلغاء الامتيازات (Privilege Latency)**: عندما يُلغى دور مستخدم في قاعدة البيانات، متى يتوقف رمزه الحالي عن العمل؟
 
-### Strategy 1: Short-Lived Access Tokens (Recommended)
+### الاستراتيجية 1: رموز وصول قصيرة الأجل (موصى بها)
 
-- Issue stateless access JWTs with a short TTL (e.g., 5 to 15 minutes).
-- When roles change, the user continues to hold permissions for at most 15 minutes.
-- Refresh tokens (which are stateful) query the database for current roles on every token refresh.
+- إصدار رموز JWT عديمة الحالة بفترة صلاحية قصيرة (من 5 إلى 15 دقيقة).
+- عند تغيير الأدوار، يمتد تأثير الدور القديم لـ 15 دقيقة على الأكثر.
+- تقوم رموز التجديد (Stateful Refresh Tokens) بالاستعلام من قاعدة البيانات لجلب أحدث الأدوار عند كل عملية تجديد.
 
-### Strategy 2: Subject Token Versioning (Zero-Latency Revocation)
+### الاستراتيجية 2: إصدار التوكن للفاعل (Subject Token Versioning)
 
-- Store a `token_version` (integer) on the user record in PostgreSQL.
-- Embed `token_version: 3` in the JWT claims.
-- Keep a high-speed Redis or in-memory map of `user_id -> current_token_version`.
-- When an admin revokes a role, increment `token_version` in the database and flush the cache.
-- The PEP compares the JWT's embedded version with the cache; if mismatched, it rejects with `401 Unauthorized`.
+- حفظ حقل `token_version` (رقم صحيح) في سجل المستخدم في قاعدة البيانات.
+- تضمين `token_version: 3` في ادعاءات رمز JWT.
+- الاحتفاظ بخريطة سريعة في Redis أو الذاكرة: `user_id -> current_token_version`.
+- عندما يقوم المدير بإلغاء دور، يتم زيادة `token_version` في قاعدة البيانات وتحديث الكاش.
+- تقارن نقطة الفرض PEP إصدار التوكن مع القيمة في الكاش؛ وإذا لم تتطابق، ترفض الطلب فوراً بـ `401 Unauthorized`.
 
 ```go
 type ClaimsWithVersion struct {
@@ -89,10 +89,10 @@ func ValidateTokenVersion(cachedVersion int, claims ClaimsWithVersion) bool {
 
 ---
 
-## 4. Combating Privilege Creep (Periodic Access Reviews)
+## 4. مكافحة تراكم الامتيازات (Periodic Access Reviews)
 
-Over time, employees change departments and accumulate roles without old ones being revoked.
+مع مرور الوقت، ينتقل الموظفون بين الأقسام وتتراكم لديهم الأدوار القديمة دون إلغاء:
 
-- Maintain an audit table: `role_assignments(user_id, role, granted_at, expires_at, granted_by)`.
-- Enforce mandatory role expiration: time-bounded role grants (e.g., 90 days).
-- Provide automated reports listing inactive accounts holding high-privilege roles.
+- الاحتفاظ بجدول تدقيق: `role_assignments(user_id, role, granted_at, expires_at, granted_by)`.
+- فرض مدة صلاحية زمنية إلزامية لكل دور (مثال: 90 يوماً قابلة للتجديد بموافقة).
+- تقديم تقارير دورية آلية للحسابات الخاملة التي تمتلك أدواراً عالية الامتيازات لمراجعتها وإلغائها.

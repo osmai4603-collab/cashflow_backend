@@ -1,33 +1,33 @@
-# Official Standards & Architecture References for Transport Layer
+# المعايير الرسمية والمراجع المعمارية لطبقة النقل (Official References)
 
-This document catalogs the authoritative standards, official Go documentation, and reference implementations underpinning the unified HTTP/gRPC transport layer architecture.
-
----
-
-## 1. Official Go Language Documentation (`go.dev`)
-
-- [Go Standard Library `net/http` Package](https://pkg.go.dev/net/http): Definitive reference for `http.Handler`, `http.ResponseWriter`, `http.Request`, and canonical header formatting (`CanonicalHeaderKey`).
-- [Go Standard Library `context` Package](https://pkg.go.dev/context): Best practices for request-scoped cancellation, deadlines, and collision-free unexported key typing.
-- [Go Standard Library `log/slog` Package](https://pkg.go.dev/log/slog): Structured, high-performance logging for ingress boundaries.
-- [Go Standard Library `net` Package](https://pkg.go.dev/net): IP address splitting (`net.SplitHostPort`) and listener multiplexing primitives.
+توثق هذه الصفحة المعايير القياسية والتوثيقات الرسمية للغة Go والتطبيقات المرجعية التي تستند إليها معمارية طبقة النقل الموحدة لبروتوكولي HTTP و gRPC.
 
 ---
 
-## 2. Official gRPC & RPC Ecosystem Documentation
+## 1. التوثيق الرسمي للغة Go (`go.dev`)
 
-- [Official gRPC Go Documentation](https://grpc.io/docs/languages/go/): Comprehensive guides for unary and streaming server interceptors.
-- [Go gRPC Package Reference (`google.golang.org/grpc`)](https://pkg.go.dev/google.golang.org/grpc): `UnaryServerInterceptor`, `StreamServerInterceptor`, and metadata lifecycle.
-- [gRPC Metadata Reference (`google.golang.org/grpc/metadata`)](https://pkg.go.dev/google.golang.org/grpc/metadata): Key-value pair semantics for request and response headers (`metadata.MD`).
-- [ConnectRPC Specification](https://connectrpc.com/): Official guidelines for unified RPC over HTTP/1.1, HTTP/2, and standard `http.Handler`.
-- [gRPC-Gateway](https://github.com/grpc-ecosystem/grpc-gateway): Reverse-proxy pattern translating REST/JSON into gRPC.
-- [Go kit Transport Architecture](https://gokit.io/docs/architecture/): Foundational 3-layer service design (Transport -> Endpoint -> Service).
+- [حزمة المكتبة القياسية `net/http`](https://pkg.go.dev/net/http): المرجع الحاسم لواجهات `http.Handler` و `http.ResponseWriter` و `http.Request` وتنسيق الترويسات القياسي (`CanonicalHeaderKey`).
+- [حزمة المكتبة القياسية `context`](https://pkg.go.dev/context): أفضل الممارسات لإلغاء العمليات والمهل الزمنية وتجنب تصادم المفاتيح عبر الأنواع غير المصدرة.
+- [حزمة المكتبة القياسية `log/slog`](https://pkg.go.dev/log/slog): التسجيل الهيكلي عالي الأداء لحدود الدخول الشبكي.
+- [حزمة المكتبة القياسية `net`](https://pkg.go.dev/net): معالجة وتقسيم عناوين IP (`net.SplitHostPort`) والبدائيات الشبكية للمستمعات.
 
 ---
 
-## 3. International Standards & RFCs
+## 2. التوثيق الرسمي لنظام gRPC و RPC
 
-- **RFC 7807**: *Problem Details for HTTP APIs*. Standardized format for machine-readable HTTP error payloads (`application/problem+json`).
-- **RFC 9110**: *HTTP Semantics*. Standards for HTTP status codes, method idempotency, and header parsing.
-- **W3C Trace Context Specification**: Standardized `traceparent` and `tracestate` headers for distributed microservice tracing across HTTP and gRPC.
-- **RFC 7519**: *JSON Web Token (JWT)*. Format for bearer tokens transported across `Authorization` headers.
-- **RFC 7239**: *Forwarded HTTP Extension*. Canonical syntax for proxy forwarding headers (`Forwarded`, `X-Forwarded-For`).
+- [التوثيق الرسمي لـ gRPC في Go](https://grpc.io/docs/languages/go/): أدلة شاملة للمعترضات الأحادية ومعترضات التدفق (Unary & Streaming Interceptors).
+- [توثيق حزمة gRPC في Go (`google.golang.org/grpc`)](https://pkg.go.dev/google.golang.org/grpc): تفاصيل `UnaryServerInterceptor` و `StreamServerInterceptor` ودورة حياة البيانات الوصفية.
+- [مرجع بيانات gRPC الوصفية (`google.golang.org/grpc/metadata`)](https://pkg.go.dev/google.golang.org/grpc/metadata): دلالات أزواج المفتاح والقيمة لترويسات الطلب والاستجابة (`metadata.MD`).
+- [مواصفات ConnectRPC](https://connectrpc.com/): الإرشادات الرسمية لتوحيد RPC عبر HTTP/1.1 و HTTP/2 و `http.Handler` القياسي.
+- [مشروع gRPC-Gateway](https://github.com/grpc-ecosystem/grpc-gateway): نمط الوكيل العكسي لترجمة REST/JSON إلى gRPC.
+- [معمارية النقل في Go kit](https://gokit.io/docs/architecture/): التصميم التأسيسي ثلاثي الطبقات (Transport -> Endpoint -> Service).
+
+---
+
+## 3. المعايير الدولية ومواصفات RFC
+
+- **RFC 7807**: *تفاصيل المشكلات لواجهات برمجية تطبيقات HTTP (Problem Details for HTTP APIs)*. التنسيق المعياري لحمولات أخطاء HTTP القابلة للقراءة آلياً (`application/problem+json`).
+- **RFC 9110**: *دلالات HTTP (HTTP Semantics)*. المعايير المعتمدة لرموز حالة HTTP، وعدم التكرار الحسابي (Idempotency)، وتحليل الترويسات.
+- **مواصفات W3C Trace Context**: الترويسات المعيارية `traceparent` و `tracestate` للتتبع الموزع عبر الخدمات المصغرة باستخدام HTTP و gRPC.
+- **RFC 7519**: *رمز ويب JSON (JWT)*. التنسيق القياسي لرموز الحامل المنقولة عبر ترويسة `Authorization`.
+- **RFC 7239**: *امتداد التمرير لـ HTTP (Forwarded HTTP Extension)*. البنية القياسية لترويسات تمرير الوكيل (`Forwarded` و `X-Forwarded-For`).

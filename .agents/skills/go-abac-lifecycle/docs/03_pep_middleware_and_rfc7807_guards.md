@@ -1,64 +1,64 @@
-# PEP Middleware and RFC 7807 Problem Details Guards in Go
+# وسائط PEP ومغلفات أخطاء RFC 7807 في Go
 
-This document details the design and implementation of the **Policy Enforcement Point (PEP)** in Go HTTP and gRPC services, focusing on collision-free context propagation, fail-closed enforcement guards, and standardized **RFC 7807 Problem Details** error formatting.
+توضح هذه الوثيقة تصميم وتطبيق **نقطة فرض السياسة (Policy Enforcement Point - PEP)** في خدمات Go لبروتوكولي HTTP و gRPC، مع التركيز على حماية السياق من التصادم، وحراس الفرض الصارم للمنع الافتراضي (Fail-Closed)، واستجابات الأخطاء المعيارية وفق **RFC 7807 Problem Details**.
 
 ---
 
-## 1. The Role of the Policy Enforcement Point (PEP)
+## 1. دور نقطة فرض السياسة (PEP)
 
-The PEP protects application boundaries by:
+تحمي نقطة الفرض (PEP) حدود التطبيق عبر:
 
-1. **Intercepting** incoming requests before any domain or business handler executes.
-2. **Extracting & Propagating** caller identity and environmental context.
-3. **Coordinating** with the PDP (and PIP if dynamic attributes are required).
-4. **Enforcing** the decision: allowing execution to proceed (`200 OK` path) or terminating execution immediately with a safe `403 Forbidden` response.
+1. **اعتراض** الطلبات القادمة قبل وصولها إلى معالجات المجال والمنطق التجاري.
+2. **استخراج وتمرير** هوية الفاعل والسياق البيئي عبر السياق.
+3. **التنسيق** مع محرك اتخاذ القرار (PDP) ومستودعات البيانات (PIP) لجلب سمات الموارد.
+4. **فرض** القرار الحاسم: إما السماح باستكمال المعالجة (`200 OK`) أو قطع الطلب فوراً باستجابة آمنة برمز `403 Forbidden`.
 
 ```text
-Incoming HTTP/gRPC Request
+طلب شبكي قادم (HTTP / gRPC)
            │
            ▼
 ┌──────────────────────────────────────────────────────────┐
-│ PEP Authentication Middleware (AuthN)                    │
-│ 1. Validate JWT / mTLS / Session                         │
-│ 2. Construct Subject & Environment                       │
-│ 3. Inject into request context (unexported contextKey)   │
+│ وسيط المصادقة (PEP AuthN Middleware)                     │
+│ 1. التحقق من التوكن / الشهادات / الجلسة                  │
+│ 2. تكوين كائن الفاعل (Subject) والبيئة (Environment)     │
+│ 3. حقن كائن الهوية في السياق بنوع مفتاح غير مصدّر        │
 └──────────────────────────┬───────────────────────────────┘
                            │
                            ▼
 ┌──────────────────────────────────────────────────────────┐
-│ PEP Authorization Guard (AuthZ)                          │
-│ 1. Extract Subject & Env from ctx                        │
-│ 2. PIP Lookup: Resolve target Resource attributes        │
-│ 3. PDP Evaluate: Run combining algorithm                 │
+│ حارس التفويض (PEP Authorization Guard)                   │
+│ 1. استرجاع الفاعل والبيئة من السياق                      │
+│ 2. استدعاء PIP: جلب سمات المورد المستهدف                 │
+│ 3. استدعاء PDP: تقييم القواعد بخوارزمية الدمج الحتمية    │
 └──────────────────────────┬───────────────────────────────┘
                            │
              ┌─────────────┴─────────────┐
              │                           │
-      [DecisionPermit]            [DecisionDeny]
+       [قرار بالسماح Permit]       [قرار بالمنع Deny]
              │                           │
              ▼                           ▼
 ┌─────────────────────────┐ ┌──────────────────────────────┐
-│ Call next.ServeHTTP()   │ │ Return RFC 7807 Problem (403)│
-│ (Execute Domain Action) │ │ (Terminate pipeline safely)  │
+│ استدعاء next.ServeHTTP()│ │ إرجاع مشكلة RFC 7807 (403)   │
+│ (تنفيذ إجراءات المجال)  │ │ (إنهاء المعالجة فورياً وبأمان)│
 └─────────────────────────┘ └──────────────────────────────┘
 ```
 
 ---
 
-## 2. Type-Safe, Collision-Free Context Propagation
+## 2. تمرير الهوية عبر السياق بأمان ومنع التصادم (Context Safety)
 
-In Go, `context.Context` accepts `any` as key and value. Using raw string keys (e.g., `"subject"`) invites key collisions between packages or third-party middleware.
+في Go، تقبل دالة `context.WithValue` النوع `any` للمفتاح والقيمة. استخدام مفاتيح نصية بسيطة (مثل `"subject"`) يؤدي حتماً إلى تصادمات بين الحزم ووسطاء الطرف الثالث.
 
-### The Idiomatic Go Standard
+### المعيار الاصطلاحي المعتمد في Go
 
-Define an **unexported struct type** specifically for context keys:
+تعريف **نوع بنية خاصة غير مصدّرة** مخصصة حصرياً لمفاتيح السياق:
 
 ```go
 package abac
 
 import "context"
 
-// contextKey is unexported, making collisions outside this package impossible.
+// contextKey نوع غير مصدّر يمنع رياضياً أي تصادم خارج هذه الحزمة
 type contextKey struct{}
 
 var (
@@ -66,23 +66,23 @@ var (
     environmentKey = contextKey{}
 )
 
-// WithSubject stores the authenticated Subject in the context.
+// WithSubject يحقن الفاعل الموثق بأمان في السياق
 func WithSubject(ctx context.Context, sub Subject) context.Context {
     return context.WithValue(ctx, subjectKey, sub)
 }
 
-// GetSubject extracts the Subject from the context.
+// GetSubject يسترجع الفاعل الموثق من السياق مع تأكيد النوع
 func GetSubject(ctx context.Context) (Subject, bool) {
     sub, ok := ctx.Value(subjectKey).(Subject)
     return sub, ok
 }
 
-// WithEnvironment stores the Environment in the context.
+// WithEnvironment يحقن السياق البيئي في السياق
 func WithEnvironment(ctx context.Context, env Environment) context.Context {
     return context.WithValue(ctx, environmentKey, env)
 }
 
-// GetEnvironment extracts the Environment from the context.
+// GetEnvironment يسترجع السياق البيئي من السياق مع تأكيد النوع
 func GetEnvironment(ctx context.Context) (Environment, bool) {
     env, ok := ctx.Value(environmentKey).(Environment)
     return env, ok
@@ -91,11 +91,11 @@ func GetEnvironment(ctx context.Context) (Environment, bool) {
 
 ---
 
-## 3. RFC 7807 Problem Details Rejection Guard
+## 3. مغلفات أخطاء المنع القياسية وفق RFC 7807
 
-When an access check fails, the API must return a structured, standardized JSON response conforming to **RFC 7807** (*Problem Details for HTTP APIs*).
+عندما يفشل فحص الصلاحية، يجب أن تُرجع الواجهة البرمجية استجابة مهيكلة ومعيارية بصيغة JSON متوافقة تماماً مع معيار **RFC 7807** (*Problem Details for HTTP APIs*).
 
-### 3.1 Problem Details Schema
+### 3.1 هيكل حمولة تفاصيل المشكلة (Problem Details Schema)
 
 ```go
 package abac
@@ -105,16 +105,16 @@ import (
     "net/http"
 )
 
-// ProblemDetails models an RFC 7807 problem payload.
+// ProblemDetails يمثل حمولة استجابة مشكلة RFC 7807
 type ProblemDetails struct {
-    Type     string `json:"type"`               // URI reference identifying the problem type
-    Title    string `json:"title"`              // Short human-readable summary
-    Status   int    `json:"status"`             // HTTP status code (403)
-    Detail   string `json:"detail"`             // Human-readable explanation of this specific occurrence
-    Instance string `json:"instance,omitempty"` // URI reference identifying the specific request path
+    Type     string `json:"type"`               // رابط URI يحدد نوع المشكلة البرمجية
+    Title    string `json:"title"`              // ملخص مقروء وموجز عن الخطأ
+    Status   int    `json:"status"`             // رمز حالة HTTP (403)
+    Detail   string `json:"detail"`             // شرح عام ومحدد لحدوث هذه الحالة
+    Instance string `json:"instance,omitempty"` // مسار الطلب الشبكي الذي وقعت عنده المشكلة
 }
 
-// WriteForbiddenProblem sends a standard RFC 7807 response with 403 Forbidden.
+// WriteForbiddenProblem يرسل استجابة معيارية برمز 403 Forbidden ونوع محتوى problem+json
 func WriteForbiddenProblem(w http.ResponseWriter, r *http.Request, detail string) {
     w.Header().Set("Content-Type", "application/problem+json")
     w.WriteHeader(http.StatusForbidden)
@@ -128,23 +128,23 @@ func WriteForbiddenProblem(w http.ResponseWriter, r *http.Request, detail string
 }
 ```
 
-### 3.2 Information Disclosure Prevention
+### 3.2 منع تسريب معلومات البنية الأمنية (Information Disclosure Prevention)
 
 > [!CAUTION]
-> **Never leak internal policy details**:
-> An attacker can map out the security system if error messages state:
-> `"Denied: Subject clearance 2 is less than Resource sensitivity 5, and Department accounting does not match finance"`.
+> **إياك وتسريب أسماء قواعد السياسات الداخلية**:
+> يمكن للمهاجم استكشاف البنية الأمنية إذا كانت رسالة الخطأ توضح:
+> `"تم المنع: تصريح الفاعل 2 أقل من حساسية المورد 5، وقسم المحاسبة لا يطابق قسم المالية"`.
 >
-> In production:
+> في البيئات الإنتاجية:
 >
-> - **External Response (Public RFC 7807)**: `"Access denied: insufficient privileges to access this resource"`.
-> - **Internal Audit Log (`log/slog`)**: Detailed reason including failed rule ID, clearance, department, and tenant match status.
+> - **الاستجابة الخارجية للعميل (RFC 7807)**: `"تم رفض الوصول: صلاحيات غير كافية للوصول لهذا المورد"`.
+> - **سجل التدقيق الداخلي (`log/slog`)**: سبب المنع التفصيلي متضمناً معرّف القاعدة التي رفضت الطلب، ومستوى التصريح، وتطابق الأقسام، ومعرّف المستأجر.
 
 ---
 
-## 4. Reusable HTTP PEP Middleware Implementation
+## 4. تطبيق وسيط HTTP PEP العام القابل لإعادة الاستخدام
 
-Here is a generic, reusable HTTP middleware function enforcing ABAC:
+فيما يلي وسيط HTTP نموذجي يفرض سياسات ABAC بنمط الفشل السريع (Fail-Closed):
 
 ```go
 type ResourceExtractor func(r *http.Request) (Resource, error)
@@ -152,21 +152,21 @@ type ResourceExtractor func(r *http.Request) (Resource, error)
 func RequireABAC(pdp *Engine, verb string, extractResource ResourceExtractor) func(http.Handler) http.Handler {
     return func(next http.Handler) http.Handler {
         return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-            // 1. Get Subject from Context (injected by upstream AuthN middleware)
+            // 1. استخراج الفاعل من السياق (المحقون سابقاً عبر وسيط AuthN)
             subject, ok := GetSubject(r.Context())
             if !ok {
-                WriteForbiddenProblem(w, r, "Access denied: unauthenticated subject context")
+                WriteForbiddenProblem(w, r, "تم رفض الوصول: سياق فاعل غير مصادق عليه")
                 return
             }
 
-            // 2. Resolve target Resource
+            // 2. استخراج المورد المستهدف
             resource, err := extractResource(r)
             if err != nil {
-                WriteForbiddenProblem(w, r, "Access denied: unable to resolve target resource")
+                WriteForbiddenProblem(w, r, "تم رفض الوصول: تعذر استخراج المورد المستهدف")
                 return
             }
 
-            // 3. Resolve Environment (from ctx or current request)
+            // 3. استخراج أو تكوين السياق البيئي
             env, ok := GetEnvironment(r.Context())
             if !ok {
                 env = Environment{
@@ -175,7 +175,7 @@ func RequireABAC(pdp *Engine, verb string, extractResource ResourceExtractor) fu
                 }
             }
 
-            // 4. Construct EvaluationContext
+            // 4. بناء سياق التقييم الرباعي
             evalCtx := EvaluationContext{
                 Subject:     subject,
                 Resource:    resource,
@@ -183,15 +183,15 @@ func RequireABAC(pdp *Engine, verb string, extractResource ResourceExtractor) fu
                 Environment: env,
             }
 
-            // 5. Evaluate PDP
+            // 5. تقييم القرار عبر محرك PDP
             decision, _ := pdp.Evaluate(evalCtx)
             if decision != DecisionPermit {
-                // Fail-Closed: return 403 Forbidden without leaking internal rule names
-                WriteForbiddenProblem(w, r, "Access denied: you do not have permission to perform this action on this resource")
+                // الفشل الآمن: إرجاع 403 فوراً دون تسريب أسماء القواعد الداخلية
+                WriteForbiddenProblem(w, r, "تم رفض الوصول: لا تملك الصلاحيات الكافية لتنفيذ هذا الإجراء على المورد")
                 return
             }
 
-            // 6. Access permitted -> delegate to downstream handler
+            // 6. منح الوصول والتسليم للمعالج التالي في خط الأنابيب
             next.ServeHTTP(w, r)
         })
     }

@@ -1,43 +1,43 @@
-# Rate Limiting & Brute Force Prevention
+# تحديد معدل استهلاك الواجهات ومكافحة هجمات التخمين في Go
 
-Authentication endpoints (`/api/v1/auth/login`, `/api/v1/auth/reset-password`) are prime targets for automated credential stuffing and brute-force dictionary attacks. A production Go service must throttle requests before expensive cryptographic operations (e.g. `bcrypt` password hashing) consume server CPU.
-
----
-
-## 1. Multi-Dimensional Rate Limiting
-
-Effective defense requires limiting along multiple dimensions simultaneously:
-
-1. **IP-Based Limiting**: Limits requests per remote IP address (e.g., maximum 10 attempts per minute). Protects against single-host brute-force attacks.
-2. **Account/Identity-Based Limiting**: Limits attempts against a specific account/email (e.g., maximum 5 failed attempts per 15 minutes before locking). Protects against distributed credential stuffing across botnets.
-3. **Global Endpoint Limiting**: Overall ceiling for authentication traffic to protect server capacity.
+تعد مسارات المصادقة (مثل `/api/v1/auth/login` و `/api/v1/auth/reset-password`) أهدافاً رئيسية لهجمات حشو بيانات الاعتماد (Credential Stuffing) وهجمات القواميس والتخمين الآلي (Brute-Force). يجب أن تقوم خدمة Go الإنتاجية بكبح الطلبات وتحديد معدلها قبل أن تستهلك العمليات التشفيرية المكلفة (مثل خوارزمية تجزئة كلمات المرور `bcrypt`) معالجات الخادم.
 
 ---
 
-## 2. In-Memory Token Bucket Algorithm
+## 1. تحديد المعدل متعدد الأبعاد (Multi-Dimensional Rate Limiting)
 
-For single-instance or localized rate limiting, the Token Bucket algorithm provides smooth burst handling and constant refilling:
+يتطلب الدفاع الفعال فرض قيود على عدة أبعاد متزامنة:
+
+1. **التقييد المستند إلى عنوان IP**: تقييد عدد المحاولات لكل عنوان IP (مثل: 10 محاولات كحد أقصى في الدقيقة). يحمي من هجمات التخمين الصادرة من مصدر منفرد.
+2. **التقييد المستند إلى الحساب/البريد الإلكتروني**: تقييد المحاولات الفاشلة الموجهة لحساب معين (مثل: 5 محاولات فاشلة كحد أقصى خلال 15 دقيقة قبل قفل الحساب مؤقتاً). يحمي من هجمات حشو البيانات الموزعة عبر شبكات البوت (Botnets).
+3. **التقييد العام للمسار (Global Limiting)**: سقف إجمالي لحركة المرور على مسارات المصادقة لحماية سعة الخادم من الإنهاك.
+
+---
+
+## 2. خوارزمية دلو الرموز في الذاكرة (Token Bucket Algorithm)
+
+للتحكم الموضعي في المعدل داخل الخدمة، توفر خوارزمية Token Bucket استيعاباً سلساً للطلبات الفجائية (Bursts) مع إعادة ملء مستمرة:
 
 ```text
-Tokens in bucket: [● ● ● ● ●]  (Capacity: 5)
-Requests consume:  ▼
-Refill rate:       1 token per 5 seconds
-Empty bucket:      Returns 429 Too Many Requests
+الرموز في الدلو: [● ● ● ● ●]  (السعة: 5)
+الطلبات تستهلك:   ▼
+معدل التعبئة:     رمز واحد كل 5 ثوانٍ
+الدلو الفارغ:     يُرجع 429 Too Many Requests
 ```
 
-### Key Headers to Return on Throttling
+### الترويسات القياسية عند تقييد المعدل
 
-When a request is rate-limited, return HTTP 429 and standard rate-limiting headers:
+عند حظر الطلب بسبب تجاوز المعدل، يتم إرجاع رمز `429 Too Many Requests` مع الترويسات المعيارية:
 
-- `Retry-After`: Number of seconds to wait before retrying.
-- `X-RateLimit-Limit`: Maximum allowed attempts in window.
-- `X-RateLimit-Remaining`: Remaining attempts.
-- `X-RateLimit-Reset`: Unix timestamp when bucket refills.
+- `Retry-After`: عدد الثواني المطلوب انتظارها قبل إعادة المحاولة.
+- `X-RateLimit-Limit`: الحد الأقصى للمحاولات المسموحة في النافذة الزمنية.
+- `X-RateLimit-Remaining`: عدد المحاولات المتبقية.
+- `X-RateLimit-Reset`: الطابع الزمني بتوقيت Unix للحظة اكتمال إعادة تعبئة الدلو.
 
 ---
 
-## 3. Account Lockout & Graduated Delays
+## 3. قفل الحسابات والتأخير الزمني المتدرج
 
-- **Exponential Delay**: After 3 failed password attempts, introduce a progressive artificial delay (e.g., 500ms, 1s, 2s) before returning the response.
-- **Account Lockout**: After 5 failed attempts within 15 minutes, temporarily lock the account for 30 minutes. Send a security notification email to the account owner.
-- **Constant Time Password Verification**: Always execute password hashing checks in constant time (`bcrypt.CompareHashAndPassword` or `subtle.ConstantTimeCompare`) even if the user does not exist (using a dummy hash) to prevent user enumeration via timing attacks.
+- **التأخير الزمني المتدرج**: بعد 3 محاولات فاشلة لكلمة المرور، يتم إدخال تأخير زمني اصطناعي تصاعدي (500ms ثم 1s ثم 2s) قبل إرجاع الاستجابة.
+- **القفل المؤقت للحساب**: بعد 5 محاولات فاشلة خلال 15 دقيقة، يتم قفل الحساب مؤقتاً لمدة 30 دقيقة وإرسال بريد أمني تنبيهي لمالك الحساب.
+- **فحص كلمة المرور في زمن ثابت**: تنفيذ فحص التجزئة دائماً في زمن ثابت (`bcrypt.CompareHashAndPassword` أو `subtle.ConstantTimeCompare`) حتى لو كان المستخدم غير موجود في النظام (باستخدام تجزئة وهمية Dummy Hash) لمنع استكشاف أسماء المستخدمين عبر هجمات التوقيت الجانبية.

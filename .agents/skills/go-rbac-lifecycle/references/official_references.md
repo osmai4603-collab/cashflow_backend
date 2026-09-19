@@ -1,32 +1,32 @@
-# Official Standards & Architecture References
+# المعايير الرسمية والمراجع المعمارية لـ RBAC
 
-This document catalogs the authoritative standards, official Go documentation, and reference implementations underpinning this RBAC lifecycle architecture.
-
----
-
-## 1. Official Go Language Documentation (`go.dev`)
-
-- [Go Security Architecture & Philosophy](https://go.dev/doc/security/): Official overview of Go's design decisions regarding security, memory safety, and framework independence.
-- [Security Best Practices for Go Developers](https://go.dev/security/best-practices): Official guidance covering automated vulnerability scanning (`govulncheck`), race condition detection (`-race`), and fuzzing (`-fuzz`).
-- [Go Vulnerability Database](https://go.dev/security/vuln/): Real-time tracking of security advisories in the Go ecosystem.
-- [Go Standard Library `context` Package](https://pkg.go.dev/context): Best practices for value propagation, cancellation, and unexported key typing.
-- [Go Standard Library `crypto/subtle` Package](https://pkg.go.dev/crypto/subtle): Constant-time byte comparisons to prevent timing side-channel attacks.
-- [Effective Go](https://go.dev/doc/effective_go): Idiomatic Go design guidelines, package structure, and concurrency idioms.
+توثق هذه الصفحة المعايير الدولية المعتمدة، وتوثيقات لغة Go الرسمية، والتطبيقات المرجعية الرائدة التي تستند إليها معمارية دورة حياة التحكم بالوصول القائم على الأدوار (RBAC).
 
 ---
 
-## 2. Formal International Access Control Standards
+## 1. التوثيقات الرسمية للغة Go (`go.dev`)
 
-- **NIST SP 800-21d**: *Proposed NIST Standard for Role-Based Access Control*. Defines the formal mathematical foundation of Core RBAC, Hierarchical RBAC, Constrained RBAC, and Symmetric RBAC.
-- **ANSI/INCITS 359-2012**: *American National Standard for Information Technology - Role Based Access Control*. The international consensus standard for RBAC systems.
-- **NIST SP 800-162**: *Guide to Attribute Based Access Control (ABAC) Definition and Considerations*. Reference for hybrid RBAC-ABAC models.
-- **RFC 7807**: *Problem Details for HTTP APIs*. The standardized JSON structure for machine-readable HTTP error handling (`application/problem+json`).
-- **RFC 7519**: *JSON Web Token (JWT)*. Industry standard for transmitting claims securely between parties.
+- [معمارية وفلسفة أمان Go](https://go.dev/doc/security/): نظرة عامة رسمية حول قرارات تصميم لغة Go المتعلقة بالأمان، وأمان الذاكرة، والاستقلالية عن أطر العمل.
+- [أفضل الممارسات الأمنية لمطوري Go](https://go.dev/security/best-practices): توجيه رسمي يغطي الفحص الآلي للثغرات (`govulncheck`)، واكتشاف سباق البيانات (`-race`)، واختبارات التشويش (`-fuzz`).
+- [قاعدة بيانات ثغرات Go](https://go.dev/security/vuln/): متابعة لحظية للنشرات الأمنية في منظومة Go.
+- [توثيق حزمة السياق القياسية `context`](https://pkg.go.dev/context): القواعد القياسية لنقل القيم وإلغاء العمليات واستخدام المفاتيح الخاصة غير المصدّرة.
+- [حزمة المقارنة الزمنية الثابتة `crypto/subtle`](https://pkg.go.dev/crypto/subtle): المقارنة في زمن ثابت لمنع هجمات التوقيت الجانبية.
+- [دليل Go الفعال (Effective Go)](https://go.dev/doc/effective_go): المعايير الاصطلاحية لتصميم الحزم البرمجية وأنماط التزامن.
 
 ---
 
-## 3. High-Scale Reference Implementations in Go
+## 2. المعايير الدولية الرسمية لإدارة الوصول
 
-- [Kubernetes Authorizer Engine (`k8s.io/apiserver`)](https://github.com/kubernetes/kubernetes/tree/master/pkg/apis/rbac): The gold standard for decoupled RBAC in Go, separating Role definitions from Subject Bindings.
-- [Kubernetes RBAC Reference Guide](https://kubernetes.io/docs/reference/access-authn-authz/rbac/): Production deployment model for roles, cluster roles, subjects, and verbs.
-- [Casbin Authorization Framework](https://github.com/casbin/casbin): Leading open-source Go authorization engine based on the PERM (Policy, Effect, Request, Matcher) paradigm.
+- **NIST SP 800-21d**: *Proposed NIST Standard for Role-Based Access Control*. الأساس الرياضي والهندسي لنماذج RBAC: الأساسي، الهرمي، المقيد، والمتناظر.
+- **ANSI/INCITS 359-2012**: *American National Standard for Information Technology - Role Based Access Control*. المعيار المعتمد دولياً لأنظمة RBAC.
+- **NIST SP 800-162**: *Guide to Attribute Based Access Control (ABAC) Definition and Considerations*. المرجع للنماذج الهجينة التي تجمع بين RBAC و ABAC.
+- **RFC 7807**: *Problem Details for HTTP APIs*. التنسيق القياسي المهيكل لأخطاء HTTP (`application/problem+json`).
+- **RFC 7519**: *JSON Web Token (JWT)*. المعيار العالمي لنقل ادعاءات وهوية الفاعل الموثقة بأمان.
+
+---
+
+## 3. التطبيقات المرجعية عالية الإنتاجية في Go
+
+- [محرك التفويض في Kubernetes (`k8s.io/apiserver`)](https://github.com/kubernetes/kubernetes/tree/master/pkg/apis/rbac): المعيار الذهبي لفصل تعريف الأدوار (Roles) عن ربطها بالمستخدمين (RoleBindings).
+- [دليل مراجع RBAC في Kubernetes](https://kubernetes.io/docs/reference/access-authn-authz/rbac/): نموذج النشر الإنتاجي للأدوار وأدوار العنقود (ClusterRoles) والأفعال والمستخدمين.
+- [مكتبة Casbin للتفويض](https://github.com/casbin/casbin): محرك Go مفتوح المصدر الرائد المعتمد على نموذج PERM.

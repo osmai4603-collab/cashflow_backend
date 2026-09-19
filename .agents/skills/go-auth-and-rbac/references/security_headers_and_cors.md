@@ -1,36 +1,36 @@
-# Security Headers & CORS Reference Policy
+# سياسة ترويسات الأمان ومشاركة الموارد عبر الأصول (Security Headers & CORS)
 
-Production Go services serving REST APIs must attach security headers to all HTTP responses to protect clients against Cross-Site Scripting (XSS), Clickjacking, MIME-sniffing, and MITM attacks.
+يجب على خدمات Go الإنتاجية التي تقدم واجهات برمجة تطبيقات REST إرفاق ترويسات الأمان بجميع استجابات HTTP لحماية العملاء ضد هجمات البرمجة عبر المواقع (XSS)، وخطف النقرات (Clickjacking)، والتخمين الخاطئ لأنواع MIME، وهجمات الوسيط (MITM).
 
 ---
 
-## 1. Mandatory HTTP Security Headers
+## 1. ترويسات أمان HTTP الإلزامية (Mandatory HTTP Security Headers)
 
-| Header | Production Recommended Value | Purpose |
+| الترويسة (Header) | القيمة الموصى بها في الإنتاج | الغرض الأمني |
 | :--- | :--- | :--- |
-| `X-Content-Type-Options` | `nosniff` | Prevents browser MIME-type sniffing |
-| `X-Frame-Options` | `DENY` (or `SAMEORIGIN`) | Prevents clickjacking by blocking iframe embedding |
-| `X-XSS-Protection` | `1; mode=block` | Legacy filter activation for older browsers |
-| `Strict-Transport-Security` | `max-age=63072000; includeSubDomains; preload` | Enforces HTTPS strictly (2 years) |
-| `Content-Security-Policy` | `default-src 'self'; frame-ancestors 'none';` | Restricts resource origins and framing |
-| `Referrer-Policy` | `strict-origin-when-cross-origin` | Strips path/query from referrer across origins |
-| `Permissions-Policy` | `geolocation=(), camera=(), microphone=()` | Disables sensitive browser hardware APIs |
+| `X-Content-Type-Options` | `nosniff` | منع المتصفح من تخمين نوع المحتوى (MIME-type sniffing) |
+| `X-Frame-Options` | `DENY` (أو `SAMEORIGIN`) | منع خطف النقرات عبر حظر التضمين داخل إطارات `iframe` |
+| `X-XSS-Protection` | `1; mode=block` | تفعيل مرشح الحماية القديم للمتصفحات السابقة |
+| `Strict-Transport-Security` | `max-age=63072000; includeSubDomains; preload` | فرض بروتوكول HTTPS الصارم لمدة عامين |
+| `Content-Security-Policy` | `default-src 'self'; frame-ancestors 'none';` | تقييد مصادر الموارد وحظر التضمين تماماً |
+| `Referrer-Policy` | `strict-origin-when-cross-origin` | تجريد المسار والاستعلام من ترويسة الإحالة عبر النطاقات |
+| `Permissions-Policy` | `geolocation=(), camera=(), microphone=()` | تعطيل واجهات عتاد المتصفح الحساسة |
 
 ---
 
-## 2. Cross-Origin Resource Sharing (CORS) Policy
+## 2. سياسة مشاركة الموارد عبر الأصول (CORS Policy)
 
-CORS must be strictly configured based on environment:
+يجب ضبط إعدادات CORS بصرامة استناداً إلى بيئة التشغيل:
 
-### Forbidden in Production
+### محظور تماماً في البيئة الإنتاجية
 
-- `Access-Control-Allow-Origin: *` when credentials (`cookies`, `Authorization`) are allowed.
-- Dynamic reflection of `Origin` header without whitelist verification.
+- استخدام `Access-Control-Allow-Origin: *` عند السماح ببيانات الاعتماد (`cookies`، أو ترويسة `Authorization`).
+- الانعكاس الديناميكي لترويسة `Origin` دون التحقق من القائمة البيضاء المعتمدة (Whitelist).
 
-### Recommended Configuration
+### التكوين الإنتاجي الموصى به
 
 ```go
-// CORSConfig defines production CORS parameters.
+// CORSConfig يحدد معاملات CORS في البيئة الإنتاجية.
 type CORSConfig struct {
  AllowedOrigins   []string
  AllowedMethods   []string
@@ -40,7 +40,7 @@ type CORSConfig struct {
  MaxAgeSeconds    int
 }
 
-// Production Defaults
+// الإعدادات الافتراضية الإنتاجية
 var DefaultCORS = CORSConfig{
  AllowedOrigins: []string{
   "https://app.example.com",
@@ -56,6 +56,6 @@ var DefaultCORS = CORSConfig{
   "X-Request-ID", "Retry-After",
  },
  AllowCredentials: true,
- MaxAgeSeconds:    86400, // 24 hours preflight cache
+ MaxAgeSeconds:    86400, // تخزين مؤقت للتحقق المسبق (Preflight) لمدة 24 ساعة
 }
 ```

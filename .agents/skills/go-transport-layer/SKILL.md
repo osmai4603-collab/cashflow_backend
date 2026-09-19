@@ -1,84 +1,84 @@
 ---
 name: go-transport-layer
-description: "Production-ready, protocol-agnostic Transport Layer architecture for Go backends unifying HTTP (REST/JSON) and gRPC (Protobuf) before request handling. Covers Hexagonal primary adapter boundaries, TransportContext abstraction, unexported type-safe context keying, 6-stage pre-handling lifecycle pipeline, protocol identification, dual-protocol middleware/interceptors, port multiplexing (cmux & h2c), and bidirectional domain error mapping."
+description: "معمارية طبقة النقل (Transport Layer Architecture) الإنتاجية والمحايدة للبروتوكولات لخدمات Go الخلفية، لتوحيد بروتوكولي HTTP (REST/JSON) و gRPC (Protobuf) قبل معالجة الطلبات. تغطي حدود المحولات الأولية (Hexagonal primary adapter)، تجريد سياق النقل TransportContext، مفاتيح السياق الآمنة غير المصدرة، خط أنابيب المعالجة المسبقة المكون من 6 مراحل، التحديد الصريح للبروتوكول، البرمجيات الوسيطة والمترضات المزدوجة، مضاmultiplexing المنافذ (cmux و h2c)، والربط ثنائي الاتجاه لأخطاء النطاق."
 ---
 
-# Go Transport Layer Architecture: Unifying HTTP & gRPC Pre-Handling
+# معمارية طبقة النقل في Go: توحيد المعالجة المسبقة لبروتوكولي HTTP و gRPC
 
-This skill defines a production-grade, battle-tested, and protocol-agnostic **Transport Layer Architecture** for Go backend services. It provides a clean, unified ingress boundary for applications that simultaneously support **HTTP/REST (JSON)** and **gRPC (Protobuf over HTTP/2)**, guaranteeing that requests are stamped, normalized, authenticated, validated, and enriched **before** entering core application use cases or domain handlers.
+تحدد هذه المهارة **معمارية طبقة النقل (Transport Layer Architecture)** الإنتاجية والمجربة والمحايدة للبروتوكولات لخدمات Go الخلفية. توفر هذه المعمارية حدود دخول (Ingress Boundary) موحدة ونظيفة للتطبيقات التي تدعم في آن واحد **HTTP/REST (JSON)** و **gRPC (Protobuf عبر HTTP/2)**، مما يضمن وسم الطلبات وتطبيعها والمصادقة عليها والتحقق منها وإثرائها **قبل** دخولها إلى حالات الاستخدام (Use Cases) أو معالجات النطاق الأساسية.
 
-The architecture synthesizes official Go idiomatic standards from `net/http`, Google's official `google.golang.org/grpc` project, Hexagonal / Clean Architecture (Ports & Adapters), Go kit transport design, and modern RPC unification patterns (ConnectRPC, gRPC-Gateway).
-
----
-
-## Production Architectural Principles
-
-1. **Strict Primary / Driving Adapter Placement**:
-   The transport layer lives at the outermost edge of the system (`internal/transport/` or `adapter/transport/`). It acts purely as a **Driving (Primary) Adapter**. It translates external network bytes (TCP/HTTP/gRPC) into domain calls and translates domain results into network responses.
-
-2. **Zero Protocol Leakage into Business Handlers**:
-   Domain services, use cases, and entities MUST NOT import `net/http`, `google.golang.org/grpc`, or auto-generated Protobuf structs. No `*http.Request`, `http.ResponseWriter`, or `grpc.ServerStream` may cross into the application core. Passing transport artifacts into use cases creates tight network coupling, breaks unit testability, and violates the Dependency Inversion Principle.
-
-3. **Context-Scoped, Type-Safe Identity & Protocol Propagation**:
-   All metadata extracted at the transport boundary (Protocol, Request ID, Client IP, Authenticated Principal) MUST be propagated into Go's standard `context.Context` using **unexported, package-private key types** (`type contextKey int`). This mathematically eliminates key collisions across libraries.
-
-4. **Explicit Protocol Identification (Self-Aware Ingress)**:
-   The application core and cross-cutting pipelines can always query *which protocol* delivered the request via a strongly-typed `TransportProtocol` enum (`HTTP` vs `GRPC`). This enables protocol-specific telemetry, selective caching, or customized response shapes when needed without breaking abstractions.
-
-5. **Deterministic 6-Stage Pre-Handling Pipeline**:
-   Every incoming request (regardless of whether it entered via HTTP router or gRPC listener) must traverse an identical, ordered pre-handling pipeline before reaching the handler:
-   - **Stage 1: Protocol Stamping & Ingress Logging**
-   - **Stage 2: Correlation ID & Distributed Tracing** (`X-Request-ID`, W3C TraceContext)
-   - **Stage 3: Metadata Normalization** (Header case-folding, Client IP resolution)
-   - **Stage 4: Authentication & SecurityPrincipal Resolution** (Bearer JWT / API Key)
-   - **Stage 5: Syntactic Payload Validation** (Schema/format checks vs domain logic)
-   - **Stage 6: Deadlines & Rate Limiting** (`context.WithDeadline`, token buckets)
-
-6. **Bidirectional Error & Status Code Mapping**:
-   Domain handlers return pure Go domain errors (e.g., `ErrNotFound`, `ErrConflict`, `ErrUnauthorized`). The transport adapter maps these errors symmetrically to **HTTP Status Codes** (with RFC 7807 Problem Details) and **gRPC Status Codes** (`codes.NotFound`, `codes.AlreadyExists`, `codes.Unauthenticated`).
-
-7. **Fail-Safe Panic Recovery**:
-   Any panic occurring during transport decoding, pre-handling, or business execution is caught at the transport boundary. The panic is logged with its stack trace to internal telemetry, and a safe, sanitized `500 Internal Server Error` (or gRPC `codes.Internal`) is returned to the client without leaking memory pointers or infrastructure details.
+تجمع المعمارية بين المعايير الاصطلاحية لـ Go من حزمة `net/http`، ومشروع `google.golang.org/grpc` الرسمي من Google، والمعمارية السداسية / النظيفة (Hexagonal / Clean Architecture - Ports & Adapters)، وتصميم النقل في Go kit، وأنماط توحيد استدعاء الإجراءات عن بُعد الحديثة (ConnectRPC، gRPC-Gateway).
 
 ---
 
-## Architectural Topology: Dual Ingress to Pure Handling
+## المبادئ المعمارية الإنتاجية
+
+1. **التموضع الصارم كمحول قيادة / محول أولي (Primary / Driving Adapter)**:
+   تعيش طبقة النقل في الحافة الخارجية للنظام (`internal/transport/` أو `adapter/transport/`). وهي تعمل حصرياً كـ **محول قيادة (Driving Adapter)**؛ تترجم بايتات الشبكة الخارجية (TCP/HTTP/gRPC) إلى استدعاءات لنطاق العمل، وتترجم نتائج النطاق إلى استجابات شبكية.
+
+2. **انعدام تسريب البروتوكولات إلى معالجات الأعمال (Zero Protocol Leakage)**:
+   يُحظر تماماً على خدمات النطاق وحالات الاستخدام والكيانات استيراد `net/http` أو `google.golang.org/grpc` أو هياكل Protobuf المولدة تلقائياً. لا يجوز لأي `*http.Request` أو `http.ResponseWriter` أو `grpc.ServerStream` عبور الحدود إلى قلب التطبيق. تمرير أدوات النقل إلى حالات الاستخدام يولد اقتراناً شبكياً وثيقاً، ويدمر قابلية الاختبار الأحادي، وينتهك مبدأ عكس التبعية (DIP).
+
+3. **تمرير الهوية والبروتوكول بأمان نوعي محصور في السياق (Type-Safe Context Propagation)**:
+   يجب تمرير جميع البيانات الوصفية المستخرجة عند حدود النقل (البروتوكول، معرف الطلب، عنوان IP للعميل، الهوية الأمنية المعتمدة) داخل `context.Context` القياسي في Go باستخدام **أنواع مفاتيح خاصة وغير مصدرة** (`type contextKey int`). هذا يلغي برمجياً ورياضياً تصادم المفاتيح بين المكتبات.
+
+4. **التحديد الصريح للبروتوكول (Self-Aware Ingress)**:
+   يمكن لقلب التطبيق وخطوط الأنابيب العرضية دائماً الاستعلام عن *البروتوكول* الذي سلم الطلب عبر تعداد قوي الأنواع `TransportProtocol` (`HTTP` مقابل `GRPC`). يتيح ذلك القياس عن بُعد المخصص لكل بروتوكول، أو التخزين المؤقت الانتقائي، أو تشكيل الاستجابات المخصصة دون كسر التجريد المعماري.
+
+5. **خط أنابيب حتمي للمعالجة المسبقة من 6 مراحل (Deterministic 6-Stage Pre-Handling Pipeline)**:
+   يجب على كل طلب وارد (سواء دخل عبر موجه HTTP أو مستمع gRPC) اجتياز خط أنابيب معالجة مسبقة متطابق ومرتب قبل الوصول إلى المعالج:
+   - **المرحلة 1: وسم البروتوكول وتسجيل الدخول (Protocol Stamping & Ingress Logging)**
+   - **المرحلة 2: معرف الارتباط والتتبع الموزع (Correlation ID & Distributed Tracing)** (`X-Request-ID` و W3C TraceContext)
+   - **المرحلة 3: تطبيع البيانات الوصفية (Metadata Normalization)** (توحيد الترويسات وحل عنوان IP الحقيقي)
+   - **المرحلة 4: المصادقة وحل الهوية الأمنية (Authentication & SecurityPrincipal)** (رمز Bearer JWT أو مفتاح API)
+   - **المرحلة 5: التحقق النحوي من الحمولة (Syntactic Payload Validation)** (فحص المخططات والشكل الخارجي بمعزل عن منطق الأعمال)
+   - **المرحلة 6: المهل الزمنية وتحديد المعدل (Deadlines & Rate Limiting)** (`context.WithDeadline` ودلاء الرموز)
+
+6. **مطابقة الأخطاء ورموز الحالة ثنائية الاتجاه (Bidirectional Error Mapping)**:
+   تُرجع معالجات النطاق أخطاء Go نقية خاصة بالنطاق (مثل `ErrNotFound` و `ErrConflict` و `ErrUnauthorized`). يقوم محول النقل بمطابقة هذه الأخطاء بشكل متماثل مع **رموز حالة HTTP** (مع تفاصيل المشكلات RFC 7807) و **رموز حالة gRPC** (`codes.NotFound` و `codes.AlreadyExists` و `codes.Unauthenticated`).
+
+7. **التعافي الآمن من الانهيارات (Fail-Safe Panic Recovery)**:
+   أي هلع (Panic) يقع أثناء فك تشفير النقل أو المعالجة المسبقة أو تنفيذ الأعمال يتم التقاطه عند حدود النقل. يتم تسجيل الهلع مع تتبع المكدس (Stack Trace) في أنظمة القياس الداخلية، وتُعاد للعميل استجابة آمنة ومطهرة `500 Internal Server Error` (أو رمز gRPC `codes.Internal`) دون تسريب مؤشرات الذاكرة أو تفاصيل البنية التحتية.
+
+---
+
+## الهيكلية المعمارية: من الدخول المزدوج إلى المعالجة النقية
 
 ```text
 ┌──────────────────────────────────────────────────────────────────────────────────┐
-│                                 Incoming Network                                 │
-│         Client (HTTP/REST JSON)                     Microservice (gRPC Protobuf) │
+│                                 حركة مرور الشبكة الواردة                         │
+│         العميل (HTTP/REST JSON)                     الخدمة المصغرة (gRPC Protobuf)│
 └──────────────────────────┬───────────────────────────────────────┬───────────────┘
                            │                                       │
                            ▼                                       ▼
 ┌───────────────────────────────────────┐   ┌──────────────────────────────────────┐
-│       HTTP Router / Chi / stdlib      │   │          gRPC Server Engine          │
+│       موجه HTTP / Chi / المكتبة القياسية│   │          محرك خادم gRPC               │
 │            (http.Handler)             │   │       (UnaryServerInterceptor)       │
 └──────────────────┬────────────────────┘   └──────────────────────┬───────────────┘
                    │                                               │
                    ▼                                               ▼
 ┌──────────────────────────────────────────────────────────────────────────────────┐
-│                   Unified Transport Adapter Layer (Ingress Boundary)             │
+│                   طبقة محولات النقل الموحدة (حدود الدخول Ingress Boundary)        │
 │                                                                                  │
 │   HTTPTransportContext                                  GRPCTransportContext     │
-│   ├── Wraps *http.Request                               ├── Wraps metadata.MD    │
-│   └── Implements TransportContext                       └── Implements TC        │
+│   ├── يغلف *http.Request                                 ├── يغلف metadata.MD    │
+│   └── يحقق TransportContext                             └── يحقق TC              │
 │                                                                                  │
 │   ┌──────────────────────────────────────────────────────────────────────────┐   │
-│   │                      6-Stage Pre-Handling Pipeline                       │   │
+│   │                      خط أنابيب المعالجة المسبقة (6 مراحل)                │   │
 │   │                                                                          │   │
-│   │  [1] Protocol Stamping & Ingress Logging (HTTP vs GRPC)                  │   │
-│   │  [2] Correlation & Tracing (X-Request-ID, W3C traceparent)               │   │
-│   │  [3] Metadata Normalization (Client IP, Headers, User-Agent)             │   │
-│   │  [4] Authentication & SecurityPrincipal Resolution                      │   │
-│   │  [5] Syntactic Payload Validation & Schema Decoupling                    │   │
-│   │  [6] Context Deadlines, Timeouts & Rate Limits                           │   │
+│   │  [1] وسم البروتوكول وتسجيل الدخول (HTTP مقابل GRPC)                       │   │
+│   │  [2] الربط والتتبع الموزع (X-Request-ID و W3C traceparent)               │   │
+│   │  [3] تطبيع البيانات الوصفية (IP العميل، الترويسات، وكيل المستخدم)         │   │
+│   │  [4] المصادقة واستخراج الهوية الأمنية SecurityPrincipal                   │   │
+│   │  [5] التحقق النحوي من الحمولة وفصل المخطط                                │   │
+│   │  [6] المهل الزمنية للسياق وحدود معدل الطلبات                             │   │
 │   └─────────────────────────────────────┬────────────────────────────────────┘   │
 └─────────────────────────────────────────┼────────────────────────────────────────┘
                                           │
-                                          ▼ Enriched context.Context + Pure DTO
+                                          ▼ سياق Context مثرى + كائن DTO نقي
 ┌──────────────────────────────────────────────────────────────────────────────────┐
-│                Pure Application Core / Use Case (Zero Network Imports)           │
+│                قلب التطبيق النقي / حالة الاستخدام (خالٍ تماماً من استيرادات الشبكة)│
 │                                                                                  │
 │   type OrderUseCase interface {                                                  │
 │       CreateOrder(ctx context.Context, req CreateOrderDTO) (*OrderResult, error) │
@@ -88,9 +88,9 @@ The architecture synthesizes official Go idiomatic standards from `net/http`, Go
 
 ---
 
-## Core Interfaces and Data Contracts
+## الواجهات الأساسية وعقود البيانات (Core Interfaces & Contracts)
 
-### 1. Protocol Definition and Security Principal
+### 1. تعريف البروتوكول والهوية الأمنية (Protocol & Security Principal)
 
 ```go
 package transport
@@ -100,7 +100,7 @@ import (
  "time"
 )
 
-// TransportProtocol identifies the network ingress channel that delivered the request.
+// TransportProtocol يحدد قناة الدخول الشبكية التي سلمت الطلب.
 type TransportProtocol string
 
 const (
@@ -112,8 +112,8 @@ func (p TransportProtocol) String() string {
  return string(p)
 }
 
-// SecurityPrincipal represents an authenticated caller identity, completely decoupled from
-// network transport, headers, or token encoding.
+// SecurityPrincipal يمثل هوية المتصل المعتمدة، مفصولة تماماً عن
+// بروتوكول النقل أو الترويسات أو ترميز الرموز.
 type SecurityPrincipal struct {
  UserID    string    `json:"user_id"`
  TenantID  string    `json:"tenant_id,omitempty"`
@@ -125,7 +125,7 @@ type SecurityPrincipal struct {
  ExpiresAt time.Time `json:"expires_at,omitempty"`
 }
 
-// TransportInfo holds diagnostic transport metadata injected into context.Context.
+// TransportInfo يحتوي على البيانات الوصفية التشخيصية للنقل المحقونة داخل context.Context.
 type TransportInfo struct {
  Protocol  TransportProtocol `json:"protocol"`
  RequestID string            `json:"request_id"`
@@ -134,39 +134,39 @@ type TransportInfo struct {
 }
 ```
 
-### 2. The Abstract `TransportContext` Interface
+### 2. واجهة `TransportContext` المجردة
 
 ```go
-// TransportContext abstracts incoming request properties across HTTP and gRPC protocols,
-// enabling reusable interceptors, logging, and security evaluation without network imports.
+// TransportContext يجرد خصائص الطلب الوارد عبر بروتوكولي HTTP و gRPC،
+// مما يتيح بناء معترضات وسجلات وتقييم أمني قابل لإعادة الاستخدام دون استيراد حزم الشبكة.
 type TransportContext interface {
- // Protocol returns whether the request arrived via HTTP or gRPC.
+ // Protocol يعيد ما إذا كان الطلب قد وصل عبر HTTP أو gRPC.
  Protocol() TransportProtocol
 
- // Context returns the standard Go context associated with the request.
+ // Context يعيد سياق Go القياسي المقترن بالطلب.
  Context() context.Context
 
- // RequestID returns the distributed trace / correlation identifier.
+ // RequestID يعيد معرف التتبع والارتباط الموزع.
  RequestID() string
 
- // ClientIP extracts the canonical client IP address after resolving proxy headers.
+ // ClientIP يستخرج عنوان IP القياسي للعميل بعد حل ترويسات الوكيل المعتمدة.
  ClientIP() string
 
- // UserAgent returns the client software signature.
+ // UserAgent يعيد بصمة برنامج العميل.
  UserAgent() string
 
- // Header returns a normalized, case-insensitive metadata value.
+ // Header يعيد قيمة البيانات الوصفية بشكل غير حساس لحالة الأحرف.
  Header(key string) string
 
- // Principal retrieves the resolved security identity, if authenticated.
+ // Principal يسترجع الهوية الأمنية التي تم التحقق منها إن وجدت.
  Principal() (*SecurityPrincipal, bool)
 
- // SetPrincipal associates an authenticated identity with the transport context.
+ // SetPrincipal يربط هوية أمنية معتمدة بسياق النقل.
  SetPrincipal(principal *SecurityPrincipal)
 }
 ```
 
-### 3. Collision-Free Context Keying
+### 3. مفاتيح السياق الآمنة من التصادم (Collision-Free Context Keys)
 
 ```go
 package transport
@@ -180,23 +180,23 @@ const (
  principalKey
 )
 
-// WithTransportInfo embeds transport diagnostic metadata into context.Context.
+// WithTransportInfo يحقن بيانات النقل التشخيصية في context.Context.
 func WithTransportInfo(ctx context.Context, info TransportInfo) context.Context {
  return context.WithValue(ctx, transportInfoKey, info)
 }
 
-// GetTransportInfo retrieves transport diagnostic metadata from context.Context.
+// GetTransportInfo يسترجع بيانات النقل التشخيصية من context.Context.
 func GetTransportInfo(ctx context.Context) (TransportInfo, bool) {
  info, ok := ctx.Value(transportInfoKey).(TransportInfo)
  return info, ok
 }
 
-// WithPrincipal injects an authenticated SecurityPrincipal into context.Context.
+// WithPrincipal يحقن هوية SecurityPrincipal معتمدة في context.Context.
 func WithPrincipal(ctx context.Context, p *SecurityPrincipal) context.Context {
  return context.WithValue(ctx, principalKey, p)
 }
 
-// GetPrincipal retrieves an authenticated SecurityPrincipal from context.Context.
+// GetPrincipal يسترجع الهوية الأمنية المعتمدة من context.Context.
 func GetPrincipal(ctx context.Context) (*SecurityPrincipal, bool) {
  p, ok := ctx.Value(principalKey).(*SecurityPrincipal)
  return p, ok && p != nil
@@ -205,7 +205,7 @@ func GetPrincipal(ctx context.Context) (*SecurityPrincipal, bool) {
 
 ---
 
-## The 6-Stage Pre-Handling Pipeline Engine
+## محرك خط أنابيب المعالجة المسبقة المكون من 6 مراحل
 
 ```go
 package transport
@@ -239,14 +239,14 @@ func NewPreHandlingPipeline(validator TokenValidator, logger *slog.Logger, defau
  }
 }
 
-// Execute orchestrates the 6 stages prior to business logic execution.
+// Execute ينسق المراحل الست قبل تنفيذ منطق الأعمال.
 func (p *PreHandlingPipeline) Execute(tc TransportContext) (context.Context, error) {
  start := time.Now()
  protocol := tc.Protocol()
  reqID := tc.RequestID()
  clientIP := tc.ClientIP()
 
- // Stage 1 & 2: Protocol Stamping, Correlation Logging
+ // المرحلتان 1 و 2: وسم البروتوكول وتسجيل الارتباط
  p.logger.Info("Ingress request received at transport boundary",
   slog.String("protocol", protocol.String()),
   slog.String("request_id", reqID),
@@ -254,7 +254,7 @@ func (p *PreHandlingPipeline) Execute(tc TransportContext) (context.Context, err
   slog.String("user_agent", tc.UserAgent()),
  )
 
- // Stage 3: Metadata Normalization & Context Injection
+ // المرحلة 3: تطبيع البيانات الوصفية وحقن سياق النقل
  ctx := tc.Context()
  ctx = WithTransportInfo(ctx, TransportInfo{
   Protocol:  protocol,
@@ -263,7 +263,7 @@ func (p *PreHandlingPipeline) Execute(tc TransportContext) (context.Context, err
   UserAgent: tc.UserAgent(),
  })
 
- // Stage 4: Authentication & SecurityPrincipal Resolution
+ // المرحلة 4: المصادقة وحل الهوية الأمنية
  authHeader := tc.Header("Authorization")
  if authHeader != "" {
   token := strings.TrimPrefix(authHeader, "Bearer ")
@@ -283,11 +283,11 @@ func (p *PreHandlingPipeline) Execute(tc TransportContext) (context.Context, err
   }
  }
 
- // Stage 6: Timeout / Deadline Enforcement (if not already set upstream)
+ // المرحلة 6: فرض المهلة الزمنية للسياق (إذا لم تكن محددة مسبقاً)
  if _, hasDeadline := ctx.Deadline(); !hasDeadline && p.timeout > 0 {
   var cancel context.CancelFunc
   ctx, cancel = context.WithTimeout(ctx, p.timeout)
-  _ = cancel // Handled by caller or transport wrapper completion
+  _ = cancel // تدار عبر المتصل أو اكتمال غلاف النقل
  }
 
  p.logger.Debug("Pre-handling pipeline successfully completed",
@@ -301,9 +301,9 @@ func (p *PreHandlingPipeline) Execute(tc TransportContext) (context.Context, err
 
 ---
 
-## Dual Protocol Ingress Adapters
+## محولات الدخول للبروتوكولين (Dual Protocol Ingress Adapters)
 
-### 1. HTTP Adapter Middleware (`net/http`)
+### 1. برمجية HTTP الوسيطة (`net/http`)
 
 ```go
 package transport
@@ -342,7 +342,7 @@ func generateID() string {
 }
 ```
 
-### 2. gRPC Unary Server Interceptor (`google.golang.org/grpc`)
+### 2. معترض gRPC الأحادي (`google.golang.org/grpc`)
 
 ```go
 package transport
@@ -386,27 +386,27 @@ func GRPCUnaryInterceptor(pipeline *PreHandlingPipeline) grpc.UnaryServerInterce
 
 ---
 
-## Domain Error Mapping Matrix
+## مصفوفة مطابقة أخطاء النطاق (Domain Error Mapping Matrix)
 
-| Domain Error | HTTP Status | RFC 7807 Problem Title | gRPC Status Code | Description |
+| خطأ النطاق (Domain Error) | رمز حالة HTTP | عنوان مشكلة RFC 7807 | رمز حالة gRPC | الوصف الهندسي |
 | :--- | :--- | :--- | :--- | :--- |
-| `ErrNotFound` | `404 Not Found` | Resource Not Found | `codes.NotFound` | Requested entity does not exist |
-| `ErrUnauthorized` | `401 Unauthorized` | Authentication Required | `codes.Unauthenticated` | Missing or invalid auth credentials |
-| `ErrForbidden` | `403 Forbidden` | Access Denied | `codes.PermissionDenied` | Valid caller lacks permission |
-| `ErrInvalidInput` | `400 Bad Request` | Invalid Input | `codes.InvalidArgument` | Syntactic or validation failure |
-| `ErrConflict` | `409 Conflict` | Resource Conflict | `codes.AlreadyExists` | Unique constraint violation |
-| `ErrPreconditionFailed` | `412 Precondition` | Precondition Failed | `codes.FailedPrecondition` | Optimistic lock or state mismatch |
-| `ErrRateLimited` | `429 Too Many Req` | Rate Limit Exceeded | `codes.ResourceExhausted` | Quota or rate threshold exceeded |
-| `ErrDeadlineExceeded` | `504 Timeout` | Gateway Timeout | `codes.DeadlineExceeded` | Context deadline elapsed |
-| `ErrInternal` / Panic | `500 Server Error` | Internal Server Error | `codes.Internal` | Unexpected unhandled failure |
+| `ErrNotFound` | `404 Not Found` | Resource Not Found | `codes.NotFound` | الكيان المطلوب غير موجود |
+| `ErrUnauthorized` | `401 Unauthorized` | Authentication Required | `codes.Unauthenticated` | بيانات الاعتماد مفقودة أو غير صالحة |
+| `ErrForbidden` | `403 Forbidden` | Access Denied | `codes.PermissionDenied` | المتصل موثق ولكنه يفتقر للصلاحية |
+| `ErrInvalidInput` | `400 Bad Request` | Invalid Input | `codes.InvalidArgument` | فشل في التحقق النحوي أو تنسيق البيانات |
+| `ErrConflict` | `409 Conflict` | Resource Conflict | `codes.AlreadyExists` | انتهاك لقيد فريد أو تضارب في المورد |
+| `ErrPreconditionFailed` | `412 Precondition` | Precondition Failed | `codes.FailedPrecondition` | فشل القفل التفاؤلي أو عدم تطابق الحالة |
+| `ErrRateLimited` | `429 Too Many Req` | Rate Limit Exceeded | `codes.ResourceExhausted` | تجاوز الحصة أو عتبة معدل الطلبات |
+| `ErrDeadlineExceeded` | `504 Timeout` | Gateway Timeout | `codes.DeadlineExceeded` | انقضاء المهلة الزمنية المحددة للسياق |
+| `ErrInternal` / Panic | `500 Server Error` | Internal Server Error | `codes.Internal` | خطأ غير متوقع أو انهيار غير معالج |
 
 ---
 
-## Production Verification Checklist
+## قائمة التحقق للإنتاجية والجاهزية (Production Checklist)
 
-- [ ] **No Protocol Imports in Use Cases**: Verify with `go vet` or custom linting that `application/` and `domain/` packages do not import `net/http` or `google.golang.org/grpc`.
-- [ ] **Context Keys Unexported**: Ensure all keys used with `context.WithValue` are private, zero-size types or unexported ints.
-- [ ] **Safe Client IP Resolution**: Strip untrusted proxy headers (`X-Forwarded-For`) unless behind a verified trusted ingress gateway.
-- [ ] **Panic Recovery at Boundary**: Ensure both HTTP middleware and gRPC interceptors defer a `recover()` call to prevent process crashes.
-- [ ] **Case-Insensitive Headers**: Verify gRPC `metadata.MD` keys are lowercased and HTTP headers use `http.CanonicalHeaderKey`.
-- [ ] **Structured Telemetry**: Ensure `TransportInfo` (protocol, request_id, client_ip) is attached to all `slog` messages and OpenTelemetry traces.
+- [ ] **انعدام استيراد البروتوكولات في حالات الاستخدام**: تحقق عبر `go vet` أو أدوات الفحص المخصصة من أن حزم `application/` و `domain/` لا تستورد `net/http` أو `google.golang.org/grpc`.
+- [ ] **مفاتيح السياق غير مصدرة**: تأكد من أن جميع المفاتيح المستخدمة مع `context.WithValue` هي أنواع خاصة غير مصدرة أو أعداد صحيحة لمنع التصادم.
+- [ ] **الحل الآمن لعنوان IP للعميل**: جرد ترويسات الوكيل غير الموثوقة (`X-Forwarded-For`) إلا إذا كانت خلف بوابة دخول موثوقة ومحددة بدقة.
+- [ ] **التعافي من الانهيار عند الحدود (Panic Recovery)**: تأكد من أن برمجية HTTP الوسيطة ومعترضات gRPC تستخدم `recover()` لمنع توقف العملية بأكملها.
+- [ ] **ترويسات غير حساسة لحالة الأحرف**: تأكد من أن مفاتيح `metadata.MD` في gRPC تكون بحروف صغيرة دائماً وأن ترويسات HTTP تستخدم `http.CanonicalHeaderKey`.
+- [ ] **القياس المنظم عن بُعد**: تأكد من إرفاق `TransportInfo` (البروتوكول، معرف الطلب، IP العميل) بجميع رسائل `slog` ومسارات OpenTelemetry.

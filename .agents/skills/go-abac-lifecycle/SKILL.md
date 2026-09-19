@@ -1,98 +1,98 @@
 ---
 name: go-abac-lifecycle
-description: "Production-ready, framework-agnostic Attribute-Based Access Control (ABAC) lifecycle architecture for Go applications. Covers NIST SP 800-162 standards, 4-dimensional attribute modeling (Subject, Resource, Action, Environment), dynamic PIP enrichment, PDP combining algorithms (Deny-Overrides, Permit-Overrides), context-scoped identity propagation, PEP middleware guards, RFC 7807 problem details, and tamper-evident audit logging."
+description: "معمارية إنتاجية محايدة للأطر لإدارة دورة حياة التحكم بالوصول القائم على السمات (ABAC) في تطبيقات Go. تغطي معايير NIST SP 800-162، نمذجة السمات رباعية الأبعاد (Subject, Resource, Action, Environment)، الإثراء الديناميكي عبر PIP، خوارزميات دمج القرارات في PDP (مثل Deny-Overrides و Permit-Overrides)، نقل الهوية المحمي عبر السياق، حراس وسائط PEP، مغلفات مشاكل RFC 7807، وسجلات التدقيق غير القابلة للتلاعب."
 ---
 
-# Go ABAC Lifecycle Architecture Skill
+# مهارة معمارية دورة حياة التحكم بالوصول القائم على السمات (ABAC) في Go
 
-This skill defines a comprehensive, production-ready, and completely framework-agnostic **Attribute-Based Access Control (ABAC) Security Lifecycle** for Go applications. It is strictly decoupled from any specific business domain (e.g., banking, healthcare, CRM, e-commerce), making it directly applicable to any Go microservice, monolith, REST API, gRPC backend, or distributed cloud-native daemon.
+تحدد هذه المهارة المعمارية الهندسية والإنتاجية المحايدة تماماً لأطر العمل لإدارة **دورة حياة التحكم بالوصول القائم على السمات (Attribute-Based Access Control - ABAC)** في خدمات وتطبيقات **Go**. المعمارية مفصولة كلياً عن أي مجال تجاري محدد، مما يجعلها قابلة للتطبيق المباشر على الخدمات المصغرة، والأنظمة الأحادية، وواجهات REST API، وخوادم gRPC، والأنظمة الموزعة السحابية.
 
-The architecture synthesizes:
+تجمع هذه المعمارية بين:
 
-- Official Go language security standards and idioms from [go.dev](https://go.dev/doc/security) and [go.dev/security/best-practices](https://go.dev/security/best-practices).
-- Formal international access control standards from **NIST SP 800-162** (*Guide to Attribute Based Access Control Definition and Considerations*) and **OASIS XACML 3.0**.
-- The battle-tested authorization decoupling patterns pioneered by **Kubernetes** (`k8s.io/apiserver`) and **Google CEL** (`google/cel-go`).
-
----
-
-## Production Security Principles
-
-1. **Strict Default Deny (Fail-Closed Architecture)**:
-   Access is denied by default. An action is permitted if and only if an explicit policy or combination of policies allows it. If an attribute is missing, a PIP lookup fails, a context is unauthenticated, or an internal error occurs, the decision MUST immediately evaluate to `Deny`.
-
-2. **The 4-Dimensional Attribute Quadruple**:
-   Authorization decisions evaluate four atomic dimensions in real-time:
-   - **Subject ($S$)**: Principal attributes (ID, TenantID, Roles, Clearance, Department, Attributes map).
-   - **Resource ($R$)**: Target entity attributes (ID, Type, OwnerID, TenantID, Sensitivity, Status, Attributes map).
-   - **Action ($A$)**: Operation attributes (Verb, Method, TargetScope).
-   - **Environment ($E$)**: Contextual/ambient attributes (RequestTime, ClientIP, NetworkZone, TLSVersion, SecurityPosture).
-
-3. **Domain-Agnostic Separation of Concerns**:
-   - **PAP / PRP (Policy Administration & Retrieval Point)**: Declares, validates, and stores policies (Go pure functions, CEL, or JSON rules).
-   - **PIP (Policy Information Point)**: Dynamically retrieves and enriches resource and environmental attributes from databases or caches.
-   - **PDP (Policy Decision Point)**: Evaluates attributes against loaded policies using deterministic combining algorithms (`Deny-Overrides`, `Permit-Overrides`).
-   - **PEP (Policy Enforcement Point)**: Intercepts requests, propagates context safely, and enforces the PDP's decision at the protocol boundary (HTTP/gRPC).
-
-4. **Type-Safe, Unexported Context Keying**:
-   Caller identity and verified subject attributes MUST be injected and propagated through `context.Context` using unexported private key types (`type contextKey struct{}`) to make key collision between packages mathematically impossible.
-
-5. **Thread-Safe, Sub-Microsecond Policy Evaluation**:
-   Policy evaluation happens in the critical path of incoming requests. The PDP must evaluate rules with zero locking contention during read paths (using `sync.RWMutex` or `atomic.Pointer`) and minimal memory allocations.
-
-6. **Information Disclosure Prevention on Rejection**:
-   Forbidden responses MUST follow **RFC 7807 (Problem Details for HTTP APIs)** with HTTP status code `403 Forbidden`. The public error message MUST NOT reveal internal attribute values, sensitive rule names, or infrastructure layout.
-
-7. **Tamper-Evident Audit Trails & Observability**:
-   Every authorization decision (both permitted and denied) must emit structured logs (`log/slog`) and export real-time counters (e.g., Prometheus `authz_evaluations_total{decision="allow|deny"}`).
+- معايير Go الأمنية الرسمية من [go.dev/doc/security](https://go.dev/doc/security) و [go.dev/security/best-practices](https://go.dev/security/best-practices).
+- المعايير الدولية الرسمية لإدارة الوصول من **NIST SP 800-162** (*دليل تعريف واعتبارات التحكم بالوصول القائم على السمات*) ومواصفات **OASIS XACML 3.0**.
+- أنماط فصل التفويض المعتمدة في **Kubernetes** (`k8s.io/apiserver`) ومحرك **Google CEL** (`google/cel-go`).
 
 ---
 
-## Architectural Topology: The 7-Phase ABAC Lifecycle
+## المبادئ الأمنية للبيئات الإنتاجية (Production Principles)
+
+1. **المنع الافتراضي الصارم (Fail-Closed / Default Deny)**:
+   الوصول ممنوع افتراضياً. لا يُسمح بأي إجراء إلا إذا وجد تصريح صريح ومطابق من السياسات. عند فقدان أي سمة، أو فشل استعلام PIP، أو عدم وجود مصادقة، يجب أن تنتهي النتيجة فوراً إلى **المنع (Deny)**.
+
+2. **رباعية السمات المتزامنة (The 4-Dimensional Attribute Quadruple)**:
+   يتم تقييم أربعة أبعاد لحظية في كل قرار تفويض:
+   - **الفاعل ($S$ - Subject)**: سمات المتصل الموثق (ID, TenantID, Roles, Clearance, Department, Attributes map).
+   - **المورد ($R$ - Resource)**: سمات الكيان المستهدف (ID, Type, OwnerID, TenantID, Sensitivity, Status, Attributes map).
+   - **الإجراء ($A$ - Action)**: سمات العملية المطلوبة (Verb, Method, TargetScope).
+   - **البيئة ($E$ - Environment)**: السياق المحيط لحظة الطلب (RequestTime, ClientIP, NetworkZone, TLSVersion, SecurityPosture).
+
+3. **الفصل المعماري لمسؤوليات XACML / NIST**:
+   - **نقطة إدارة واسترجاع السياسات (PAP / PRP)**: تصريح واختبار وتخزين السياسات (كدوال Go نقية أو قواعد CEL أو JSON).
+   - **نقطة جمع المعلومات (PIP)**: استرجاع سمات المورد والبيئة ديناميكياً من قواعد البيانات ومخازن الذاكرة المؤقتة.
+   - **نقطة اتخاذ القرار (PDP)**: تقييم السمات مقابل السياسات المعتمدة باستخدام خوارزميات دمج حتمية (`Deny-Overrides`, `Permit-Overrides`).
+   - **نقطة فرض السياسة (PEP)**: اعتراض الطلبات، وحقن السياق بأمان، وتطبيق قرار PDP عند حدود البروتوكول (HTTP/gRPC).
+
+4. **حماية السياق عبر أنواع غير مصدّرة (Unexported Context Keys)**:
+   يجب تمرير بيانات الفاعل والسمات الموثقة عبر `context.Context` حصراً باستخدام أنواع بنى خاصة غير مصدّرة (`type contextKey struct{}`) لمنع أي تصادم بين الحزم.
+
+5. **تقييم فائق السرعة متوافق مع التزامن (Thread-Safe Evaluation)**:
+   يقع تقييم السياسات في المسار الحرج للطلبات. يجب أن يعمل محرك PDP بدون أي تنازع أقفال في مسارات القراءة (باستخدام `sync.RWMutex` أو `atomic.Pointer`) وبأقل استهلاك ممكن للذاكرة.
+
+6. **منع تسريب تفاصيل البنية عند الرفض (Information Disclosure Prevention)**:
+   استجابات المنع يجب أن تتبع معيار **RFC 7807 (Problem Details)** برمز الحالة `403 Forbidden`، دون تسريب أسماء القواعد أو حقول الجداول الداخلية للعميل غير الموثوق.
+
+7. **سجلات تدقيق غير قابلة للتلاعب ومراقبة مستمرة**:
+   كل قرار تفويض (سواء بالسماح أو المنع) يجب أن يولد سجلاً مهيكلاً (`log/slog`) ويصدر عدادات آنية (Prometheus Metrics).
+
+---
+
+## المخطط المعماري: دورة حياة ABAC السداسية/السباعية
 
 ```text
 ┌──────────────────────────────────────────────────────────────────────────────────────────────────┐
-│ Phase 1: Attribute Modeling       Define Subject, Resource, Action, and Environment Schemas       │
+│ المرحلة 1: نمذجة السمات (Modeling)       تحديد مخططات الفاعل والمورد والإجراء والبيئة             │
 └──────────────────────────────────────────────┬───────────────────────────────────────────────────┘
                                                ▼
 ┌──────────────────────────────────────────────────────────────────────────────────────────────────┐
-│ Phase 2: Policy Authoring (PAP)    Define Policy Rules, Targets, Conditions, & Combining Algorithm │
+│ المرحلة 2: كتابة السياسات (PAP)          تعريف القواعد والشروط وخوارزميات الدمج الحتمية           │
 └──────────────────────────────────────────────┬───────────────────────────────────────────────────┘
                                                ▼
 ┌──────────────────────────────────────────────────────────────────────────────────────────────────┐
-│ Phase 3: Ingress & Context (PEP)   Intercept Request, verify AuthN, inject Subject & Env to ctx  │
+│ المرحلة 3: اعتراض الطلب والسياق (PEP)     التحقق من الهوية، وحقن Subject والبيئة في السياق       │
 └──────────────────────────────────────────────┬───────────────────────────────────────────────────┘
                                                ▼
 ┌──────────────────────────────────────────────────────────────────────────────────────────────────┐
-│ Phase 4: Dynamic PIP Enrichment    Query DB/Cache to resolve Resource & ambient context           │
+│ المرحلة 4: الإثراء الديناميكي (PIP)       استرجاع بيانات وسمات المورد من قاعدة البيانات أو الكاش   │
 └──────────────────────────────────────────────┬───────────────────────────────────────────────────┘
                                                ▼
 ┌──────────────────────────────────────────────────────────────────────────────────────────────────┐
-│ Phase 5: PDP Evaluation Engine     Execute Combining Algorithm (Deny-Overrides / Permit-Overrides)│
+│ المرحلة 5: محرك التقييم (PDP Engine)     تنفيذ خوارزمية الدمج (Deny-Overrides / Permit-Overrides)│
 └──────────────────────────────────────────────┬───────────────────────────────────────────────────┘
                                                ▼
 ┌──────────────────────────────────────────────────────────────────────────────────────────────────┐
-│ Phase 6: Enforcement & Rejection   Permitted: ServeHTTP (200) | Denied: RFC 7807 Problem (403)   │
+│ المرحلة 6: الفرض والرفض الآمن (PEP)      مسموح: تمرير المعالجة (200) | ممنوع: مشكلة RFC 7807 (403)│
 └──────────────────────────────────────────────┬───────────────────────────────────────────────────┘
                                                ▼
 ┌──────────────────────────────────────────────────────────────────────────────────────────────────┐
-│ Phase 7: Audit & Observability     Structured slog logging, Prometheus OpenMetrics, Security SIEM │
+│ المرحلة 7: التدقيق والمراقبة             سجلات مهيكلة عبر slog، وتصدير مقاييس Prometheus و SIEM  │
 └──────────────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## Phase-by-Phase Engineering Guide
+## الدليل الهندسي للمراحل (Phase-by-Phase Engineering Guide)
 
-### Phase 1: Domain-Agnostic Attribute Modeling
+### المرحلة 1: نمذجة السمات بشكل محايد للمجال
 
-Represent the 4 core dimensions using strongly-typed Go structs with generic attribute maps for dynamic extensions:
+تمثيل الأبعاد الأربعة باستخدام هياكل Go محكمة الأنواع مع خرائط سمات ديناميكية:
 
 ```go
 package abac
 
 import "time"
 
-// Subject represents the authenticated caller requesting access.
+// Subject يمثل الفاعل الموثق الذي يطلب الوصول
 type Subject struct {
     ID         string            `json:"id"`
     TenantID   string            `json:"tenant_id,omitempty"`
@@ -102,10 +102,10 @@ type Subject struct {
     Attributes map[string]any    `json:"attributes,omitempty"`
 }
 
-// Resource represents the target entity being accessed or mutated.
+// Resource يمثل الكيان المستهدف المطلوب الوصول إليه أو تعديله
 type Resource struct {
     ID          string            `json:"id"`
-    Type        string            `json:"type"` // e.g., "document", "transaction", "profile"
+    Type        string            `json:"type"` // مثال: "document", "transaction", "invoice"
     OwnerID     string            `json:"owner_id,omitempty"`
     TenantID    string            `json:"tenant_id,omitempty"`
     Department  string            `json:"department,omitempty"`
@@ -114,13 +114,13 @@ type Resource struct {
     Attributes  map[string]any    `json:"attributes,omitempty"`
 }
 
-// Action represents the verb or operation requested on the resource.
+// Action يمثل العملية المطلوب تنفيذها على المورد
 type Action struct {
-    Verb   string `json:"verb"`             // e.g., "read", "create", "update", "delete", "approve"
-    Method string `json:"method,omitempty"` // HTTP method or RPC method
+    Verb   string `json:"verb"`             // مثال: "read", "create", "update", "delete", "approve"
+    Method string `json:"method,omitempty"` // أسلوب HTTP أو اسم دالة RPC
 }
 
-// Environment represents ambient contextual metadata at evaluation time.
+// Environment يمثل السياق البيئي والزمني المحيط بلحظة التقييم
 type Environment struct {
     RequestTime time.Time         `json:"request_time"`
     ClientIP    string            `json:"client_ip,omitempty"`
@@ -128,7 +128,7 @@ type Environment struct {
     Attributes  map[string]any    `json:"attributes,omitempty"`
 }
 
-// EvaluationContext encapsulates the complete attribute quadruple.
+// EvaluationContext سياق التقييم الجامع للرباعية الكاملة
 type EvaluationContext struct {
     Subject     Subject
     Resource    Resource
@@ -137,9 +137,9 @@ type EvaluationContext struct {
 }
 ```
 
-### Phase 2: Policy Authoring and Combining Algorithms (PAP/PDP)
+### المرحلة 2: كتابة السياسات وخوارزميات الدمج (PAP/PDP)
 
-A policy rule implements the `PolicyRule` interface. The PDP combines multiple rules using a deterministic algorithm:
+تحقق كل قاعدة سياسة واجهة `PolicyRule`، ويقوم محرك PDP بدمج القواعد وفق خوارزمية محددة:
 
 ```go
 package abac
@@ -168,9 +168,9 @@ const (
 )
 ```
 
-### Phase 3: Request Interception and Type-Safe Context Propagation (PEP)
+### المرحلة 3: اعتراض الطلب وحقن السياق بأمان (PEP)
 
-Never use raw strings for context keys. Always declare an unexported type:
+يُحظر استخدام السلاسل النصية كمفاتيح للسياق؛ يجب دائماً تعريف نوع خاص غير مصدّر:
 
 ```go
 package abac
@@ -191,9 +191,9 @@ func GetSubject(ctx context.Context) (Subject, bool) {
 }
 ```
 
-### Phase 4: Dynamic Policy Information Point (PIP) Enrichment
+### المرحلة 4: الإثراء الديناميكي لنقطة المعلومات (PIP)
 
-In real-world applications, resource attributes cannot be trusted from client tokens; they must be retrieved from the persistent state:
+في التطبيقات الحقيقية، لا يجوز الوثوق بسمات المورد القادمة من العميل؛ بل يجب جلبها من التخزين الدائم:
 
 ```go
 type PIPResolver interface {
@@ -201,9 +201,9 @@ type PIPResolver interface {
 }
 ```
 
-### Phase 5: High-Performance, Thread-Safe PDP Engine
+### المرحلة 5: محرك التقييم المتزامن عالي الأداء (PDP Engine)
 
-The engine manages policy rules safely under concurrent reads:
+يدير المحرك قواعد السياسات بأمان تحت القراءات المتزامنة المكثفة:
 
 ```go
 type Engine struct {
@@ -219,16 +219,15 @@ func (e *Engine) Evaluate(ctx EvaluationContext) (Decision, string) {
 
     switch e.algorithm {
     case DenyOverrides:
-        // If any applicable rule denies, immediate Deny
-        // Must have at least one applicable rule permitting, else Default Deny
-    ...
+        // إذا رفضت أي قاعدة سارية، فالقرار الفوري هو المنع Deny
+        // ويجب أن توجد قاعدة سارية واحدة على الأقل تسمح، وإلا فالمنع الافتراضي
     }
 }
 ```
 
-### Phase 6: Enforcement (PEP) and RFC 7807 Safe Rejections
+### المرحلة 6: الفرض (PEP) ومغلفات أخطاء RFC 7807
 
-When an access check fails, return a standard RFC 7807 response:
+عند فشل فحص الوصول، يتم إرجاع استجابة قياسية وفق RFC 7807:
 
 ```go
 type ProblemDetails struct {
@@ -252,9 +251,9 @@ func WriteForbiddenProblem(w http.ResponseWriter, r *http.Request, detail string
 }
 ```
 
-### Phase 7: Audit Logging and Observability
+### المرحلة 7: التدقيق الأمني والمراقبة (Audit Logging)
 
-Record structured audit events without leaking sensitive credentials:
+تسجيل أحداث التدقيق المهيكلة دون تسريب أي أسرار للمستخدمين:
 
 ```go
 logger.Warn("ABAC evaluation denied",
@@ -271,13 +270,13 @@ logger.Warn("ABAC evaluation denied",
 
 ---
 
-## Production Security Checklist
+## قائمة التحقق الأمني للإنتاج (Production Checklist)
 
-- [ ] **Default Deny / Fail-Closed**: Any unhandled request, empty policy list, or evaluation error results in `Deny`.
-- [ ] **BOLA/IDOR Defense**: All tenant-scoped operations enforce `Subject.TenantID == Resource.TenantID`.
-- [ ] **Thread-Safe Policy Updates**: Policy cache updates utilize `sync.RWMutex` or `atomic.Pointer`.
-- [ ] **Race Condition Validation**: Every codebase running this skill must pass `go test -race ./...`.
-- [ ] **No Context Key Collisions**: Context values are keyed by unexported struct types (`type contextKey struct{}`).
-- [ ] **RFC 7807 Compliance**: Rejections return `403 Forbidden` with `application/problem+json`.
-- [ ] **Information Disclosure Prevention**: Error details never reveal internal policy rules, schemas, or database fields to untrusted clients.
-- [ ] **Audit Trail & SIEM Ingestion**: All denials and permissions produce structured logs via `log/slog`.
+- [ ] **المنع الافتراضي (Fail-Closed)**: أي طلب غير مغطى بقاعدة، أو قائمة سياسات فارغة، أو خطأ تقييم ينتهي حتماً بـ `Deny`.
+- [ ] **الحماية من ثغرات BOLA/IDOR**: كافة العمليات المقيدة بالمستأجر تفرض مطابقة `Subject.TenantID == Resource.TenantID`.
+- [ ] **تحديث السياسات بأمان متزامن**: تحديث ذاكرة السياسات يستخدم `sync.RWMutex` أو `atomic.Pointer`.
+- [ ] **التحقق من عدم وجود سباق بيانات**: يجب أن تجتاز جميع الحزم أمر `go test -race ./...`.
+- [ ] **عدم تصادم مفاتيح السياق**: قيم السياق تُحفظ وتُسترجع عبر أنواع بنى خاصة غير مصدّرة (`type contextKey struct{}`).
+- [ ] **مطابقة RFC 7807**: استجابات الرفض ترجع برمز `403 Forbidden` ونوع المحتوى `application/problem+json`.
+- [ ] **منع تسريب المعلومات**: تفاصيل الأخطاء لا تكشف أسماء القواعد أو حقول الجداول الداخلية للعملاء الخارجيين.
+- [ ] **سجل التدقيق والتكامل مع SIEM**: جميع القرارات (السماح والمنع) تنتج سجلات مهيكلة عبر `log/slog`.

@@ -1,68 +1,68 @@
-# NIST SP 800-162 and Attribute Modeling in Go
+# معيار NIST SP 800-162 ونمذجة السمات في Go
 
-This document details the formal mathematical modeling of Attribute-Based Access Control (ABAC) in accordance with **NIST SP 800-162** (*Guide to Attribute Based Access Control Definition and Considerations*) and how it translates into idiomatic, high-performance Go structures.
+توضح هذه الوثيقة النمذجة الرياضية الرسمية للتحكم بالوصول القائم على السمات (ABAC) وفقاً لمعيار **NIST SP 800-162** (*دليل تعريف واعتبارات التحكم بالوصول القائم على السمات*)، وكيفية ترجمتها إلى هياكل برمجية اصطلاحية وعالية الأداء في لغة Go.
 
 ---
 
-## 1. The Formal ABAC Model (NIST SP 800-162)
+## 1. نموذج ABAC الرسمي (معيار NIST SP 800-162)
 
-NIST SP 800-162 defines ABAC as an access control methodology where authorization privileges are granted to users through the evaluation of attributes assigned to subjects, resources, actions, and the environment.
+يعرّف معيار NIST SP 800-162 نموذج ABAC بأنه منهجية للتحكم بالوصول تُمنح فيها امتيازات التفويض للمستخدمين عبر تقييم السمات المسندة إلى الفاعلين، والموارد، والإجراءات، والبيئة المحيطة.
 
-Formally, the evaluation space is defined as the Cartesian product of four attribute domains:
+رياضياً، يُعرّف فضاء التقييم كحاصل الضرب الديكارتي لأربعة نطاقات سمات:
 
 $$\mathcal{C} = \mathcal{S} \times \mathcal{R} \times \mathcal{A} \times \mathcal{E}$$
 
-Where:
+حيث:
 
-- $\mathcal{S}$ is the set of **Subject Attributes**.
-- $\mathcal{R}$ is the set of **Resource Attributes**.
-- $\mathcal{A}$ is the set of **Action Attributes**.
-- $\mathcal{E}$ is the set of **Environment Attributes**.
+- $\mathcal{S}$ هي مجموعة **سمات الفاعل (Subject Attributes)**.
+- $\mathcal{R}$ هي مجموعة **سمات المورد (Resource Attributes)**.
+- $\mathcal{A}$ هي مجموعة **سمات الإجراء (Action Attributes)**.
+- $\mathcal{E}$ هي مجموعة **سمات البيئة (Environment Attributes)**.
 
-A policy rule $R_i$ is a Boolean predicate function mapping an evaluation context $c \in \mathcal{C}$ to a decision:
+قاعدة السياسة $R_i$ هي دالة بوليانية تسقط سياق التقييم $c \in \mathcal{C}$ إلى قرار قاطع:
 
 $$R_i: \mathcal{C} \to \{\text{Permit}, \text{Deny}, \text{NotApplicable}\}$$
 
 ```text
        ┌────────────────────────┐
-       │   Subject Attributes   │
-       │ (ID, Roles, Tenant)    │
+       │     سمات الفاعل        │
+       │ (المعرف، الأدوار، الشركة)│
        └───────────┬────────────┘
                    │
                    ▼
        ┌────────────────────────┐         ┌────────────────────────┐
-       │  Resource Attributes   │────────▶│   Evaluation Context   │
-       │ (Type, Owner, Status)  │         │     (Quadruple)        │
+       │      سمات المورد       │────────▶│      سياق التقييم      │
+       │(النوع، المالك، الحالة) │         │       (الرباعية)       │
        └────────────────────────┘         └───────────┬────────────┘
                    ▲                                  │
                    │                                  ▼
        ┌───────────┴────────────┐         ┌────────────────────────┐
-       │   Action Attributes    │         │  Boolean Policy Rules  │
-       │ (Verb: read/update)    │         │    R_i(S, R, A, E)     │
+       │      سمات الإجراء      │         │     قواعد السياسات     │
+       │ (النوع: قراءة/تعديل)   │         │    R_i(S, R, A, E)     │
        └────────────────────────┘         └───────────┬────────────┘
                    ▲                                  │
                    │                                  ▼
        ┌───────────┴────────────┐         ┌────────────────────────┐
-       │ Environment Attributes │         │    Final PDP Decision  │
-       │ (Time, IP, Security)   │         │    Permit vs Deny      │
+       │       سمات البيئة      │         │    قرار المحرك النهائي │
+       │ (الوقت، الـ IP، الأمان)│         │     (سماح أم منع)      │
        └────────────────────────┘         └────────────────────────┘
 ```
 
 ---
 
-## 2. Strong Typing vs. Dynamic Extensibility in Go
+## 2. النمط محكم الأنواع مقابل القابلية للتوسع الديناميكي في Go
 
-A common architectural trap in Go ABAC implementations is choosing between:
+أحد المآزق المعمارية الشائعة عند بناء أنظمة ABAC في Go هو الاختيار بين:
 
-1. **Rigid Strong Typing (`struct`)**: Maximum compile-time type safety, zero allocations, fast property access, but hard to extend with dynamic attributes across varied microservices.
-2. **Untyped Generic Maps (`map[string]any`)**: Infinite flexibility, but heavy heap allocations, loss of type safety, and runtime panic risks due to faulty type assertions.
+1. **الأنواع الصلبة المحكمة (`struct`)**: أمان تام وقت التصريف، صفر استهلاك للذاكرة على الـ Heap، وسرعة وصول فائقة للحقول، ولكن يعيبها صعوبة التوسع بالسمات المتنوعة عبر الخدمات المصغرة.
+2. **الخرائط العامة غير محكمة الأنواع (`map[string]any`)**: مرونة غير محدودة، ولكن يعيبها استهلاك مكثف للذاكرة وفقدان التحقق الصارم وقت التصريف ومخاطر حدوث Runtime Panic عند تحويل الأنواع الخاطئ.
 
-The **idiomatic Go pattern** achieves the best of both worlds by combining:
+يحقق **النمط الاصطلاحي في Go** التوازن الأمثل عبر الجمع بين:
 
-- **Canonical Top-Level Fields**: Strongly typed fields for attributes universally required across all authorization checks (`ID`, `TenantID`, `Type`, `OwnerID`, `RequestTime`).
-- **Secondary Typed Extension Map (`map[string]any`)**: An optional auxiliary map for domain-specific attributes that varies per entity or subsystem.
+- **حقول رئيسية موحدة ومحكمة الأنواع**: للسمات المشتركة عالمياً في كافة فحوصات الصلاحيات (`ID`, `TenantID`, `Type`, `OwnerID`, `RequestTime`).
+- **خريطة تمديد فرعية ديناميكية (`map[string]any`)**: للسمات التخصصية التي تختلف من كيان لآخر أو بين الأنظمة الفرعية.
 
-### Canonical Go Modeling
+### النمذجة القياسية في Go
 
 ```go
 package abac
@@ -72,7 +72,7 @@ import (
     "time"
 )
 
-// Subject encapsulates caller identity and security credentials.
+// Subject يمثل هوية المتصل وبياناته الأمنية
 type Subject struct {
     ID          string         `json:"id"`
     TenantID    string         `json:"tenant_id,omitempty"`
@@ -82,10 +82,10 @@ type Subject struct {
     Attributes  map[string]any `json:"attributes,omitempty"`
 }
 
-// Resource encapsulates the target entity being operated upon.
+// Resource يمثل الكيان المستهدف المطلوب التعامل معه
 type Resource struct {
     ID          string         `json:"id"`
-    Type        string         `json:"type"` // e.g. "document", "financial_record"
+    Type        string         `json:"type"` // مثال: "document", "invoice", "account"
     OwnerID     string         `json:"owner_id,omitempty"`
     TenantID    string         `json:"tenant_id,omitempty"`
     Department  string         `json:"department,omitempty"`
@@ -94,13 +94,13 @@ type Resource struct {
     Attributes  map[string]any `json:"attributes,omitempty"`
 }
 
-// Action encapsulates the intended verb and invocation semantics.
+// Action يمثل العملية المطلوب تنفيذها
 type Action struct {
-    Verb   string `json:"verb"`             // e.g. "read", "create", "update", "delete", "approve"
-    Method string `json:"method,omitempty"` // e.g. "POST", "GET", or gRPC method
+    Verb   string `json:"verb"`             // مثال: "read", "create", "update", "delete", "approve"
+    Method string `json:"method,omitempty"` // أسلوب HTTP أو اسم دالة RPC
 }
 
-// Environment encapsulates ambient and ephemeral context.
+// Environment يمثل السياق البيئي المحيط لحظة الطلب
 type Environment struct {
     RequestTime time.Time      `json:"request_time"`
     ClientIP    string         `json:"client_ip,omitempty"`
@@ -108,7 +108,7 @@ type Environment struct {
     Attributes  map[string]any `json:"attributes,omitempty"`
 }
 
-// EvaluationContext binds the 4 dimensions together.
+// EvaluationContext يجمع أبعاد التقييم الأربعة معاً
 type EvaluationContext struct {
     Subject     Subject     `json:"subject"`
     Resource    Resource    `json:"resource"`
@@ -119,12 +119,12 @@ type EvaluationContext struct {
 
 ---
 
-## 3. Safe Attribute Accessor Helpers
+## 3. دوال الوصول الآمن للسمات (Safe Attribute Accessors)
 
-To prevent runtime panics when reading from dynamic `Attributes` maps, safe accessor functions with fallback defaults must be used:
+لمنع حدوث Runtime Panic عند قراءة السمات الديناميكية من الخرائط، يجب استخدام دوال وصول مساعدة ومحمية بقيم افتراضية:
 
 ```go
-// GetStringAttr safely extracts a string attribute from a generic attribute map.
+// GetStringAttr يستخرج قيمة نصية بأمان من خريطة السمات مع قيمة افتراضية
 func GetStringAttr(attrs map[string]any, key string, defaultVal string) string {
     if attrs == nil {
         return defaultVal
@@ -140,7 +140,7 @@ func GetStringAttr(attrs map[string]any, key string, defaultVal string) string {
     return strVal
 }
 
-// GetFloatAttr safely extracts a float64 attribute.
+// GetFloatAttr يستخرج قيمة رقمية عشرية بأمان مع معالجة كافة أنواع الأرقام
 func GetFloatAttr(attrs map[string]any, key string, defaultVal float64) float64 {
     if attrs == nil {
         return defaultVal
@@ -163,7 +163,7 @@ func GetFloatAttr(attrs map[string]any, key string, defaultVal float64) float64 
     }
 }
 
-// GetBoolAttr safely extracts a boolean attribute.
+// GetBoolAttr يستخرج قيمة بوليانية بأمان مع قيمة افتراضية
 func GetBoolAttr(attrs map[string]any, key string, defaultVal bool) bool {
     if attrs == nil {
         return defaultVal
@@ -182,12 +182,12 @@ func GetBoolAttr(attrs map[string]any, key string, defaultVal bool) bool {
 
 ---
 
-## 4. Multi-Tenant Isolation & BOLA/IDOR Invariants
+## 4. عزل المستأجرين وحماية ثغرات BOLA/IDOR
 
-In any multi-tenant system, access control must enforce strict cryptographic and logical boundaries between tenants. NIST SP 800-162 ABAC models handle multi-tenancy natively at the attribute layer:
+في أي نظام متعدد المستأجرين (Multi-Tenant)، يجب فرض حدود منطقية وتشفيرية صارمة بين المستأجرين. يعالج نموذج ABAC وفق NIST SP 800-162 عزل المستأجرين أصلياً عند طبقة السمات:
 
 ```go
-// InvariantTenantIsolation verifies that the subject and resource belong to the exact same tenant.
+// InvariantTenantIsolation يتحقق من تطابق المستأجر بين الفاعل والمورد لمنع BOLA/IDOR
 func InvariantTenantIsolation(ctx EvaluationContext) error {
     if ctx.Subject.TenantID == "" || ctx.Resource.TenantID == "" {
         return fmt.Errorf("tenant isolation violation: missing tenant ID")
@@ -200,4 +200,4 @@ func InvariantTenantIsolation(ctx EvaluationContext) error {
 }
 ```
 
-By verifying this invariant first in every policy rule or PDP engine evaluation, **Broken Object Level Authorization (BOLA)** and **Insecure Direct Object Reference (IDOR)** vulnerabilities (OWASP Top 10 API Security #1) are eliminated by design.
+بفرض هذا القيد الحتمي كأول خطوة في كل قاعدة سياسة أو تقييم في محرك PDP، يتم القضاء هندسياً على ثغرات **تجاوز الصلاحيات على مستوى الكائن (Broken Object Level Authorization - BOLA)** وثغرات **المراجع المباشرة غير الآمنة (IDOR)** (المرتبة الأولى في تصنيف OWASP Top 10 لأمان الواجهات البرمجية).

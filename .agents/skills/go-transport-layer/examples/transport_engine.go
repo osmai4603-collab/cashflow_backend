@@ -17,10 +17,10 @@ import (
 )
 
 // ============================================================================
-// 1. DOMAIN & TRANSPORT DATA CONTRACTS
+// 1. عقود بيانات النطاق وطبقة النقل (Domain & Transport Contracts)
 // ============================================================================
 
-// TransportProtocol identifies the network ingress channel.
+// TransportProtocol يحدد قناة الدخول الشبكية التي سلمت الطلب.
 type TransportProtocol string
 
 const (
@@ -32,17 +32,17 @@ func (p TransportProtocol) String() string {
 	return string(p)
 }
 
-// SecurityPrincipal represents an authenticated caller identity.
+// SecurityPrincipal يمثل هوية المتصل المعتمدة بعد نجاح المصادقة.
 type SecurityPrincipal struct {
-	UserID    string   `json:"user_id"`
-	TenantID  string   `json:"tenant_id,omitempty"`
-	Roles     []string `json:"roles,omitempty"`
-	Scopes    []string `json:"scopes,omitempty"`
-	Subject   string   `json:"subject,omitempty"`
-	IsAdmin   bool     `json:"is_admin"`
+	UserID   string   `json:"user_id"`
+	TenantID string   `json:"tenant_id,omitempty"`
+	Roles    []string `json:"roles,omitempty"`
+	Scopes   []string `json:"scopes,omitempty"`
+	Subject  string   `json:"subject,omitempty"`
+	IsAdmin  bool     `json:"is_admin"`
 }
 
-// TransportInfo holds diagnostic transport metadata injected into context.Context.
+// TransportInfo يحتوي على البيانات الوصفية التشخيصية للنقل المحقونة داخل context.Context.
 type TransportInfo struct {
 	Protocol  TransportProtocol `json:"protocol"`
 	RequestID string            `json:"request_id"`
@@ -50,7 +50,7 @@ type TransportInfo struct {
 	UserAgent string            `json:"user_agent"`
 }
 
-// Standard Domain Errors
+// أخطاء النطاق القياسية (Standard Domain Errors)
 var (
 	ErrNotFound           = errors.New("resource not found")
 	ErrUnauthorized       = errors.New("unauthorized: missing or invalid credentials")
@@ -64,7 +64,7 @@ var (
 )
 
 // ============================================================================
-// 2. UNEXPORTED TYPE-SAFE CONTEXT PROPAGATION
+// 2. تمرير البيانات داخل السياق عبر مفاتيح غير مصدرة وآمنة من التصادم
 // ============================================================================
 
 type contextKey int
@@ -74,26 +74,30 @@ const (
 	principalKey
 )
 
+// WithTransportInfo يحقن بيانات النقل التشخيصية في سياق الاتصال context.Context.
 func WithTransportInfo(ctx context.Context, info TransportInfo) context.Context {
 	return context.WithValue(ctx, transportInfoKey, info)
 }
 
+// GetTransportInfo يسترجع بيانات النقل التشخيصية من context.Context.
 func GetTransportInfo(ctx context.Context) (TransportInfo, bool) {
 	info, ok := ctx.Value(transportInfoKey).(TransportInfo)
 	return info, ok
 }
 
+// WithPrincipal يحقن الهوية الأمنية SecurityPrincipal في context.Context.
 func WithPrincipal(ctx context.Context, p *SecurityPrincipal) context.Context {
 	return context.WithValue(ctx, principalKey, p)
 }
 
+// GetPrincipal يسترجع الهوية الأمنية SecurityPrincipal من context.Context.
 func GetPrincipal(ctx context.Context) (*SecurityPrincipal, bool) {
 	p, ok := ctx.Value(principalKey).(*SecurityPrincipal)
 	return p, ok && p != nil
 }
 
 // ============================================================================
-// 3. TRANSPORT CONTEXT ABSTRACTION
+// 3. تجريد سياق النقل (Transport Context Abstraction)
 // ============================================================================
 
 type TransportContext interface {
@@ -107,7 +111,7 @@ type TransportContext interface {
 	SetPrincipal(principal *SecurityPrincipal)
 }
 
-// HTTP Implementation
+// تطبيق HTTP (HTTP Implementation)
 type httpTransportContext struct {
 	req       *http.Request
 	requestID string
@@ -168,7 +172,7 @@ func (h *httpTransportContext) SetPrincipal(principal *SecurityPrincipal) {
 	*h.req = *h.req.WithContext(WithPrincipal(h.req.Context(), principal))
 }
 
-// gRPC Implementation (Compatible with metadata.MD)
+// تطبيق gRPC (متوافق مع metadata.MD)
 type GRPCPeer struct {
 	Addr string
 }
@@ -250,7 +254,7 @@ func (g *GRPCTransportContext) SetPrincipal(principal *SecurityPrincipal) {
 }
 
 // ============================================================================
-// 4. PRE-HANDLING PIPELINE ENGINE
+// 4. محرك خط أنابيب المعالجة المسبقة (Pre-Handling Pipeline Engine)
 // ============================================================================
 
 type TokenValidator interface {
@@ -283,7 +287,7 @@ func (p *PreHandlingPipeline) Execute(tc TransportContext) (context.Context, err
 	reqID := tc.RequestID()
 	clientIP := tc.ClientIP()
 
-	// Stage 1 & 2: Ingress logging & Correlation
+	// المرحلتان 1 و 2: تسجيل الدخول ومعرف الارتباط
 	p.logger.Info("Ingress request received",
 		slog.String("protocol", protocol.String()),
 		slog.String("request_id", reqID),
@@ -291,7 +295,7 @@ func (p *PreHandlingPipeline) Execute(tc TransportContext) (context.Context, err
 		slog.String("user_agent", tc.UserAgent()),
 	)
 
-	// Stage 3: Context normalization
+	// المرحلة 3: تطبيع سياق النقل
 	ctx := tc.Context()
 	ctx = WithTransportInfo(ctx, TransportInfo{
 		Protocol:  protocol,
@@ -300,7 +304,7 @@ func (p *PreHandlingPipeline) Execute(tc TransportContext) (context.Context, err
 		UserAgent: tc.UserAgent(),
 	})
 
-	// Stage 4: Authentication & Principal extraction
+	// المرحلة 4: المصادقة واستخراج الهوية الأمنية
 	authHeader := tc.Header("Authorization")
 	if authHeader != "" {
 		token := strings.TrimPrefix(authHeader, "Bearer ")
@@ -320,7 +324,7 @@ func (p *PreHandlingPipeline) Execute(tc TransportContext) (context.Context, err
 		}
 	}
 
-	// Stage 6: Timeout enforcement
+	// المرحلة 6: فرض المهلة الزمنية للسياق
 	if _, hasDeadline := ctx.Deadline(); !hasDeadline && p.timeout > 0 {
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(ctx, p.timeout)
@@ -342,14 +346,14 @@ func GenerateCorrelationID() string {
 }
 
 // ============================================================================
-// 5. PROTOCOL INGRESS ADAPTERS
+// 5. محولات الدخول للبروتوكولين (Protocol Ingress Adapters)
 // ============================================================================
 
-// HTTP Middleware Adapter
+// محول البرمجية الوسيطة لـ HTTP (HTTP Middleware Adapter)
 func HTTPMiddleware(pipeline *PreHandlingPipeline) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			// Panic Recovery at Transport Edge
+			// التعافي من الانهيار عند حافة النقل (Panic Recovery)
 			defer func() {
 				if rec := recover(); rec != nil {
 					pipeline.logger.Error("Panic recovered at HTTP transport boundary",
@@ -377,7 +381,7 @@ func HTTPMiddleware(pipeline *PreHandlingPipeline) func(http.Handler) http.Handl
 	}
 }
 
-// gRPC Interceptor Types (Standard gRPC-compatible signatures)
+// أنواع معترضات gRPC (متوافقة مع تواقيع gRPC القياسية)
 type UnaryServerInfo struct {
 	FullMethod string
 }
@@ -392,7 +396,7 @@ func GRPCUnaryInterceptor(pipeline *PreHandlingPipeline, outgoingMDSetter func(c
 		info *UnaryServerInfo,
 		handler UnaryHandler,
 	) (resp any, err error) {
-		// Panic Recovery at gRPC Transport Edge
+		// التعافي من الانهيار عند حافة نقل gRPC
 		defer func() {
 			if rec := recover(); rec != nil {
 				pipeline.logger.Error("Panic recovered at gRPC transport boundary",
@@ -407,7 +411,7 @@ func GRPCUnaryInterceptor(pipeline *PreHandlingPipeline, outgoingMDSetter func(c
 			outgoingMDSetter(ctx, "x-request-id", reqID)
 		}
 
-		// In actual gRPC, incoming metadata is extracted via metadata.FromIncomingContext
+		// في gRPC الفعلي، يتم استخراج البيانات الوصفية الواردة عبر metadata.FromIncomingContext
 		tc := NewGRPCTransportContext(ctx, nil, "", reqID)
 		enrichedCtx, pErr := pipeline.Execute(tc)
 		if pErr != nil {
@@ -419,7 +423,7 @@ func GRPCUnaryInterceptor(pipeline *PreHandlingPipeline, outgoingMDSetter func(c
 }
 
 // ============================================================================
-// 6. ERROR TRANSLATION & STATUS MAPPING
+// 6. ترجمة الأخطاء ومطابقة رموز الحالة (Error Translation & Status Mapping)
 // ============================================================================
 
 type ProblemDetails struct {
@@ -466,7 +470,7 @@ func MapToHTTPStatus(err error) int {
 	}
 }
 
-// gRPC Status Code Representation (Mirroring google.golang.org/grpc/codes)
+// تمثيل رموز حالة gRPC (مطابقة لـ google.golang.org/grpc/codes)
 type GRPCCode uint32
 
 const (
@@ -522,7 +526,7 @@ func MapToGRPCError(err error) error {
 }
 
 // ============================================================================
-// 7. PURE BUSINESS USE CASE (Zero Transport Leakage)
+// 7. حالة استخدام نقية لنطاق الأعمال (Zero Transport Leakage)
 // ============================================================================
 
 type CreatePaymentDTO struct {
@@ -554,7 +558,7 @@ func NewPaymentService() *PaymentService {
 }
 
 func (s *PaymentService) ProcessPayment(ctx context.Context, req CreatePaymentDTO) (*PaymentResult, error) {
-	// 1. Syntactic / Semantic Validation
+	// 1. التحقق النحوي والدلالي
 	if req.Amount <= 0 {
 		return nil, fmt.Errorf("%w: amount must be strictly positive", ErrInvalidInput)
 	}
@@ -562,13 +566,13 @@ func (s *PaymentService) ProcessPayment(ctx context.Context, req CreatePaymentDT
 		return nil, fmt.Errorf("%w: currency is required", ErrInvalidInput)
 	}
 
-	// 2. Caller Identity Verification from Context
+	// 2. التحقق من هوية المتصل من السياق
 	principal, ok := GetPrincipal(ctx)
 	if !ok {
 		return nil, ErrUnauthorized
 	}
 
-	// 3. Protocol Discovery (Self-Aware Telemetry)
+	// 3. اكتشاف البروتوكول المستخدم في القياس عن بُعد
 	tInfo, _ := GetTransportInfo(ctx)
 
 	s.mu.Lock()

@@ -1,69 +1,71 @@
-# NIST RBAC Models and Hierarchical DAG Architecture in Go
+# نماذج NIST للتحكم بالوصول القائم على الأدوار والرسم البياني الهرمي DAG في Go
 
-This document details the formal mathematical modeling of the four standard NIST / ANSI INCITS 359-2012 RBAC levels and how they are implemented using idiomatic Go constructs.
+توضح هذه الوثيقة النمذجة الرياضية الرسمية للمستويات الأربعة القياسية لنموذج RBAC وفق معايير **NIST / ANSI INCITS 359-2012**، وكيفية تطبيقها باستخدام هياكل Go الاصطلاحية وعالية الكفاءة.
 
 ---
 
-## 1. Formal Models Defined by NIST
+## 1. النماذج الرسمية المعتمدة من NIST
 
 ```text
        ┌────────────────────────┐
-       │   4. Symmetric RBAC    │
-       │   (Bidirectional Query)│
+       │   4. النموذج المتناظر   │
+       │ (الاستعلام ثنائي الاتجاه)│
        └───────────▲────────────┘
                    │
        ┌───────────┴────────────┐
-       │ 3. Constrained RBAC    │
-       │ (SSD & DSD Separation) │
+       │   3. النموذج المقيد    │
+       │(الفصل بين الواجبات SSD)│
        └───────────▲────────────┘
                    │
        ┌───────────┴────────────┐
-       │ 2. Hierarchical RBAC   │
-       │ (Role Inheritance DAG) │
+       │    2. النموذج الهرمي   │
+       │  (وراثة الأدوار عبر DAG)│
        └───────────▲────────────┘
                    │
        ┌───────────┴────────────┐
-       │   1. Core / Flat RBAC  │
-       │ (Users, Roles, Perms)  │
+       │    1. النموذج الأساسي   │
+       │(المستخدمون، الأدوار،..)│
        └────────────────────────┘
 ```
 
-### Level 1: Core (Flat) RBAC
-- **Users ($U$)**: Entities (humans, system accounts, microservices) requesting access.
-- **Roles ($R$)**: Functional titles grouping duties and responsibilities.
-- **Permissions ($P = OP \times OBJ$)**: An operation (read, write, approve) paired with an object (invoices, users, orders).
-- **User-to-Role Assignment ($UA \subseteq U \times R$)**: Many-to-many relationship mapping users to roles.
-- **Permission-to-Role Assignment ($PA \subseteq P \times R$)**: Many-to-many relationship mapping permissions to roles.
+### المستوى 1: نموذج RBAC الأساسي (Core / Flat RBAC)
+- **المستخدمون ($U$)**: الكيانات (المستخدمون البشر، حسابات النظام، الخدمات المصغرة) التي تطلب الوصول.
+- **الأدوار ($R$)**: المسميات الوظيفية التي تجمع الواجبات والمسؤوليات.
+- **الصلاحيات ($P = OP \times OBJ$)**: اقتران العملية (قراءة، تعديل، اعتماد) بكائن محدد (فواتير، مستخدمين، طلبات).
+- **إسناد المستخدمين للأدوار ($UA \subseteq U \times R$)**: علاقة متعدد-إلى-متعدد تربط المستخدمين بالأدوار.
+- **إسناد الصلاحيات للأدوار ($PA \subseteq P \times R$)**: علاقة متعدد-إلى-متعدد تربط الصلاحيات بالأدوار.
 
-### Level 2: Hierarchical RBAC
-Introduces a partial order relation ($\succeq$) over $R$.
-If $r_{senior} \succeq r_{junior}$, then:
+### المستوى 2: نموذج RBAC الهرمي (Hierarchical RBAC)
+يقدم علاقة ترتيب جزئي ($\succeq$) على مجموعة الأدوار $R$.
+إذا كان $r_{senior} \succeq r_{junior}$، فإن:
 $$P(r_{senior}) \supseteq P(r_{junior})$$
-A user assigned to $r_{senior}$ automatically acquires all direct permissions of $r_{senior}$ plus all permissions inherited from $r_{junior}$.
+المستخدم المسند إلى $r_{senior}$ يكتسب تلقائياً كافة صلاحيات $r_{senior}$ المباشرة بالإضافة لكافة الصلاحيات الموروثة من $r_{junior}$.
 
-### Level 3: Constrained RBAC (Separation of Duties)
-Enforces security constraints preventing excessive authorization concentration:
-- **Static Separation of Duties (SSD)**: A constraint specifying that no user can be assigned to both conflicting roles:
+### المستوى 3: نموذج RBAC المقيد (Constrained RBAC - الفصل بين الواجبات)
+يفرض قيوداً أمنية تمنع تركز الصلاحيات الحساسة:
+- **الفصل الاستاتيكي بين الواجبات (SSD)**: قيد يمنع إسناد دورين متعارضين لنفس المستخدم وقت الإنشاء:
   $$\forall u \in U, \quad \{r_1, r_2\} \subseteq UA(u) \implies \text{SSD\_Conflict}(r_1, r_2) = \text{false}$$
-- **Dynamic Separation of Duties (DSD)**: A constraint specifying that a user holding both roles cannot activate both concurrently within the same session/transaction:
+- **الفصل الديناميكي بين الواجبات (DSD)**: قيد يمنع تفعيل دورين متعارضين معاً في نفس الجلسة أو المعاملة التشغيلية:
   $$\forall s \in S(u), \quad \{r_1, r_2\} \subseteq ActiveRoles(s) \implies \text{DSD\_Conflict}(r_1, r_2) = \text{false}$$
 
-### Level 4: Symmetric RBAC
-Enforces system query symmetry:
-- **Forward Query**: Given a user/role, list all authorized permissions.
-- **Reverse Query**: Given a sensitive permission/resource, immediately enumerate all roles and subjects that hold that authority. Essential for automated security compliance and auditing.
+### المستوى 4: نموذج RBAC المتناظر (Symmetric RBAC)
+يفرض تناظر الاستعلام في النظام:
+- **الاستعلام الأمامي**: إعطاء مستخدم أو دور واسترجاع كافة الصلاحيات المصرح له بها.
+- **الاستعلام العكسي**: إعطاء صلاحية أو مورد حساس واسترجاع كافة الأدوار والمستخدمين الذين يمتلكون حق الوصول إليها، وهو شرط أساسي للتدقيق الأمني والامتثال الرقابي.
 
 ---
 
-## 2. Idiomatic Go Implementation of the Hierarchical DAG
+## 2. التطبيق الاصطلاحي للرسم البياني الهرمي (DAG) في Go
 
-In Go, a Directed Acyclic Graph (DAG) for role inheritance is modeled cleanly using standard hash maps:
+في Go، يتم نمذجة الرسم البياني الموجه غير الدائري (DAG) لوراثة الأدوار بكفاءة عبر الخرائط القياسية (Hash Maps):
 
 ```go
 package rbac
 
+import "fmt"
+
 type RoleDAG struct {
-	// parentToChildren maps senior roles to junior roles they inherit from
+	// parentToChildren يربط الأدوار الأعلى بالأدوار الأدنى الموروثة
 	parentToChildren map[Role][]Role
 }
 
@@ -73,17 +75,16 @@ func NewRoleDAG() *RoleDAG {
 	}
 }
 
-// AddInheritance registers that senior inherits from junior
+// AddInheritance يسجل أن الدور الأعلى senior يرث من junior مع فحص الحلقات التكرارية
 func (dag *RoleDAG) AddInheritance(senior, junior Role) error {
-	// Check for cycle before adding
 	if dag.hasPath(junior, senior) {
-		return fmt.Errorf("cyclic inheritance detected: %s -> %s would create a cycle", senior, junior)
+		return fmt.Errorf("اكتشاف حلقة وراثة تكرارية: %s -> %s سيخلق دورة مغلقة", senior, junior)
 	}
 	dag.parentToChildren[senior] = append(dag.parentToChildren[senior], junior)
 	return nil
 }
 
-// hasPath performs a Depth-First Search (DFS) to detect reachability
+// hasPath يستخدم خوارزمية البحث بالعمق (DFS) للتحقق من عدم وجود مسارات عكسية
 func (dag *RoleDAG) hasPath(start, target Role) bool {
 	visited := make(map[Role]bool)
 	var dfs func(current Role) bool
@@ -104,7 +105,7 @@ func (dag *RoleDAG) hasPath(start, target Role) bool {
 	return dfs(start)
 }
 
-// ResolveAllInherited collects all ancestor and junior roles for a given set of initial roles
+// ResolveAllInherited يستخرج كافة الأدوار الموروثة المباشرة وغير المباشرة
 func (dag *RoleDAG) ResolveAllInherited(roles []Role) []Role {
 	allRoles := make(map[Role]bool)
 	var walk func(r Role)
@@ -131,12 +132,12 @@ func (dag *RoleDAG) ResolveAllInherited(roles []Role) []Role {
 
 ---
 
-## 3. Reverse Query for Symmetric RBAC (Auditing)
+## 3. الاستعلام العكسي في النموذج المتناظر (Symmetric RBAC Auditing)
 
-To comply with Level 4 Symmetric RBAC, provide an inverted lookup index:
+للامتثال لمتطلبات المستوى الرابع، يوفر المحرك إمكانية الاستعلام العكسي للتدقيق الأمني:
 
 ```go
-// WhoHasPermission returns all subjects or roles that have access to the given permission
+// WhoCanPerform يسترجع كافة الأدوار التي تملك حق تنفيذ صلاحية معينة
 func (e *Engine) WhoCanPerform(targetPerm Permission) []Role {
 	e.mu.RLock()
 	defer e.mu.RUnlock()

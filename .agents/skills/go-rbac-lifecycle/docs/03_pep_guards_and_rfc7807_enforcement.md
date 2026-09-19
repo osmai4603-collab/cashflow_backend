@@ -1,141 +1,140 @@
-# PEP Guards and RFC 7807 Enforcement Architecture
+# حراس وسائط PEP ومعمارية فرض RFC 7807 في Go
 
-This document describes how to construct resilient Policy Enforcement Points (PEPs) in Go, covering HTTP middlewares, gRPC interceptors, and secure RFC 7807 Problem Details error formatting.
+توضح هذه الوثيقة كيفية بناء نقاط فرض سياسات (PEPs) قوية ومرنة في Go، تشمل وسائط HTTP، ومعترضات gRPC، ومغلفات أخطاء RFC 7807 الآمنة لمنع تسريب بيانات النظام.
 
 ---
 
-## 1. The Dual-Tier Enforcement Strategy
+## 1. استراتيجية الفرض ثنائية المستويات (Dual-Tier Enforcement)
 
-In clean Go architecture, access control is enforced at two distinct tiers:
+في المعمارية النظيفة لـ Go، يُفرض التحكم بالوصول على مستويين منفصلين:
 
 ```text
-Incoming Request
-       │
-       ▼
+الطلب القادم
+     │
+     ▼
 ┌────────────────────────────────────────────────────────┐
-│ Tier 1: Protocol PEP Guard (HTTP Middleware / gRPC)    │
-│ Scope: Coarse-Grained Route Gating                     │
-│ Check: Does the subject hold "invoices:create"?        │
+│ المستوى 1: حارس PEP عند البروتوكول (HTTP / gRPC)       │
+│ النطاق: حراسة المسارات بالتفويض الخشن                  │
+│ الفحص: هل يحمل الفاعل صلاحية "invoices:create"؟        │
 └──────────────────────────┬─────────────────────────────┘
-                           │ (Allowed)
+                           │ (مسموح)
                            ▼
 ┌────────────────────────────────────────────────────────┐
-│ Tier 2: Domain / Use Case Enforcement                  │
-│ Scope: Fine-Grained Object & Tenant Boundary Check     │
-│ Check: Does subject's tenant match invoice.company_id? │
+│ المستوى 2: الفرض داخل طبقة التطبيق والمجال             │
+│ النطاق: فحص الكائن الدقيق وحدود المستأجر               │
+│ الفحص: هل يطابق مستأجر الفاعل حقل invoice.company_id؟  │
 └────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## 2. HTTP PEP Middleware Implementation
+## 2. تطبيق وسيط HTTP PEP
 
-A production-ready HTTP middleware must:
-
-1. Extract and validate identity from `r.Context()`.
-2. Evaluate permissions via the in-memory engine.
-3. Handle failure securely without information disclosure.
+يجب أن يقوم وسيط HTTP الإنتاجي بـ:
+1. استخراج والتحقق من الهوية من `r.Context()`.
+2. تقييم الصلاحيات عبر محرك الذاكرة الحية.
+3. معالجة حالات الرفض بأمان دون تسريب أي معلومات عن بنية النظام.
 
 ```go
 package rbac
 
 import (
- "encoding/json"
- "log/slog"
- "net/http"
- "time"
+	"encoding/json"
+	"log/slog"
+	"net/http"
+	"time"
 )
 
 type ProblemDetails struct {
- Type     string `json:"type"`
- Title    string `json:"title"`
- Status   int    `json:"status"`
- Detail   string `json:"detail"`
- Instance string `json:"instance"`
+	Type     string `json:"type"`
+	Title    string `json:"title"`
+	Status   int    `json:"status"`
+	Detail   string `json:"detail"`
+	Instance string `json:"instance"`
 }
 
 func WriteProblemDetails(w http.ResponseWriter, status int, title, detail, instance string) {
- w.Header().Set("Content-Type", "application/problem+json")
- w.WriteHeader(status)
- _ = json.NewEncoder(w).Encode(ProblemDetails{
-  Type:     "https://golang.org/errors/access-denied",
-  Title:    title,
-  Status:   status,
-  Detail:   detail,
-  Instance: instance,
- })
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(ProblemDetails{
+		Type:     "https://golang.org/errors/access-denied",
+		Title:    title,
+		Status:   status,
+		Detail:   detail,
+		Instance: instance,
+	})
 }
 
 func Guard(engine *Engine, logger *slog.Logger, required Permission) func(http.Handler) http.Handler {
- return func(next http.Handler) http.Handler {
-  return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-   start := time.Now()
-   subject, ok := SubjectFromContext(r.Context())
-   if !ok {
-    WriteProblemDetails(w, http.StatusUnauthorized, "Unauthorized", "Authentication required", r.URL.Path)
-    return
-   }
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			start := time.Now()
+			subject, ok := SubjectFromContext(r.Context())
+			if !ok {
+				WriteProblemDetails(w, http.StatusUnauthorized, "Unauthorized", "Authentication required", r.URL.Path)
+				return
+			}
 
-   if !engine.HasPermission(subject.Roles, required) {
-    logger.Warn("RBAC access denied",
-     "subject_id", subject.ID,
-     "roles", subject.Roles,
-     "required_permission", required,
-     "path", r.URL.Path,
-     "latency_us", time.Since(start).Microseconds(),
-    )
-    // Anti-leakage: Do NOT state "Missing permission: invoices:delete"
-    WriteProblemDetails(w, http.StatusForbidden, "Forbidden", "You do not have permission to access this resource", r.URL.Path)
-    return
-   }
+			if !engine.HasPermission(subject.Roles, required) {
+				logger.Warn("تم رفض وصول RBAC",
+					"subject_id", subject.ID,
+					"roles", subject.Roles,
+					"required_permission", required,
+					"path", r.URL.Path,
+					"latency_us", time.Since(start).Microseconds(),
+				)
+				// منع تسريب المعلومات: لا تذكر "نقص صلاحية: invoices:delete" للعميل الخارجي
+				WriteProblemDetails(w, http.StatusForbidden, "Forbidden", "ليس لديك الصلاحية الكافية للوصول لهذا المورد", r.URL.Path)
+				return
+			}
 
-   next.ServeHTTP(w, r)
-  })
- }
+			next.ServeHTTP(w, r)
+		})
+	}
 }
 ```
 
 ---
 
-## 3. gRPC Unary Interceptor PEP Guard
+## 3. معترض gRPC الأحادي لحراسة المسارات (Unary Interceptor PEP Guard)
 
-For gRPC microservices, implement a Unary Server Interceptor:
+للخدمات المصغرة التي تعتمد على gRPC، يتم تطبيق معترض أحادي:
 
 ```go
 package rbac
 
 import (
- "context"
- "google.golang.org/grpc"
- "google.golang.org/grpc/codes"
- "google.golang.org/grpc/status"
+	"context"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 type MethodPermissionMap map[string]Permission
 
 func UnaryServerInterceptor(engine *Engine, methodPerms MethodPermissionMap) grpc.UnaryServerInterceptor {
- return func(
-  ctx context.Context,
-  req any,
-  info *grpc.UnaryServerInfo,
-  handler grpc.UnaryHandler,
- ) (any, error) {
-  required, exists := methodPerms[info.FullMethod]
-  if !exists {
-   // Fail-Closed: If method is not registered, deny by default
-   return nil, status.Errorf(codes.PermissionDenied, "access denied by default policy")
-  }
+	return func(
+		ctx context.Context,
+		req any,
+		info *grpc.UnaryServerInfo,
+		handler grpc.UnaryHandler,
+	) (any, error) {
+		required, exists := methodPerms[info.FullMethod]
+		if !exists {
+			// الفشل الآمن: إذا لم تكن الدالة مسجلة، تمنع افتراضياً
+			return nil, status.Errorf(codes.PermissionDenied, "تم رفض الوصول وفق السياسة الافتراضية")
+		}
 
-  subject, ok := SubjectFromContext(ctx)
-  if !ok {
-   return nil, status.Errorf(codes.Unauthenticated, "unauthenticated caller")
-  }
+		subject, ok := SubjectFromContext(ctx)
+		if !ok {
+			return nil, status.Errorf(codes.Unauthenticated, "متصل غير مصادق عليه")
+		}
 
-  if !engine.HasPermission(subject.Roles, required) {
-   return nil, status.Errorf(codes.PermissionDenied, "insufficient privileges")
-  }
+		if !engine.HasPermission(subject.Roles, required) {
+			return nil, status.Errorf(codes.PermissionDenied, "صلاحيات غير كافية")
+		}
 
-  return handler(ctx, req)
- }
+		return handler(ctx, req)
+	}
 }
 ```
