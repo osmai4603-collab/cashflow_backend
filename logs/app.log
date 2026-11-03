@@ -13,3 +13,31 @@
 {"time":"2026-11-03 02:58:30 AM","level":"INFO","msg":"stopping all background workers..."}
 {"time":"2026-11-03 02:58:30 AM","level":"INFO","msg":"background worker terminated cleanly","worker":"system-heartbeat"}
 {"time":"2026-11-03 02:58:30 AM","level":"INFO","msg":"all background workers stopped successfully"}
+{"time":"2026-11-03T03:39:12+02:00","level":"INFO","msg":"configuration loaded","interface":"0.0.0.0","port":"8080","log_level":"info","log_to_file":true}
+{"time":"2026-11-03T03:39:12+02:00","level":"INFO","msg":"initializing postgres connection pool","op":"postgres.NewPool","target":"postgres://cashflow@localhost:5432/cashflow?sslmode=disable","max_conns":25,"min_conns":5,"max_conn_lifetime":3600000000000,"max_conn_idle_time":300000000000,"health_check_period":30000000000}
+{"time":"2026-11-03T03:42:33+02:00","level":"INFO","msg":"configuration loaded","interface":"0.0.0.0","port":"8099","log_level":"info","log_to_file":true}
+{"time":"2026-11-03T03:42:33+02:00","level":"INFO","msg":"using in-memory development database driver"}
+{"time":"2026-11-03T03:42:33+02:00","level":"INFO","msg":"bootstrap complete","addr":"0.0.0.0:8099","driver":"memory"}
+{"time":"2026-11-03T03:42:33+02:00","level":"INFO","msg":"starting service","addr":"0.0.0.0:8099"}
+{"time":"2026-11-03T03:42:33+02:00","level":"INFO","msg":"server is ready to accept traffic"}
+{"time":"2026-11-03T03:42:33+02:00","level":"INFO","msg":"http server serving","addr":"[::]:8099"}
+{"time":"2026-11-03T03:42:34+02:00","level":"INFO","msg":"http request completed","method":"GET","path":"/","request_id":"8710012ea32f6fbd6fcc71f05d714504","client_ip":"127.0.0.1:39616","status":200,"duration":90680,"bytes":82}
+{"time":"2026-11-03T03:42:34+02:00","level":"INFO","msg":"shutdown signal received"}
+{"time":"2026-11-03T03:42:34+02:00","level":"INFO","msg":"drain phase started","drain_duration":1000000000,"shutdown_reason":"signal"}
+{"time":"2026-11-03T03:42:35+02:00","level":"INFO","msg":"drain phase complete"}
+{"time":"2026-11-03T03:42:35+02:00","level":"INFO","msg":"graceful shutdown completed","duration":0}
+{"time":"2026-11-03T03:42:35+02:00","level":"INFO","msg":"http server stopped"}
+{"time":"2026-11-03T03:42:35+02:00","level":"INFO","msg":"stopping background workers"}
+{"time":"2026-11-03T03:42:35+02:00","level":"INFO","msg":"all background workers stopped"}
+{"time":"2026-11-03T03:42:35+02:00","level":"INFO","msg":"server exited cleanly","shutdown_reason":"signal","uptime":2030000000}
+{"time":"2026-11-03T03:42:35+02:00","level":"INFO","msg":"service terminated successfully"}
+{"time":"2026-11-03T03:43:06+02:00","level":"INFO","msg":"configuration loaded","interface":"0.0.0.0","port":"8080","log_level":"info","log_to_file":true}
+{"time":"2026-11-03T03:43:06+02:00","level":"INFO","msg":"initializing postgres connection pool","op":"postgres.NewPool","target":"postgres://cashflow@localhost:5432/cashflow?sslmode=disable","max_conns":25,"min_conns":5,"max_conn_lifetime":3600000000000,"max_conn_idle_time":300000000000,"health_check_period":30000000000}
+{"time":"2026-11-03T03:43:24+02:00","level":"INFO","msg":"configuration loaded","interface":"0.0.0.0","port":"8080","log_level":"info","log_to_file":true}
+{"time":"2026-11-03T03:43:24+02:00","level":"INFO","msg":"initializing postgres connection pool","op":"postgres.NewPool","target":"postgres://cashflow@localhost:5432/cashflow?sslmode=disable","max_conns":25,"min_conns":5,"max_conn_lifetime":3600000000000,"max_conn_idle_time":300000000000,"health_check_period":30000000000}
+{"time":"2026-11-03T03:44:43+02:00","level":"INFO","msg":"configuration loaded","interface":"0.0.0.0","port":"8080","log_level":"info","log_to_file":true}
+{"time":"2026-11-03T03:44:43+02:00","level":"INFO","msg":"initializing postgres connection pool","op":"postgres.NewPool","target":"postgres://cashflow@localhost:5432/cashflow?sslmode=disable","max_conns":25,"min_conns":5,"max_conn_lifetime":3600000000000,"max_conn_idle_time":300000000000,"health_check_period":30000000000}
+{"time":"2026-11-03T03:45:40+02:00","level":"INFO","msg":"configuration loaded","interface":"0.0.0.0","port":"8080","log_level":"info","log_to_file":true}
+{"time":"2026-11-03T03:45:40+02:00","level":"INFO","msg":"initializing postgres connection pool","op":"postgres.NewPool","target":"postgres://cashflow@localhost:5432/cashflow?sslmode=disable","max_conns":25,"min_conns":5,"max_conn_lifetime":3600000000000,"max_conn_idle_time":300000000000,"health_check_period":30000000000}
+{"time":"2026-11-03T03:52:31+02:00","level":"INFO","msg":"configuration loaded","interface":"0.0.0.0","port":"8080","log_level":"info","log_to_file":true}
+{"time":"2026-11-03T03:52:31+02:00","level":"INFO","msg":"initializing postgres connection pool","op":"postgres.NewPool","target":"postgres://cashflow@localhost:5432/train_db?sslmode=disable","max_conns":25,"min_conns":5,"max_conn_lifetime":3600000000000,"max_conn_idle_time":300000000000,"health_check_period":30000000000}

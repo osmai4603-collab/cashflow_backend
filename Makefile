@@ -1,15 +1,15 @@
 .PHONY: all run build test clean add-feature
 
-MODULES = ./apps/api/... ./internal/infrastructure/... ./internal/shared/...
+MODULES = ./...
 
 all: build
 
 run:
-	go run ./apps/api
+	go run ./cmd/server
 
 build:
 	mkdir -p bin
-	go build -o bin/api ./apps/api
+	go build -o bin/api ./cmd/server
 
 test:
 	go test -v -race $(MODULES)

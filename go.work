@@ -1,7 +1,3 @@
 go 1.26.3
 
-use (
-	./apps/api
-	./internal/infrastructure
-	./internal/shared
-)
+use .

@@ -56,7 +56,7 @@ cashflow_backend/
 ```bash
 make run
 # أو مباشرة:
-go run ./apps/api
+go run ./cmd/server
 ```
 
 ### 2. بناء المشروع (Build)
