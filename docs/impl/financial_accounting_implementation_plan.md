@@ -1,443 +1,412 @@
-# الخطة التنفيذية الشاملة والمفصلة لبناء وحدة المحاسبة المالية للنظام المالي
+# الخطة التنفيذية الشاملة لبناء ميزة المحاسبة المالية المتكاملة
 
-## (Financial Accounting Engine Implementation Plan)
+## (Unified Financial Accounting Feature Implementation Plan)
 
-> **طبيعة الوثيقة:** خطة تنفيذية هندسية متسلسلة وفق معايير المشروعات الكبرى (Phased Engineering Execution Plan)  
-> **المرجع التحليلي الأساسي:** [التحليل الشامل والمعماري لوحدة المحاسبة وفق المعايير العالمية](file:///home/osm/StudioProjects/cashflow_system/cashflow_backend/docs/analysis/financial_accounting_system_architecture_standards.md)  
-> **دليل البناء المعتمد:** [دليل وتوصيات إنشاء ميزة جديدة في Cashflow Backend](file:///home/osm/StudioProjects/cashflow_system/cashflow_backend/docs/new_feature_guidelines.md)  
-> **المعمارية المعتمدة:** نمط الشرائح العمودية المنفصلة (Package-by-Feature / Ports and Adapters) في بيئة Modular Monolith  
-> **تاريخ التخطيط:** نوفمبر 2026
+> **طبيعة الوثيقة:** خطة تنفيذية هندسية متسلسلة لبناء ميزة موحدة وشاملة (Single Integrated Vertical Slice Feature)  
+> **مسار الميزة البرمجية المستهدفة:** `internal/features/accounting/`  
+> **المرجع التحليلي الأساسي:** [التحليل الشامل والمعماري لوحدة المحاسبة وفق المعايير العالمية](docs/analysis/financial_accounting_system_architecture_standards.md)  
+> **دليل البناء المعتمد:** [دليل وتوصيات إنشاء ميزة جديدة في Cashflow Backend](docs/new_feature_guidelines.md)  
+> **فلسفة البناء:** التصميم الموجه بالنطاق (Domain-Driven Design - DDD) وسياق النطاق الموحد (Single Bounded Context)  
+> **تاريخ التحديث:** نوفمبر 2026
 
 ---
 
 ## فهرس المحتويات
 
-1. [الرؤية التنفيذية واستراتيجية المعمارية (Architectural & Execution Strategy)](#1-الرؤية-التنفيذية-واستراتيجية-المعمارية)
-2. [هيكلية الميزات وتقسيم النطاق (Feature Boundaries & Directory Map)](#2-هيكلية-الميزات-وتقسيم-النطاق)
-3. [المراحل التنفيذية المتسلسلة (Phased Execution Roadmap)](#3-المراحل-التنفيذية-المتسلسلة)
-   - [المرحلة 0: البنية التحتية المشتركة ونماذج التخزين والأنواع الدقيقة (Platform & Foundation)](#المرحلة-0-البنية-التحتية-المشتركة-ونماذج-التخزين-والأنواع-الدقيقة)
-   - [المرحلة 1: ميزة دليل الحسابات والأبعاد التحليلية (Feature: Chart of Accounts)](#المرحلة-1-ميزة-دليل-الحسابات-والأبعاد-التحليلية)
-   - [المرحلة 2: ميزة الفترات المالية والإقفال المحاسبي (Feature: Fiscal Periods)](#المرحلة-2-ميزة-الفترات-المالية-والإقفال-المحاسبي)
-   - [المرحلة 3: ميزة محرك القيد المزدوج والأستاذ العام (Feature: General Ledger Core)](#المرحلة-3-ميزة-محرك-القيد-المزدوج-والأستاذ-العام)
-   - [المرحلة 4: محرك العملات المتعددة وتقييم فروق الصرف (Multi-Currency & FX Engine - IAS 21)](#المرحلة-4-محرك-العملات-المتعددة-وتقييم-فروق-الصرف)
-   - [المرحلة 5: ميزة التقارير والقوائم المالية الرسمية (Feature: Financial Reporting - IAS 1)](#المرحلة-5-ميزة-التقارير-والقوائم-المالية-الرسمية)
-   - [المرحلة 6: ميزة محرك المحاسبة الفرعية وعزل العمليات التجارية (Feature: Subledger SLA Engine)](#المرحلة-6-ميزة-محرك-المحاسبة-الفرعية-وعزل-العمليات-التجارية)
-   - [المرحلة 7: الرقابة الصارمة وسلاسل التدقيق والاعتماد المزدوج (Governance, SOX & Security)](#المرحلة-7-الرقابة-الصارمة-وسلاسل-التدقيق-والاعتماد-المزدوج)
-4. [مصفوفة فحص الجودة واختبارات التحقق الصارم (Testing & Verification Matrix)](#4-مصفوفة-فحص-الجودة-واختبارات-التحقق-الصارم)
-5. [ربط المكونات في نقطة التجميع (Composition Root Wiring & Registration)](#5-ربط-المكونات-في-نقطة-التجميع)
-6. [قائمة التحقق النهائية للإطلاق التشغيلي (Go-Live Pre-Flight Checklist)](#6-قائمة-التحقق-النهائية-للإطلاق-التشغيلي)
+1. [الرؤية المعمارية وتبرير الميزة الموحدة (Single Bounded Context Justification)](#1-الرؤية-المعمارية-وتبرير-الميزة-الموحدة)
+2. [الهيكل المعياري الشامل للميزة (Package Layout & File Anatomy)](#2-الهيكل-المعياري-الشامل-للميزة)
+3. [المراحل التنفيذية المتسلسلة لتطوير الميزة (Development Milestones)](#3-المراحل-التنفيذية-المتسلسلة-لتطوير-الميزة)
+   - [المحطة 0: جداول قاعدة البيانات والأنواع المشتركة — وثيقة الخطة التفصيلية](docs/impl/phase_0_foundation_and_migrations.md)
+   - [المحطة 1: وثيقة النطاق والمنافذ التجريدية ونماذج النطاق — وثيقة الخطة التفصيلية](docs/impl/phase_1_domain_entities_and_ports.md)
+   - [المحطة 2: عقود نقل البيانات والتحقق (DTOs) — وثيقة الخطة التفصيلية](docs/impl/phase_2_dtos_and_validation.md)
+   - [المحطة 3: طبقة التخزين الذرية والمستودع الموحد — وثيقة الخطة التفصيلية](docs/impl/phase_3_persistence_and_repository.md)
+   - [المحطة 4: حالات الاستخدام المستقلة واختباراتها — وثيقة الخطة التفصيلية](docs/impl/phase_4_usecases_implementation.md)
+   - [المحطة 5: طبقة معالجات الـ HTTP والمسارات — وثيقة الخطة التفصيلية](docs/impl/phase_5_http_handlers_and_routing.md)
+   - [المحطة 6: الرقابة، التدقيق التشفيري، وعزل العمليات — وثيقة الخطة التفصيلية](docs/impl/phase_6_governance_audit_and_concurrency.md)
+4. [مصفوفة فحص الجودة واختبارات التزامن (Testing & Concurrency Matrix)](#4-مصفوفة-فحص-الجودة-واختبارات-التزامن)
+5. [ربط الميزة في نقطة التجميع المركزية (Composition Root Wiring)](#5-ربط-الميزة-في-نقطة-التجميع-المركزية)
+6. [قائمة التحقق الذهبية قبل التشغيل (Pre-Flight Feature Checklist)](#6-قائمة-التحقق-الذهبية-قبل-التشغيل)
 
 ---
 
-## 1. الرؤية التنفيذية واستراتيجية المعمارية
+## 1. الرؤية المعمارية وتبرير الميزة الموحدة
 
-تهدف هذه الخطة إلى تحويل كافة المعايير والأنماط المعمارية الموثقة في وثيقة التحليل المرجعي إلى شيفرة برمجية إنتاجية فائقة الاعتمادية في مشروع `cashflow_backend`، مع الالتزام التام بالقواعد الصارمة الواردة في [دليل وتوصيات إنشاء ميزة جديدة](file:///home/osm/StudioProjects/cashflow_system/cashflow_backend/docs/new_feature_guidelines.md):
+### لماذا ميزة واحدة موحدة (`internal/features/accounting`) بدلاً من تقسيمات مصطنعة؟
 
-1. **التقسيم العمودي المستقل (Vertical Slice Architecture):** تقسيم وحدة المحاسبة المالية إلى حزم ميزات مستقلة (`internal/features/<feature>`)، لكل منها وثيقة نطاق (`doc.go`)، ومنافذ تجريدية (`ports.go`)، ونماذج نطاق (`entity.go`)، وعقود نقل (`dto.go`)، وحالات استخدام منفردة (`<action>_usecase.go`)، ومعالجات HTTP منفصلة (`<action>_handler.go`)، ومستودعات بيانات مغلفة (`internal/repository.go`).
-2. **العزل التام عن العمليات التجارية (No Commercial Sprawl):** لا وجود لأي جداول أو حقول تتعلق بأوامر البيع، الشحن، أو المخزون المادي داخل محرك المحاسبة. يتم التفاعل حصرياً عبر طبقة ترجمة الأحداث المالية (Subledger Accounting / SLA).
-3. **الدقة الحسابية اللانهائية وتفادي الكسور العائمة:** استخدام `github.com/shopspring/decimal` في Go ونوع `NUMERIC(28, 4)` في PostgreSQL مع احترام معيار ISO 4217.
-4. **حصانة السجلات المحاسبية (Zero Mutation):** لا توجد عمليات `UPDATE` أو `DELETE` على القيود المرحلة، والاعتماد الحصري على القيود العكسية (Reversals / Storno).
-5. **منع الفجوات في الترقيم التسلسلي القانوني (Gapless Sequences):** استخدام أقفال المعاملات الحصرية (`SELECT ... FOR UPDATE`) على مستوى دفتر اليومية لحماية سلامة التسلسل المالي القانوني.
+في معمارية البرمجيات الموجهة بالنطاق (DDD):
+
+1. **وحدة السياق المقيد (Single Bounded Context):**  
+   تمثل **المحاسبة المالية (Financial Accounting)** كلاً متكاملاً لا يمكن فصل أجزائه:
+   - **الحساب المالي (Account):** لا يعيش بمعزل عن القيود المالية، فهو وعاء لتجميع السطور فقط.
+   - **الفترة المالية (Fiscal Period):** ليست ميزة قائمة بذاتها، بل هي **قيد زمني وتحقق نطاقي (Domain Invariant)** ملتصق مباشرة بحركة ترحيل القيد.
+   - **دفاتر اليومية والقيود (Journals & Moves):** هي الجذر التجميعي (Aggregate Root) الذي يربط الحساب بالفترة بالعملة بالتسلسل القانوني.
+   - **التقارير والقوائم المالية (Reports):** هي نموذج القراءة والاستعلام (Read/Projection Model) المشتق مباشرة من سطور الأستاذ العام.
+2. **منع التفتيت ومشاكل الجداول (Anti-Pattern: Table-by-Table Splitting):**  
+   تقسيم النظام إلى ميزات بناءً على أسماء الجداول في قاعدة البيانات (`accounts`, `periods`, `moves`, `reports`) هو خطأ معماري فادح يكسر تماسك النطاق ويخلق منافذ استهلاك وساطة لا داعي لها بين حزم داخل نفس السياق.
+3. **سلامة المعاملات الذرية (Single Transaction Boundary):**  
+   عند ترحيل قيد مالي، يحتاج النظام في نفس اللحظة للتحقق من أن الفترة مفتوحة، وفحص طبيعة الحساب، وحجز رقم اليومية التسلسلي، وكتابة القيد والسطور وسجل التدقيق. وضع كل هذا في ميزة واحدة يسمح بتنفيذ ذلك داخل **معاملة قاعدة بيانات ذرية واحدة (`pgx.Tx`)** دون الحاجة لموزع معاملات معقد (Distributed Transactions / Saga).
+4. **كيف ندير حجم الميزة؟**  
+   يتم التحكم في الحجم دون أي تضخم من خلال تطبيق قواعد [new_feature_guidelines.md](docs/new_feature_guidelines.md):
+   - ملف مستقل لكل حالة استخدام منفردة (`<action>_usecase.go`).
+   - ملف مستقل لكل معالج HTTP محدد (`<action>_handler.go`).
 
 ---
 
-## 2. هيكلية الميزات وتقسيم النطاق
+## 2. الهيكل المعياري الشامل للميزة
 
-تنقسم منظومة المحاسبة المالية في `internal/features/` إلى 5 ميزات معيارية متكاملة تعمل بنظام Modular Monolith:
+تُبنى الميزة كاملة داخل المجلد `internal/features/accounting/` طبقاً للمخطط الهيكلي التالي:
 
 ```text
-internal/features/
-├── chart_of_accounts/          # ميزة دليل الحسابات، الأنواع، والتصنيف المالي
-├── fiscal_periods/             # ميزة الفترات المالية والإقفال المرحلي والسنوي
-├── general_ledger/             # ميزة دفاتر اليومية، القيود، الترحيل، والحصانة
-├── financial_reporting/        # ميزة ميزان المراجعة والقوائم المالية (IAS 1 & IAS 7)
-└── subledger_engine/           # ميزة محرك ترجمة الأحداث الاقتصادية إلى قيود مالية
-```
-
-### البنية الداخلية النموذجية لكل ميزة (طبقا لدليل الميزات)
-
-```text
-internal/features/<feature_name>/
-├── doc.go                      # التوثيق المعماري وحدود النطاق
-├── ports.go                    # الواجهات والمنافذ المجردة (Repository, EventPublisher)
-├── entity.go                   # كائنات النطاق وقواعد التحقق الصلبة (Pure Domain Entities)
-├── dto.go                      # كائنات نقل البيانات وعقود الـ API ودوال التحويل ToResponse()
-├── usecases.go                 # الحاوية المجمعة لحالات الاستخدام ومصنع NewUseCases()
-├── <action>_usecase.go         # ملف مستقل لكل حالة استخدام منفردة
-├── <action>_usecase_test.go    # اختبارات الوحدة المعزولة لحالة الاستخدام
-├── handler.go                  # تسجيل المسارات (chi.Router) والبنية العامة للمعالج
-├── <action>_handler.go         # معالج HTTP مستقل لكل نقطة نهاية API
-└── internal/                   # تغليف طبقة الوصول إلى البيانات (Unexported)
-    ├── repository.go           # تنفيذ الـ Port باستخدام pgxpool
-    └── queries.go              # استعلامات SQL الصريحة والمفهرسة
+internal/features/accounting/
+├── doc.go                           # التوثيق المعماري، المسؤولية النطاقية، وحدود السياق
+├── ports.go                         # جميع الواجهات والمنافذ المجردة (Repository & EventPublisher)
+├── entity.go                        # جميع كيانات النطاق وقواعد العمل الصلبة وحالات الكيانات
+├── dto.go                           # كائنات نقل البيانات (Requests/Responses) والتحقق ودوال التحويل
+├── usecases.go                      # الحاوية المجمعة لحالات الاستخدام ومصنع NewUseCases()
+│
+├── # حالات الاستخدام المستقلة (Use Cases)
+├── create_account_usecase.go        # إنشاء حساب مالي والتحقق من طبيعته
+├── list_accounts_tree_usecase.go    # بناء وعرض دليل الحسابات الهرمي
+├── create_fiscal_year_usecase.go    # توليد فترات السنة المالية
+├── change_period_state_usecase.go   # قفل أو فتح الفترة المالية (Soft/Hard Close)
+├── create_draft_move_usecase.go     # إنشاء مسودة قيد مالي مع التحقق من الأطراف
+├── post_move_usecase.go             # ترحيل القيد الذري وتوليد الرقم التسلسلي القانوني
+├── reverse_move_usecase.go          # توليد قيد عكسي مطابق (Reversal / Storno)
+├── revalue_fx_usecase.go            # إعادة تقييم البنود النقدية بالعملات الأجنبية (IAS 21)
+├── generate_trial_balance_usecase.go# استخراج ميزان المراجعة والتحقق من التوازن
+├── generate_balance_sheet_usecase.go# استخراج الميزانية العمومية والمركز المالي
+├── generate_income_statement_usecase.go # استخراج قائمة الدخل والأرباح والخسائر
+├── ingest_subledger_event_usecase.go# استيعاب الأحداث الاقتصادية مع ضمان عدم التكرار
+│
+├── # اختبارات الوحدة المعزولة لكل حالة استخدام
+├── create_account_usecase_test.go
+├── post_move_usecase_test.go
+├── reverse_move_usecase_test.go
+├── generate_trial_balance_usecase_test.go
+│
+├── # طبقة النقل وتوزيع المسارات (HTTP Handlers)
+├── handler.go                       # تسجيل الراوتر chi وتعيين مسارات /api/v1/accounting
+├── account_handler.go               # معالجات مسارات شجرة الحسابات
+├── period_handler.go                # معالجات مسارات الفترات المحاسبية والإقفال
+├── move_handler.go                  # معالجات مسارات القيود اليومية والترحيل
+├── report_handler.go                # معالجات مسارات القوائم والتقارير المالية
+├── subledger_handler.go             # معالج نقطة استيعاب الأحداث الاقتصادية الخارجية
+│
+└── internal/                        # طبقة البيانات المعزولة (Unexported Data Access)
+    ├── repository.go                # التنفيذ الموحد للـ Port باستخدام pgxpool ومعاملات ACID
+    └── queries.go                   # استعلامات الـ SQL الصريحة والمفهرسة
 ```
 
 ---
 
-## 3. المراحل التنفيذية المتسلسلة (Phased Execution Roadmap)
+## 3. المراحل التنفيذية المتسلسلة لتطوير الميزة (Development Milestones)
 
 ---
 
-### المرحلة 0: البنية التحتية المشتركة ونماذج التخزين والأنواع الدقيقة (Platform & Foundation)
+### المحطة 0: جداول قاعدة البيانات والأنواع المشتركة (Database Migrations & Precision)
 
-- **الهدف:** تجهيز البنية التحتية للأنواع المشتركة، العملات، الترقيم الدقيق، وملفات الترحيل الأولي لقاعدة البيانات.
-- **المدة المقدرة:** 2 يوم عمل.
+- **الهدف:** تجهيز البنية التحتية المشتركة للحسابات الرياضية العشرية وتطبيق سكربتات ترحيل قاعدة البيانات الشاملة للمحاسبة.
+- **المدة المقدرة:** يومان عمل.
 
-#### المهام التنفيذية التفصيلية
+#### الخطوات التنفيذية
 
-1. **الاعتماديات والمكتبات المشتركة:**
-   - إضافة مكتبة الحسابات المالية العشرية فائقة الدقة: `github.com/shopspring/decimal`.
-   - إضافة مكتبة توليد المعرفات الموحدة: `github.com/google/uuid`.
-2. **إنشاء ملفات الترحيل المجمعة في `migrations/`:**
-   - إنشاء `000002_create_chart_of_accounts.up.sql` و `down.sql`.
-   - إنشاء `000003_create_fiscal_periods.up.sql` و `down.sql`.
-   - إنشاء `000004_create_journals_and_moves.up.sql` و `down.sql`.
-   - إنشاء `000005_create_financial_audit_logs.up.sql` و `down.sql`.
-3. **تأسيس معايير العملات وفق ISO 4217 في حزمة منصة مساعدة (`internal/platform/money`):**
-   - كود العملة الثلاثي، عدد الخانات الكسرية (Minor Unit Exponent)، ودوال تحويل المبالغ بأمان.
-
-#### مخرجات المرحلة 0
-
-- [x] سكربتات ترحيل قاعدة البيانات قابلة للتطبيق العكسي بنجاح (`migrate up` / `migrate down`).
-
-- [x] حزمة الحسابات العشرية الموحدة لضمان الدقة وتفادي أي استخدام للأعداد العائمة `float64`.
+1. **الحسابات العشرية الدقيقة:**
+   - اعتماد حزمة `github.com/shopspring/decimal` لتفادي أخطاء الأعداد العائمة `float`.
+   - إنشاء حزمة منصة موحدة `internal/platform/money` تحدد أكواد العملات وفق **ISO 4217**، وعدد الخانات الكسرية (Minor Units)، ودوال تقريب وتحويل آمنة.
+2. **ملفات الترحيل المتكاملة في `migrations/`:**
+   - إنشاء ملف ترحيل جامع ومفهرس بدقة:
+     - `000002_create_accounting_schema.up.sql`
+     - `000002_create_accounting_schema.down.sql`
+   - محتويات الترحيل:
+     - جدول `accounts` (دليل الحسابات مع فهارس فريدة على الكود).
+     - جدول `fiscal_periods` (الفترات المالية وحالاتها: `open`, `soft_closed`, `hard_closed`).
+     - جدول `journals` (دفاتر اليومية وسلاسل الأرقام المتصلة).
+     - جدول `account_moves` (رؤوس القيود، الأرقام القانونية، الحالات: `draft`, `posted`, `reversed`).
+     - جدول `account_move_lines` (أسطر القيود، مبالغ المدين والدائن `NUMERIC(28, 4)`، كود العملة، ومركز التكلفة).
+     - جدول `financial_audit_logs` (سجل التدقيق وسلسلة الهاش التشفيرية).
+     - جدول `subledger_mapping_rules` (قواعد ترجمة الأحداث الاقتصادية).
 
 ---
 
-### المرحلة 1: ميزة دليل الحسابات والأبعاد التحليلية (Feature: Chart of Accounts)
+### المحطة 1: وثيقة النطاق والمنافذ التجريدية (`doc.go` & `ports.go`)
 
-- **مسار الحزمة:** `internal/features/chart_of_accounts`
-- **المرجع المعياري:** إطار IFRS المفاهيمي وتصنيفات الأصول والخصوم وحقوق الملكية والإيرادات والمصروفات.
-- **المدة المقدرة:** 3 أيام عمل.
+- **الهدف:** توثيق حدود السياق وتجريد كافة المنافذ الخارجية للميزة وفق نمط Ports and Adapters.
+- **المدة المقدرة:** يوم عمل واحد.
 
-```mermaid
-graph LR
-    COA_In[HTTP Request] --> COA_Handler[Chart of Accounts Handlers]
-    COA_Handler --> COA_UC[Create/Get/List Account UseCases]
-    COA_UC --> COA_Repo[Account Repository Port]
-    COA_Repo --> Postgres[(PostgreSQL accounts Table)]
-```
+#### الخطوات التنفيذية
 
-#### المهام التنفيذية التفصيلية
+1. **صياغة `doc.go`:**
+   - توثيق مسؤولية حزمة `accounting`: إدارة دليل الحسابات، ضبط الفترات، تطبيق قواعد القيد المزدوج الإلزامي، ضمان الحصانة، وتوليد التقارير المالية.
+   - التأكيد على حدود النطاق: خلو المحاسبة من أي منطق تجاري أو تشغيلي للمخزون أو المبيعات.
+2. **صياغة `ports.go`:**
+   - تعريف الواجهة المركزية الشاملة `AccountingRepository`:
 
-1. **`doc.go`:** توثيق نطاق الحسابات المالية، طبيعة الحساب (طبيعة مدينة/دائنة)، والتعامل الهرمي (Parent-Child).
-2. **`ports.go`:**
-   - واجهة `AccountRepository`:
-     - `Create(ctx context.Context, acc *Account) error`
-     - `GetByID(ctx context.Context, id uuid.UUID) (*Account, error)`
-     - `GetByCode(ctx context.Context, code string) (*Account, error)`
-     - `List(ctx context.Context, filter AccountFilter) ([]*Account, error)`
-     - `Update(ctx context.Context, acc *Account) error`
-3. **`entity.go`:**
-   - كيان `Account`: كود الحساب، الاسم، النوع (`Asset`, `Liability`, `Equity`, `Income`, `Expense`)، الرصيد الافتراضي (`Debit` / `Credit`)، كود العملة، الحساب الأب، وإمكانية التسوية والمطابقة (`IsReconcilable`).
-   - دوال التحقق الصارمة من صحة تكويد الحساب وشجرته.
-4. **`dto.go`:**
+     ```go
+     type AccountingRepository interface {
+         // إدارة الحسابات
+         CreateAccount(ctx context.Context, acc *Account) error
+         GetAccountByID(ctx context.Context, id uuid.UUID) (*Account, error)
+         GetAccountByCode(ctx context.Context, code string) (*Account, error)
+         ListAccounts(ctx context.Context) ([]*Account, error)
+
+         // إدارة الفترات المالية
+         CreateFiscalYear(ctx context.Context, year *FiscalYear, periods []*FiscalPeriod) error
+         GetPeriodByDate(ctx context.Context, date time.Time) (*FiscalPeriod, error)
+         UpdatePeriodState(ctx context.Context, id uuid.UUID, state PeriodState, actorID uuid.UUID) error
+
+         // إدارة دفاتر اليومية والترقيم القانوني الحصين
+         GetJournalByID(ctx context.Context, id uuid.UUID) (*Journal, error)
+         GetNextJournalSequenceWithLock(ctx context.Context, tx pgx.Tx, journalID uuid.UUID) (string, error)
+
+         // إدارة القيود والترحيل الذري
+         SaveDraftMove(ctx context.Context, move *AccountMove) error
+         GetMoveByID(ctx context.Context, id uuid.UUID) (*AccountMove, error)
+         PostMoveAtomic(ctx context.Context, move *AccountMove, audit *FinancialAuditLog) error
+         ReverseMoveAtomic(ctx context.Context, originalMoveID uuid.UUID, reversalMove *AccountMove, audit *FinancialAuditLog) error
+
+         // استعلامات التقارير والقوائم المالية (Read Model)
+         GetTrialBalance(ctx context.Context, from, to time.Time) (*TrialBalanceData, error)
+         GetGeneralLedgerLines(ctx context.Context, accountID uuid.UUID, from, to time.Time) ([]*GeneralLedgerLine, error)
+         GetBalanceSheetData(ctx context.Context, asOf time.Time) (*BalanceSheetData, error)
+         GetIncomeStatementData(ctx context.Context, from, to time.Time) (*IncomeStatementData, error)
+
+         // استيعاب الأحداث الاقتصادية
+         GetProcessedEvent(ctx context.Context, idempotencyKey string) (*AccountMove, error)
+         SaveProcessedEvent(ctx context.Context, key string, eventType string, moveID uuid.UUID) error
+     }
+     ```
+
+   - تعريف واجهة `EventPublisher` لبث أحداث النطاق (مثل `AccountingMovePostedEvent`).
+
+---
+
+### المحطة 2: نماذج النطاق والقواعد الرياضية الصلبة (`entity.go`)
+
+- **الهدف:** كتابة كائنات النطاق النقية الخالية من أي وسوم `json` أو مكتبات نقل، وتضمين قواعد العمل والتحقق الصارم.
+- **المدة المقدرة:** يومان عمل.
+
+#### الخطوات التنفيذية
+
+1. **كيانات دليل الحسابات:**
+   - نوع الحساب: `Asset`, `Liability`, `Equity`, `Income`, `Expense`.
+   - طبيعة الحساب التلقائية: `Debit` للأصول والمصروفات، `Credit` للخصوم وحقوق الملكية والإيرادات.
+2. **كيانات الفترات المالية:**
+   - حالات الفترة: `PeriodStateOpen`, `PeriodStateSoftClosed`, `PeriodStateHardClosed`.
+   - قواعد آلة الحالة: التحقق من إمكانية الترحيل `CanPost(date time.Time) error`.
+3. **كيانات القيود والأستاذ العام (Aggregate Root):**
+   - كيان `AccountMove` و `AccountMoveLine`.
+   - **القاعدة الرياضية الإلزامية (Zero-Sum Balance Invariant):**
+     $$\sum \text{Debit} - \sum \text{Credit} = 0$$
+   - دالة التحقق النطاقية الصارمة:
+
+     ```go
+     func (m *AccountMove) ValidateBalance() error {
+         if len(m.Lines) < 2 {
+             return ErrMoveRequiresAtLeastTwoLines
+         }
+         var totalDebit, totalCredit decimal.Decimal
+         for _, line := range m.Lines {
+             if line.Debit.IsNegative() || line.Credit.IsNegative() {
+                 return ErrNegativeAmountsNotAllowed
+             }
+             totalDebit = totalDebit.Add(line.Debit)
+             totalCredit = totalCredit.Add(line.Credit)
+         }
+         if !totalDebit.Equal(totalCredit) {
+             return fmt.Errorf("%w: debit %s != credit %s", ErrUnbalancedMove, totalDebit, totalCredit)
+         }
+         return nil
+     }
+     ```
+
+4. **حصانة القيد (Immutability):**
+   - منع أي تعديل على القيد إذا كانت حالته `MoveStatePosted`.
+
+---
+
+### المحطة 3: عقود نقل البيانات والتحقق (`dto.go`)
+
+- **الهدف:** إنشاء كائنات الإدخال والإخراج عبر الـ API مع دوال التحقق والتحويل النظيف.
+- **المدة المقدرة:** يومان عمل.
+
+#### الخطوات التنفيذية
+
+1. **عقود الحسابات والفترات:**
    - `CreateAccountRequest`, `AccountResponse`, `AccountTreeResponse`, `ToAccountResponse()`.
-5. **حالات الاستخدام (`usecases.go`):**
-   - `create_account_usecase.go`: التحقق من عدم تكرار كود الحساب ومطابقة نوع الحساب للرصيد الطبيعي.
-   - `get_account_usecase.go`: جلب تفاصيل الحساب برقم المعرف أو الكود.
-   - `list_accounts_tree_usecase.go`: بناء شجرة الحسابات المالية وتنسيقها هرمياً.
-6. **طبقة التخزين (`internal/repository.go` & `internal/queries.go`):**
-   - تنفيذ الاستعلامات عبر `pgxpool` باستخدام استعلامات SQL ذات كفاءة مع فهارس على `code` و `account_type`.
-7. **طبقة النقل (`handler.go` & `*_handler.go`):**
-   - `POST /api/v1/accounting/accounts`
-   - `GET /api/v1/accounting/accounts`
-   - `GET /api/v1/accounting/accounts/{id}`
-   - `GET /api/v1/accounting/accounts/tree`
-
-#### مخرجات المرحلة 1
-
-- [x] حزمة كاملة لـ `chart_of_accounts` مع اختبارات تغطية لا تقل عن 85%.
+   - `CreateFiscalYearRequest`, `ChangePeriodStateRequest`, `FiscalPeriodResponse`.
+2. **عقود القيود والترحيل:**
+   - `CreateMoveRequest`, `MoveLineRequest`, `PostMoveRequest`, `ReverseMoveRequest`, `MoveResponse`, `MoveLineResponse`, `ToMoveResponse()`.
+3. **عقود التقارير المالية:**
+   - `TrialBalanceQuery`, `TrialBalanceResponse`, `TrialBalanceAccountItem`.
+   - `BalanceSheetResponse`, `IncomeStatementResponse`.
+4. **دوال التحقق `Validate()`:**
+   - التأكد من سلامة المدخلات قبل وصولها لحالات الاستخدام (التحقق من صحة التواريخ، إلزامية الحقول، وتطابق الأكواد).
 
 ---
 
-### المرحلة 2: ميزة الفترات المالية والإقفال المحاسبي (Feature: Fiscal Periods)
+### المحطة 4: طبقة التخزين الذرية والمستودع الموحد (`internal/repository.go`)
 
-- **مسار الحزمة:** `internal/features/fiscal_periods`
-- **المرجع المعياري:** معيار IAS 1 (سنوية وقاطعية الفترات المحاسبية) وضوابط SOX لقفل السجلات.
+- **الهدف:** تنفيذ واجهة `AccountingRepository` باستخدام مكتبة `pgxpool` في PostgreSQL مع ضمان المعاملات المقفلة بدقة.
 - **المدة المقدرة:** 3 أيام عمل.
 
-#### المهام التنفيذية التفصيلية
+#### الخطوات التنفيذية
 
-1. **`doc.go` و `ports.go`:**
-   - واجهة `FiscalPeriodRepository`:
-     - `Create(ctx context.Context, period *FiscalPeriod) error`
-     - `GetByID(ctx context.Context, id uuid.UUID) (*FiscalPeriod, error)`
-     - `GetByDate(ctx context.Context, date time.Time) (*FiscalPeriod, error)`
-     - `ListByYear(ctx context.Context, year int) ([]*FiscalPeriod, error)`
-     - `UpdateState(ctx context.Context, id uuid.UUID, state PeriodState, actorID uuid.UUID) error`
-2. **`entity.go`:**
-   - كيان `FiscalPeriod`: السنة المالية، رقم الفترة (1-12)، تاريخ البدء، تاريخ النهاية، والحالة (`open`, `soft_closed`, `hard_closed`).
-   - قواعد آلة الحالة (Period State Machine): منع الانتقال من `hard_closed` إلى `open` إلا بإجراء استثنائي موثق رقابياً.
-3. **`dto.go`:**
-   - `CreateFiscalYearRequest`, `FiscalPeriodResponse`, `ChangePeriodStateRequest`.
-4. **حالات الاستخدام (`usecases.go`):**
-   - `create_fiscal_year_usecase.go`: توليد تلقائي للـ 12 شهراً/فترة متتابعة دون تداخل أو فجوات زمنية.
-   - `get_period_by_date_usecase.go`: تحديد الفترة المالية المفتوحة الخاصة بأي تاريخ قيد معروض للترحيل.
-   - `lock_period_usecase.go`: تنفيذ الإقفال الناعم أو الإقفال الصلب مع تسجيل المستخدم وتاريخ الإقفال.
-5. **طبقة النقل والتخزين (`internal/repository.go` & `handler.go`):**
-   - `POST /api/v1/accounting/fiscal-years`
-   - `GET /api/v1/accounting/fiscal-years/{year}/periods`
-   - `POST /api/v1/accounting/fiscal-periods/{id}/state`
-
-#### مخرجات المرحلة 2
-
-- [x] محرك إدارة الفترات المالية مع منع أي ترحيل مستقبلي في فترات مغلقة.
+1. **معاملات الترحيل الذري (`PostMoveAtomic`):**
+   - بدء معاملة `tx, err := pool.Begin(ctx)`.
+   - قفل سجل دفتر اليومية بواسطة `SELECT next_number, sequence_prefix FROM journals WHERE id = $1 FOR UPDATE`.
+   - توليد الرقم التسلسلي القانوني غير المنقطع (Gapless Sequence) وزيادة العداد.
+   - التحقق من قفل الفترة المالية لنفس التاريخ داخل المعاملة.
+   - تحديث رأس القيد إلى `posted` وتسجيل الرقم التسلسلي وتاريخ الترحيل.
+   - إدراج سجل التدقيق في `financial_audit_logs` مع احتساب تجزئة SHA-256.
+   - اعتماد المعاملة `tx.Commit(ctx)`.
+2. **استعلامات التقارير عالية الكفاءة في `internal/queries.go`:**
+   - كتابة استعلام ميزان المراجعة التراكمي بحساب الأرصدة الافتتاحية والحركات والختامية لجميع الحسابات في استعلام SQL واحد متكامل دون تحميل الذاكرة.
 
 ---
 
-### المرحلة 3: ميزة محرك القيد المزدوج والأستاذ العام (Feature: General Ledger Core)
+### المحطة 5: حالات الاستخدام المستقلة (`usecases.go` & Dedicated UseCases)
 
-- **مسار الحزمة:** `internal/features/general_ledger`
-- **المرجع المعياري:** Luca Pacioli Double-Entry, IAS 1, IAS 8, SOX 404 Immutability, Martin Fowler Accounting Patterns.
-- **المدة المقدرة:** 5 أيام عمل.
-
-```mermaid
-sequenceDiagram
-    autonumber
-    actor User as المحاسب / النظام
-    participant Handler as GL HTTP Handler
-    participant PostUC as PostJournalEntryUseCase
-    participant PeriodPort as FiscalPeriodConsumerPort
-    participant SeqRepo as JournalSequenceRepository
-    participant GLRepo as GeneralLedgerRepository
-    participant AuditPort as FinancialAuditPort
-
-    User->>Handler: طلب ترحيل مسودة قيد (Post Move)
-    Handler->>PostUC: Execute(ctx, moveID, actorID)
-    PostUC->>GLRepo: جلب مسودة القيد والسطور
-    PostUC->>PostUC: التحقق الصارم: Sum(Debit) == Sum(Credit)
-    PostUC->>PeriodPort: التحقق: هل الفترة المالية مفتوحة؟
-    PostUC->>SeqRepo: حجز الرقم التسلسلي القانوني (SELECT FOR UPDATE)
-    PostUC->>GLRepo: ترحيل القيد وتثبيت الحالة Posted (لا يقبل الحذف)
-    PostUC->>AuditPort: توثيق العملية وحساب التجزئة التشفيرية SHA-256
-    PostUC-->>Handler: نجاح الترحيل مع الرقم التسلسلي المالي
-    Handler-->>User: 200 OK (MoveResponse)
-```
-
-#### المهام التنفيذية التفصيلية
-
-1. **`ports.go`:**
-   - `JournalRepository`: إدارة دفاتر اليومية وسلاسل الترقيم الحصرية (`GetNextSequenceNumberWithLock`).
-   - `MoveRepository`: إدارة المسودات والترحيل الذري (`SaveDraft`, `PostMoveAtomic`, `GetMoveByID`).
-   - `FiscalPeriodChecker`: منفذ استهلاك للتحقق من حالة الفترة المالية دون استيراد مباشر لحزمة الفترات.
-   - `AuditLoggerPort`: منفذ إرسال سجلات التدقيق التشفيرية.
-2. **`entity.go`:**
-   - كيان `Journal`: الكود، النوع (`general`, `bank`, `cash`, `sale`, `purchase`)، بادئة الترقيم، والرقم التالي.
-   - كيان `AccountMove`: المعرف، الرقم القانوني، اليومية، التاريخ المحاسبي، الحالة (`draft`, `posted`, `reversed`)، التجزئة التشفيرية.
-   - كيان `AccountMoveLine`: معرف القيد، معرف الحساب، المدين، الدائن، المبلغ بالعملة المصدرية، العملة، مركز التكلفة، ومفتاح التسوية والمطابقة.
-   - **القواعد الرياضية الصلبة (Invariants):**
-     - دالة `ValidateBalance()`: التأكد المطلق من $\sum Debit - \sum Credit = 0$.
-     - دالة `ValidateLines()`: وجود سطرين على الأقل، عدم وجود مبالغ سالبة في حقول المدين والدائن القياسية.
-3. **حالات الاستخدام (`usecases.go`):**
-   - `create_draft_move_usecase.go`: إنشاء مسودة قيد مالي مع التحقق الأولي.
-   - `post_move_usecase.go`: العملية الجوهرية (The Core Atomic Post):
-     - فحص التوازن الصفري.
-     - التحقق من أن الفترة المالية مفتوحة (`PeriodState == open`).
-     - بدء معاملة قاعدة بيانات (`pgx.Tx`).
-     - قفل سجل دفتر اليومية بـ `SELECT ... FOR UPDATE` لمنع أي تنازع وحجز الرقم التسلسلي التالي بدون فجوات (`Gapless Sequential Numbering`).
-     - تثبيت حالة القيد إلى `posted` وتسجيل التوقيت وهوية المستخدم.
-     - توليد التوقيع التشفيري (SHA-256 Signature) وتوثيقه.
-   - `reverse_move_usecase.go`: إلغاء أثر قيد مرحل عبر توليد قيد عكسي مطابق ومكتمل التوازن (Reversal Move / Storno) مع ربطه بالمرجع الأصلي.
-4. **طبقة النقل والمسارات (`handler.go` & `*_handler.go`):**
-   - `POST /api/v1/accounting/journals`
-   - `POST /api/v1/accounting/moves`
-   - `POST /api/v1/accounting/moves/{id}/post`
-   - `POST /api/v1/accounting/moves/{id}/reverse`
-   - `GET /api/v1/accounting/moves/{id}`
-
-#### مخرجات المرحلة 3
-
-- [x] محرك الأستاذ العام المتزن رياضياً، المحمي بالكامل ضد التعديل أو الحذف، والمزود بترقيم قانوني غير منقطع.
-
----
-
-### المرحلة 4: محرك العملات المتعددة وتقييم فروق الصرف (Multi-Currency & FX Engine - IAS 21)
-
-- **المرجع المعياري:** معيار IAS 21 (آثار التغيرات في أسعار صرف العملات الأجنبية).
-- **المدة المقدرة:** 3 أيام عمل.
-
-#### المهام التنفيذية التفصيلية
-
-1. **جداول أسعار الصرف التاريخية (`currency_rates`):**
-   - العملة المصدر، العملة المستهدفة (العملة الوظيفية للنظام)، تاريخ الصرف، وسعر الإغلاق اليومي.
-2. **محرك التسجيل ثلاثي العملة في سطور القيود:**
-   - تسجيل السطر بالعملة الأصلية للمعاملة (`AmountCurrency` و `CurrencyID`).
-   - تسجيل السطر بالعملة المحلية للنظام (`Debit` و `Credit`) محسوباً بسعر الصرف المعتمد في تاريخ القيد.
-3. **حالة استخدام إعادة تقييم العملات الأجنبية في نهاية الفترة (`revalue_fx_monetary_items_usecase.go`):**
-   - فحص كافة الحسابات النقدية (Monetary Items: كأرصدة البنوك والعملاء والموردين بالعملات الأجنبية).
-   - حساب الفرق بين الرصيد التاريخي المسجل والرصيد مقوماً بسعر إغلاق نهاية الفترة المالية.
-   - التوليد الآلي لقيد تسوية فروق تقلبات أسعار الصرف غير المحققة (Unrealized FX Gain/Loss Entry) المقفل في قائمة الدخل.
-
-#### مخرجات المرحلة 4
-
-- [x] توافق تام مع معيار IAS 21 في إدارة العملات الأجنبية وإعادة التقييم الدوري.
-
----
-
-### المرحلة 5: ميزة التقارير والقوائم المالية الرسمية (Feature: Financial Reporting - IAS 1)
-
-- **مسار الحزمة:** `internal/features/financial_reporting`
-- **المرجع المعياري:** IAS 1 (عرض القوائم المالية)، IAS 7 (قائمة التدفقات النقدية)، IFRS 8 (التقارير القطاعية).
+- **الهدف:** كتابة منطق الأعمال لكل عملية في ملف مستقل يركز على مسؤوليته فقط، وحقن الاعتماديات عبر `NewUseCases()`.
 - **المدة المقدرة:** 4 أيام عمل.
 
 ```mermaid
 graph TD
-    subgraph DataSources["جداول الأستاذ العام المعتمدة (Posted Only)"]
-        Moves[(account_moves)]
-        Lines[(account_move_lines)]
-        Accounts[(accounts)]
-    end
-
-    subgraph ReportEngine["محرك التقارير والقوائم المالية (Reporting Engine)"]
-        TB_Calc["حساب ميزان المراجعة (Trial Balance Calculator)"]
-        BS_Calc["قائمة المركز المالي (Balance Sheet Generator)"]
-        PL_Calc["قائمة الأرباح والخسائر (Income Statement Generator)"]
-        CF_Calc["قائمة التدفقات النقدية (Cash Flow Statement Generator)"]
-    end
-
-    Lines --> TB_Calc
-    Lines --> BS_Calc
-    Lines --> PL_Calc
-    Lines --> CF_Calc
-
-    TB_Calc --> TB_Out["ميزان المراجعة الموزون"]
-    BS_Calc --> BS_Out["الميزانية العمومية"]
-    PL_Calc --> PL_Out["قائمة الدخل ومجمل الربح"]
-    CF_Calc --> CF_Out["تقرير التدفقات النقدية"]
+    UC_Container[UseCases Struct Container]
+    
+    UC_Container --> UC1[CreateAccountUseCase]
+    UC_Container --> UC2[ListAccountsTreeUseCase]
+    UC_Container --> UC3[CreateFiscalYearUseCase]
+    UC_Container --> UC4[ChangePeriodStateUseCase]
+    UC_Container --> UC5[CreateDraftMoveUseCase]
+    UC_Container --> UC6[PostMoveUseCase]
+    UC_Container --> UC7[ReverseMoveUseCase]
+    UC_Container --> UC8[RevalueFXUseCase]
+    UC_Container --> UC9[GenerateTrialBalanceUseCase]
+    UC_Container --> UC10[GenerateBalanceSheetUseCase]
+    UC_Container --> UC11[GenerateIncomeStatementUseCase]
+    UC_Container --> UC12[IngestSubledgerEventUseCase]
 ```
 
-#### المهام التنفيذية التفصيلية
+#### الملفات التفصيلية
 
-1. **`ports.go`:**
-   - واجهة `FinancialReportingRepository`:
-     - `GetTrialBalance(ctx context.Context, fromDate, toDate time.Time) (*TrialBalanceReport, error)`
-     - `GetGeneralLedger(ctx context.Context, accountID uuid.UUID, fromDate, toDate time.Time) (*GeneralLedgerReport, error)`
-     - `GetBalanceSheet(ctx context.Context, asOfDate time.Time) (*BalanceSheetReport, error)`
-     - `GetIncomeStatement(ctx context.Context, fromDate, toDate time.Time) (*IncomeStatementReport, error)`
-2. **حالات الاستخدام (`usecases.go`):**
-   - `generate_trial_balance_usecase.go`:
-     - استخراج الرصيد الافتتاحي، إجمالي الحركات المدينة، إجمالي الحركات الدائنة، والرصيد الختامي لكل حساب مالي.
-     - التحقق الآلي من توازن ميزان المراجعة: $\sum \text{Closing Debit} == \sum \text{Closing Credit}$.
-   - `generate_balance_sheet_usecase.go`:
-     - تجميع الأصول (المتداولة وغير المتداولة)، الالتزامات (المتداولة وغير المتداولة)، وحقوق الملكية.
-     - دمج صافي ربح الفترة الحالية من قائمة الدخل ضمن حقوق الملكية ليتحقق التوازن: $\text{Assets} == \text{Liabilities} + \text{Equity}$.
-   - `generate_income_statement_usecase.go`:
-     - احتساب إجمالي الإيرادات، تكلفة النشاط، المصروفات الإدارية والعمومية، وصافي الربح التشغيلي والنهائي للفترة المحددة.
-   - `generate_general_ledger_report_usecase.go`:
-     - كشف حساب تفصيلي لدفتر الأستاذ يوضح كافة السطور المرحلة ورقم القيد والتاريخ والرصيد المتحرك التراكمي (Running Balance).
-3. **طبقة النقل والمسارات (`handler.go` & `*_handler.go`):**
-   - `GET /api/v1/accounting/reports/trial-balance?from=...&to=...`
-   - `GET /api/v1/accounting/reports/general-ledger?account_id=...&from=...&to=...`
-   - `GET /api/v1/accounting/reports/balance-sheet?date=...`
-   - `GET /api/v1/accounting/reports/income-statement?from=...&to=...`
-
-#### مخرجات المرحلة 5
-
-- [x] منظومة تقارير مالية رسمية مطابقة للمواصفات المحاسبية الدولية تدعم التصدير بصيغ JSON و CSV.
+1. **`usecases.go`:** البنية المركزية التي تجمع كافة المؤشرات لحالات الاستخدام وتستقبل مستودع البيانات وسجل الأحداث.
+2. **ملفات العمليات الأساسية:**
+   - `create_account_usecase.go`: منع تكرار الكود والتحقق من الحساب الأب.
+   - `create_fiscal_year_usecase.go`: تقسيم السنة المالية تلقائياً إلى 12 شهراً منتظماً.
+   - `change_period_state_usecase.go`: تدقيق قواعد قفل وإعادة فتح الفترات.
+   - `create_draft_move_usecase.go`: فحص مبدئي لتوازن القيد وحفظه كمسودة قابلة للتعديل.
+   - `post_move_usecase.go`: القلب النابض للنظام المالي؛ فحص التوازن الصارم، والتأكد من فتح الفترة، وحجز الرقم التسلسلي الدائم.
+   - `reverse_move_usecase.go`: إنشاء قيد عكسي مطابق (معكوس الأطراف أو سالب بنمط شتورنو) وإقفال المسألة محاسبياً.
+   - `revalue_fx_usecase.go`: فحص الحسابات النقدية بالعملات الأجنبية وتوليد قيد تسوية فروق تقلبات أسعار الصرف غير المحققة وفق معيار IAS 21.
+   - `generate_trial_balance_usecase.go`: جلب الأرصدة والتحقق برمجياً من معادلة التوازن $\sum \text{Debit} == \sum \text{Credit}$.
+   - `generate_balance_sheet_usecase.go`: إعداد المركز المالي مع دمج صافي الأرباح في حقوق الملكية.
+   - `generate_income_statement_usecase.go`: إعداد قائمة الأرباح والخسائر.
+   - `ingest_subledger_event_usecase.go`: معالجة الأحداث الاقتصادية القادمة من الأنظمة التجارية مع منع التكرار الصارم.
 
 ---
 
-### المرحلة 6: ميزة محرك المحاسبة الفرعية وعزل العمليات التجارية (Feature: Subledger SLA Engine)
+### المحطة 6: طبقة معالجات الـ HTTP المستقلة (`handler.go` & Dedicated Handlers)
 
-- **مسار الحزمة:** `internal/features/subledger_engine`
-- **الهدف المحوري:** بناء جدار الحماية والعزل التام بين العمليات التجارية ومحرك المحاسبة.
-- **المدة المقدرة:** 3 أيام عمل.
+- **الهدف:** ربط طلبات الشبكة بحالات الاستخدام وإرجاع الاستجابات وحالات الـ HTTP القياسية.
+- **المدة المقدرة:** يومان عمل.
 
-#### المهام التنفيذية التفصيلية
+#### الملفات والمسارات
 
-1. **تصميم ناقل الأحداث الاقتصادية (Economic Event Bus / Ingestion Port):**
-   - استقبال أحداث من الأنظمة الخارجية أو الوحدات التجارية كأحداث مجردة:
-     - `EconomicEvent`: معرف فريد، مفتاح منع التكرار (`IdempotencyKey`)، نوع الحدث (`EventType`)، التاريخ، والمبلغ والبيانات الوصفية.
-2. **محرك مطابقة القواعد المحاسبية (SLA Rules Engine):**
-   - جدول وقواعد `subledger_mapping_rules`:
-     - تحديد الطرف المدين، الطرف الدائن، ودفتر اليومية المناسب لكل نوع حدث (مثال: حدث استلام نقدية -> مدين: حساب البنك، دائن: حساب وسيط المقبوضات).
-3. **ضمان المعالجة مرة واحدة فقط (Exactly-Once Semantics):**
-   - فحص `IdempotencyKey` المخزن مسبقاً قبل المعالجة؛ في حال تكرار استلام نفس الحدث التجاري، يتم إرجاع معرف القيد المرحل سابقاً فوراً دون تكرار القيد.
-4. **حالة استخدام ترجمة وترحيل الحدث (`ingest_economic_event_usecase.go`):**
-   - فك تشفير الحدث، تطبيق القواعد، إنشاء مسودة قيد، واستدعاء محرك الأستاذ العام لترحيلها دون أن يدري الأستاذ العام بأي تفاصيل تجارية.
-
-#### مخرجات المرحلة 6
-
-- [x] حاجز عازل يضمن بقاء وحدة المحاسبة نقية بنسبة 100% دون أي شوائب تجارية.
-
----
-
-### المرحلة 7: الرقابة الصارمة وسلاسل التدقيق والاعتماد المزدوج (Governance, SOX & Security)
-
-- **المرجع المعياري:** Sarbanes-Oxley Act (SOX Section 404 / 302), AICPA SOC 1 Type II.
-- **المدة المقدرة:** 2 يوم عمل.
-
-#### المهام التنفيذية التفصيلية
-
-1. **تشفير سجل التدقيق بسلاسل الهاش (Cryptographic Merkle/Hash Chaining):**
-   - احتساب الهاش لكل سجل تدقيق في جدول `financial_audit_logs`:
-     $$\text{Hash}_n = \text{SHA256}(\text{Hash}_{n-1} + \text{EntityID} + \text{Action} + \text{Payload} + \text{Timestamp})$$
-   - توفير مهمة فحص دورية (Verification Worker) تكشف أي تلاعب مادي في السجلات في أجزاء من الثانية.
-2. **تطبيق قاعدة الاعتماد المزدوج وفصل المهام (Maker-Checker / SoD Enforcement):**
-   - التحقق البرمجي الصارم من أن `posted_by` لا يساوي `created_by` في القيود اليدوية التي تتجاوز سقفاً مالياً محدداً في الإعدادات.
+1. **`handler.go`:**
+   - تسجيل جميع المسارات تحت بادئة `/api/v1/accounting` مع حمايتها بـ Context وسجلات التتبع (Correlation ID).
+2. **`account_handler.go`:**
+   - `POST /api/v1/accounting/accounts`
+   - `GET /api/v1/accounting/accounts`
+   - `GET /api/v1/accounting/accounts/tree`
+3. **`period_handler.go`:**
+   - `POST /api/v1/accounting/fiscal-years`
+   - `POST /api/v1/accounting/fiscal-periods/{id}/state`
+4. **`move_handler.go`:**
+   - `POST /api/v1/accounting/moves`
+   - `POST /api/v1/accounting/moves/{id}/post`
+   - `POST /api/v1/accounting/moves/{id}/reverse`
+   - `GET /api/v1/accounting/moves/{id}`
+5. **`report_handler.go`:**
+   - `GET /api/v1/accounting/reports/trial-balance`
+   - `GET /api/v1/accounting/reports/balance-sheet`
+   - `GET /api/v1/accounting/reports/income-statement`
+   - `GET /api/v1/accounting/reports/general-ledger`
+6. **`subledger_handler.go`:**
+   - `POST /api/v1/accounting/subledger/events`
 
 ---
 
-## 4. مصفوفة فحص الجودة واختبارات التحقق الصارم (Testing & Verification Matrix)
+### المحطة 7: الرقابة، التدقيق التشفيري، وعزل العمليات التجارية (SLA & Governance)
 
-امتثالاً لقسم "استراتيجية الاختبارات الآلية" في [دليل الميزات](file:///home/osm/StudioProjects/cashflow_system/cashflow_backend/docs/new_feature_guidelines.md)، تلتزم وحدة المحاسبة بالمصفوفة التالية:
+- **الهدف:** تطبيق المعايير الرقابية الدولية (SOX Section 404 و AICPA SOC 1 Type II) وضمان العزل التجاري التام.
+- **المدة المقدرة:** يومان عمل.
 
-| نوع الاختبار | النطاق المغطى | الأدوات المستخدمة | معيار النجاح الإلزامي |
-| :--- | :--- | :--- | :--- |
-| **اختبارات الوحدة لنماذج النطاق (Entity Unit Tests)** | التحقق من توازن القيد، منع المبالغ السالبة، فحص طبيعة الحساب. | Go `testing`, `testify/assert` | تغطية 100% لكافة دوال الـ Invariants والتحقق الرياضي. |
-| **اختبارات الوحدة لحالات الاستخدام (UseCase Unit Tests)** | التحقق من منطق الترحيل، فحص حالات الفترات المغلقة، محاكاة المستودعات عبر Mocks. | Mock Repositories (`ports.go`) | اختبار كل مسار نجاح وكل مسار فشل متوقع (`Table-Driven Tests`). |
-| **اختبارات التكامل وقاعدة البيانات (Integration Tests)** | فحص أقفال المعاملات (`SELECT FOR UPDATE`)، منع التنازع في الترقيم التسلسلي، وفهارس الأداء. | Testcontainers / Postgres Local Test DB | عدم حدوث أي تكرار أو فجوة في الترقيم تحت ضغط 50 طلب ترحيل متزامن. |
-| **اختبارات الامتثال المحاسبي (Accounting Compliance Tests)** | ميزان المراجعة، توازن الميزانية العمومية، تقييم فروق الصرف وفق IAS 21. | سيناريوهات قيود محاسبية حقيقية مسبقة الحساب | تطابق تام للنتائج مع المعادلات المحاسبية المعتمدة بنسبة خطأ 0.00%. |
+#### الخطوات التنفيذية
+
+1. **سلسلة التجزئة التشفيرية (Cryptographic Hash Chaining):**
+   - ربط كل سجل تدقيق في `financial_audit_logs` بتجزئة السجل السابق، ما يجعل أي تلاعب في قاعدة البيانات مكتشفاً برمجياً وفورياً.
+2. **الاعتماد المزدوج وفصل المهام (Segregation of Duties):**
+   - التحقق في `post_move_usecase.go` من أن المستخدم الذي يرحل القيد يختلف عن مُنشئ المسودة إذا تجاوز المبلغ حداً رقابياً محدداً.
 
 ---
 
-## 5. ربط المكونات في نقطة التجميع (Composition Root Wiring & Registration)
+## 4. مصفوفة فحص الجودة واختبارات التزامن (Testing & Concurrency Matrix)
 
-في نهاية تنفيذ الميزات، يتم ربط المحركات في نقطة التجميع المركزية داخل `internal/platform/app/router.go` و `app.go`:
+امتثالاً لقواعد الاختبارات في [new_feature_guidelines.md](docs/new_feature_guidelines.md#6-استراتيجية-الاختبارات-الآلية-testing-strategy):
+
+| نوع الاختبار | مسار الاختبار | الهدف ومعيار النجاح |
+| :--- | :--- | :--- |
+| **اختبارات قواعد النطاق (Entity Tests)** | `internal/features/accounting/entity_test.go` | تغطية 100% لمعادلة التوازن الصفري، منع المبالغ السالبة، وتحقق شجرة الحسابات. |
+| **اختبارات حالات الاستخدام (UseCases Tests)** | `internal/features/accounting/*_usecase_test.go` | محاكاة مستودع البيانات واختبار سيناريوهات النجاح والفشل المجدولة (`Table-Driven Tests`). |
+| **اختبارات التنازع والتزامن (Concurrency Integration)** | `internal/features/accounting/internal/repository_test.go` | إطلاق 50 طلب ترحيل متزامن والتأكد من خروج الأرقام التسلسلية مرتبة تصاعدياً دون أي فجوات أو تكرار. |
+| **اختبارات مطابقة التقارير (Accounting Invariant Verification)** | `internal/features/accounting/reports_test.go` | التحقق من توازن ميزان المراجعة والميزانية العمومية مع قائمة الدخل برصيد مطابق للأصل. |
+
+---
+
+## 5. ربط الميزة في نقطة التجميع المركزية (Composition Root Wiring)
+
+عند اكتمال بناء الميزة، يتم ربطها في نقطة التجميع المركزية `internal/platform/app/router.go` بسلاسة:
 
 ```go
-// في ملف internal/platform/app/app.go أو router.go
-func (a *App) registerAccountingFeatures(r chi.Router) {
-    // 1. المستودعات وقواعد البيانات
-    coaRepo := coarepo.NewPostgresRepository(a.db)
-    periodRepo := periodrepo.NewPostgresRepository(a.db)
-    glRepo := glrepo.NewPostgresRepository(a.db)
-    auditRepo := auditrepo.NewPostgresRepository(a.db)
-    reportsRepo := reportsrepo.NewPostgresRepository(a.db)
+// في ملف internal/platform/app/router.go أو app.go
+package app
 
-    // 2. حالات الاستخدام
-    coaUseCases := chart_of_accounts.NewUseCases(coaRepo, a.logger)
-    periodUseCases := fiscal_periods.NewUseCases(periodRepo, a.logger)
-    glUseCases := general_ledger.NewUseCases(glRepo, periodRepo, auditRepo, a.logger)
-    reportsUseCases := financial_reporting.NewUseCases(reportsRepo, a.logger)
+import (
+    "cashflow_backend/internal/features/accounting"
+    accountingrepo "cashflow_backend/internal/features/accounting/internal"
+    "github.com/go-chi/chi/v5"
+    "github.com/jackc/pgx/v5/pgxpool"
+    "log/slog"
+)
 
-    // 3. المعالجات وتسجيل المسارات المحمية
-    r.Route("/api/v1/accounting", func(sub chi.Router) {
-        chart_of_accounts.RegisterRoutes(sub, coaUseCases, a.logger)
-        fiscal_periods.RegisterRoutes(sub, periodUseCases, a.logger)
-        general_ledger.RegisterRoutes(sub, glUseCases, a.logger)
-        financial_reporting.RegisterRoutes(sub, reportsUseCases, a.logger)
-    })
+func RegisterAccountingFeature(r chi.Router, pool *pgxpool.Pool, logger *slog.Logger) {
+    // 1. إنشاء المستودع الداخلي المعزول
+    repo := accountingrepo.NewPostgresRepository(pool)
+
+    // 2. تهيئة حالات الاستخدام بحقن المستودع والسجل
+    useCases := accounting.NewUseCases(repo, logger)
+
+    // 3. تسجيل معالجات الـ HTTP تحت المسار الموحد
+    accounting.RegisterRoutes(r, useCases, logger)
 }
 ```
 
 ---
 
-## 6. قائمة التحقق النهائية للإطلاق التشغيلي (Go-Live Pre-Flight Checklist)
+## 6. قائمة التحقق الذهبية قبل التشغيل (Pre-Flight Feature Checklist)
 
-تطبيقاً لـ [قائمة التحقق الذهبية في دليل الميزات](file:///home/osm/StudioProjects/cashflow_system/cashflow_backend/docs/new_feature_guidelines.md#7-قائمة-التحقق-الذهبية-pre-flight-feature-checklist):
+قبل اعتماد الميزة للإنتاج:
 
-- [ ] **توثيق النطاق:** وجود ملف `doc.go` في كل ميزة يشرح مسؤولياتها وحدودها بدقة.
-- [ ] **عزل الواجهات:** جميع الـ Ports معرّفة داخل `ports.go` كعقود مجردة صريحة.
-- [ ] **نقاء النماذج:** خلو ملفات `entity.go` تماماً من أي وسوم `json` أو مكتبات `net/http`.
-- [ ] **عقود النقل المستقلة:** وجود دوال `Validate()` لكل DTO في `dto.go` ودوال تحويل آمنة `ToResponse()`.
-- [ ] **تجريد حالات الاستخدام والمعالجات:** وجود ملف مستقل لكل حالة استخدام (`<action>_usecase.go`) ولكل معالج HTTP (`<action>_handler.go`).
-- [ ] **تغليف التخزين:** وضع مستودعات الـ pgxpool واستعلامات SQL داخل مجلدات `internal/` الخاصة بكل ميزة.
-- [ ] **الدقة الحسابية:** حظر تام لأي استخدام للأرقام العشرية العائمة (`float32` / `float64`) في تخزين أو احتساب المبالغ المالية.
-- [ ] **الحصانة والتوازن:** التحقق من عدم وجود أوامر SQL لتعديل أو حذف القيود المرحلة (`UPDATE account_moves WHERE state = 'posted'` أو `DELETE`).
-- [ ] **سلامة الفهارس والقيود:** فهارس على مفاتيح البحث (`code`, `name`, `date`, `state`) وقيود فريدة على تسلسل القيود المرحلة.
-- [ ] **اختبارات شاملة وموثقة:** نجاح كافة اختبارات الوحدة والتكامل مع تقرير تغطية يتجاوز 85% وتنفيذ `go test ./...` دون أي خطأ.
+- [ ] **ملف التوثيق:** وجود `doc.go` يشرح نطاق وحدود `accounting`.
+- [ ] **تجريد المنافذ:** جميع الواجهات الخارجية معرّفة داخل `ports.go` كعقود صريحة.
+- [ ] **نقاء النماذج:** خلو `entity.go` تماماً من وسوم الـ `json` أو مكتبات الشبكة.
+- [ ] **عقود النقل المستقلة:** وجود دوال `Validate()` ودوال تحويل `ToResponse()` في `dto.go`.
+- [ ] **استقلالية الملفات:** وجود ملف مستقل لكل حالة استخدام ولكل معالج HTTP.
+- [ ] **تغليف التخزين:** وجود استعلامات ومستودع `pgxpool` داخل مجلد `internal/` الخاص بالميزة.
+- [ ] **الدقة اللانهائية:** عدم استخدام `float64` نهائياً والاعتماد على `shopspring/decimal`.
+- [ ] **الحصانة المحاسبية:** خلو النظام من أي أوامر لحذف أو تعديل القيود بعد ترحيلها.
+- [ ] **الترقيم غير المنقطع:** التأكد من قفل `SELECT FOR UPDATE` في ترحيل دفاتر اليومية لمنع الفجوات.
+- [ ] **التغطية البرمجية:** نجاح جميع الاختبارات مع تغطية عامة تتجاوز 85% عبر أمر `go test -race ./internal/features/accounting/...`.
 
 ---
-> **تم إعداد هذه الخطة التنفيذية لتكون المرجع الإرشادي الإلزامي لمهندسي البرمجيات في تنفيذ وحدة المحاسبة المالية.**
+> **تم إعداد وتحديث هذه الخطة لتمثل مرجعاً تنفيذياً صارماً لبناء وحدة المحاسبة المالية كميزة واحدة موحدة متماسكة.**
