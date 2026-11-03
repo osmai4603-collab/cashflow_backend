@@ -26,10 +26,13 @@ func TestDuration_UnmarshalJSON(t *testing.T) {
 		{name: "human string hours", input: `"2h"`, expected: 2 * time.Hour, wantErr: false},
 		{name: "numeric integer seconds", input: `15`, expected: 15 * time.Second, wantErr: false},
 		{name: "numeric float seconds", input: `2.5`, expected: 2500 * time.Millisecond, wantErr: false},
+		{name: "numeric exponent seconds", input: `1e1`, expected: 10 * time.Second, wantErr: false},
 		{name: "empty string", input: `""`, expected: 0, wantErr: false},
 		{name: "null value", input: `null`, expected: 0, wantErr: false},
 		{name: "invalid string", input: `"invalid"`, wantErr: true},
 		{name: "invalid type boolean", input: `true`, wantErr: true},
+		{name: "overflow", input: `9223372037`, wantErr: true},
+		{name: "trailing JSON value", input: `1 2`, wantErr: true},
 	}
 
 	for _, tc := range tests {
@@ -407,10 +410,13 @@ func TestByteSize_UnmarshalJSON(t *testing.T) {
 		{name: "kilobytes string", input: `"64KB"`, expected: 64 * 1024, wantErr: false},
 		{name: "megabytes string", input: `"10MB"`, expected: 10 * 1024 * 1024, wantErr: false},
 		{name: "gigabytes string", input: `"2GB"`, expected: 2 * 1024 * 1024 * 1024, wantErr: false},
+		{name: "fractional kilobytes string", input: `"1.5KB"`, expected: 1536, wantErr: false},
 		{name: "raw numeric bytes", input: `1048576`, expected: 1048576, wantErr: false},
+		{name: "numeric exponent bytes", input: `1e3`, expected: 1000, wantErr: false},
 		{name: "empty string", input: `""`, expected: 0, wantErr: false},
 		{name: "null value", input: `null`, expected: 0, wantErr: false},
 		{name: "invalid unit", input: `"500ZZ"`, wantErr: true},
+		{name: "overflow", input: `9223372036854775808`, wantErr: true},
 	}
 
 	for _, tc := range tests {

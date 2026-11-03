@@ -4,6 +4,8 @@ import (
 	"context"
 	"math/rand/v2"
 	"time"
+
+	"github.com/shopspring/decimal"
 )
 
 // RetryConfig configures the exponential backoff algorithm with full jitter.
@@ -18,7 +20,7 @@ type RetryConfig struct {
 	MaxInterval time.Duration
 
 	// Multiplier is the backoff factor applied on subsequent attempts.
-	Multiplier float64
+	Multiplier decimal.Decimal
 }
 
 // DefaultRetryConfig returns production-safe fallback retry parameters.
@@ -27,7 +29,7 @@ func DefaultRetryConfig() RetryConfig {
 		MaxRetries:      3,
 		InitialInterval: 50 * time.Millisecond,
 		MaxInterval:     2 * time.Second,
-		Multiplier:      2.0,
+		Multiplier:      decimal.NewFromInt(2),
 	}
 }
 
@@ -53,12 +55,13 @@ func WithRetry(ctx context.Context, cfg RetryConfig, fn RetryableFn) error {
 	if cfg.MaxInterval <= 0 {
 		cfg.MaxInterval = 2 * time.Second
 	}
-	if cfg.Multiplier <= 0 {
-		cfg.Multiplier = 2.0
+	if !cfg.Multiplier.IsPositive() {
+		cfg.Multiplier = decimal.NewFromInt(2)
 	}
 
 	var lastErr error
-	backoff := float64(cfg.InitialInterval)
+	backoff := decimal.NewFromInt(int64(cfg.InitialInterval))
+	maxInterval := decimal.NewFromInt(int64(cfg.MaxInterval))
 
 	for attempt := 0; attempt <= cfg.MaxRetries; attempt++ {
 		// Respect context cancellation before executing
@@ -77,17 +80,16 @@ func WithRetry(ctx context.Context, cfg RetryConfig, fn RetryableFn) error {
 		}
 
 		// Calculate sleep duration with Full Jitter
-		capInterval := float64(cfg.MaxInterval)
 		currentMax := backoff
-		if currentMax > capInterval {
-			currentMax = capInterval
+		if currentMax.GreaterThan(maxInterval) {
+			currentMax = maxInterval
 		}
 
 		// Jitter between 0 and currentMax
-		sleepDuration := time.Duration(rand.Float64() * currentMax)
+		sleepDuration := time.Duration(rand.Int64N(currentMax.IntPart()))
 
 		// Update backoff for next iteration
-		backoff *= cfg.Multiplier
+		backoff = backoff.Mul(cfg.Multiplier)
 
 		// Wait for sleep duration or context cancellation
 		select {

@@ -30,3 +30,16 @@ func FromContext(ctx stdctx.Context) *slog.Logger {
 	}
 	return slog.Default()
 }
+
+// FromContextOr retrieves a request-scoped logger or returns fallback.
+func FromContextOr(ctx stdctx.Context, fallback *slog.Logger) *slog.Logger {
+	if ctx != nil {
+		if l, ok := ctx.Value(loggerContextKey{}).(*slog.Logger); ok && l != nil {
+			return l
+		}
+	}
+	if fallback != nil {
+		return fallback
+	}
+	return slog.Default()
+}

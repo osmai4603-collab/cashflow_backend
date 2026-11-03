@@ -36,5 +36,9 @@
   "auth": {
     "jwt_secret": "default-development-jwt-secret-key-32-chars-min",
     "token_ttl": "24h"
+  },
+  "accounting": {
+    "maker_checker_threshold": "0",
+    "functional_currency": "SAR"
   }
 }

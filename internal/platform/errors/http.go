@@ -50,11 +50,24 @@ type HTTPErrorResponse struct {
 
 // WriteHTTPError translates the error, writes it as a safe JSON response, and logs it via log/slog
 func WriteHTTPError(w http.ResponseWriter, r *http.Request, err error, logger *slog.Logger) {
+	writeHTTPError(w, r, err, logger, 0)
+}
+
+// WriteHTTPErrorWithStatus translates the error and writes it using the supplied HTTP status.
+// A status outside the valid HTTP range falls back to the error's mapped status.
+func WriteHTTPErrorWithStatus(w http.ResponseWriter, r *http.Request, err error, logger *slog.Logger, status int) {
+	writeHTTPError(w, r, err, logger, status)
+}
+
+func writeHTTPError(w http.ResponseWriter, r *http.Request, err error, logger *slog.Logger, statusOverride int) {
 	if err == nil {
 		return
 	}
 
 	status := HTTPStatusCode(err)
+	if statusOverride >= 100 && statusOverride <= 599 {
+		status = statusOverride
+	}
 	code := ErrorCode(err)
 	userMessage := ErrorMessage(err)
 

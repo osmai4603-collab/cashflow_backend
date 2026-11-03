@@ -52,3 +52,41 @@ func TestConfigurationDSNUsesDatabaseURL(t *testing.T) {
 		t.Errorf("expected configured database URL %q, got %q", databaseURL, got)
 	}
 }
+
+func TestAccountingGovernanceSettingsLoadFromEnvironment(t *testing.T) {
+	values := map[string]string{
+		"ACCOUNTING_MAKER_CHECKER_THRESHOLD": "12500.75",
+		"ACCOUNTING_FUNCTIONAL_CURRENCY":     "USD",
+	}
+	cfg, err := NewEngine(WithEnvLookup(func(key string) (string, bool) {
+		value, ok := values[key]
+		return value, ok
+	})).Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfg.Accounting.MakerCheckerThreshold != "12500.75" || cfg.Accounting.FunctionalCurrency != "USD" {
+		t.Fatalf("accounting settings = %+v", cfg.Accounting)
+	}
+}
+
+func TestAccountingGovernanceSettingsValidation(t *testing.T) {
+	for _, test := range []struct {
+		name      string
+		threshold string
+		currency  string
+	}{
+		{name: "invalid amount", threshold: "not-a-number", currency: "SAR"},
+		{name: "negative amount", threshold: "-1", currency: "SAR"},
+		{name: "unsupported currency", threshold: "100", currency: "XYZ"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			cfg := DefaultConfiguration()
+			cfg.Accounting.MakerCheckerThreshold = test.threshold
+			cfg.Accounting.FunctionalCurrency = test.currency
+			if err := NewValidationEngine().Validate(cfg); err == nil {
+				t.Fatal("Validate() accepted invalid accounting settings")
+			}
+		})
+	}
+}

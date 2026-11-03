@@ -25,6 +25,8 @@ import (
 	"syscall"
 	"time"
 
+	"cashflow_backend/internal/features/accounting"
+	accountingwiring "cashflow_backend/internal/features/accounting/wiring"
 	"cashflow_backend/internal/infrastructure/health"
 	"cashflow_backend/internal/infrastructure/postgres"
 	"cashflow_backend/internal/infrastructure/server"
@@ -35,6 +37,7 @@ import (
 	"cashflow_backend/migrations"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/shopspring/decimal"
 )
 
 // defaultConfigPath is the JSON config store resolved in layer 2 of the
@@ -121,7 +124,20 @@ func (a *App) Bootstrap(args []string) (err error) {
 		a.workerMgr.Start("pool-monitor", newPoolMonitor(a.pool, a.logger))
 	}
 
-	router := NewRouter(a.logger, a.health)
+	var accountingUseCases *accounting.UseCases
+	if a.pool != nil {
+		threshold, err := decimal.NewFromString(cfg.Accounting.MakerCheckerThreshold)
+		if err != nil {
+			return fmt.Errorf("parse accounting maker-checker threshold: %w", err)
+		}
+		accountingUseCases, err = accountingwiring.NewPostgresUseCasesWithMakerChecker(a.pool, nil, accounting.MakerCheckerSettings{
+			Threshold: threshold, FunctionalCurrency: cfg.Accounting.FunctionalCurrency,
+		}, a.logger)
+		if err != nil {
+			return fmt.Errorf("configure accounting use cases: %w", err)
+		}
+	}
+	router := NewRouter(a.logger, a.health, accountingUseCases)
 
 	// The platform context middleware MUST run outermost so that request_id and
 	// client_ip are injected into the context before the request logging

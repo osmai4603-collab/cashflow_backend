@@ -242,6 +242,12 @@ func (p *PipelineEngine) loadEnvironment(cfg *Configuration) error {
 			cfg.Auth.TokenTTL = Duration(d)
 		}
 	}
+	if val, ok := p.lookupEnv("ACCOUNTING_MAKER_CHECKER_THRESHOLD"); ok {
+		cfg.Accounting.MakerCheckerThreshold = val
+	}
+	if val, ok := p.lookupEnv("ACCOUNTING_FUNCTIONAL_CURRENCY"); ok {
+		cfg.Accounting.FunctionalCurrency = val
+	}
 
 	return nil
 }
@@ -279,6 +285,9 @@ func (p *PipelineEngine) loadCLI(args []string, cfg *Configuration) error {
 
 		jwtSecret = fs.String("jwt-secret", "", "Auth JWT secret")
 		tokenTTL  = fs.String("jwt-token-ttl", "", "JWT token TTL")
+
+		makerCheckerThreshold = fs.String("maker-checker-threshold", "", "Accounting maker-checker threshold")
+		functionalCurrency    = fs.String("functional-currency", "", "Accounting functional currency")
 	)
 
 	if err := fs.Parse(args); err != nil {
@@ -356,6 +365,10 @@ func (p *PipelineEngine) loadCLI(args []string, cfg *Configuration) error {
 			if d, err := time.ParseDuration(*tokenTTL); err == nil {
 				cfg.Auth.TokenTTL = Duration(d)
 			}
+		case "maker-checker-threshold":
+			cfg.Accounting.MakerCheckerThreshold = *makerCheckerThreshold
+		case "functional-currency":
+			cfg.Accounting.FunctionalCurrency = *functionalCurrency
 		}
 	})
 

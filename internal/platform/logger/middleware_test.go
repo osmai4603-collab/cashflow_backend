@@ -48,7 +48,9 @@ func TestHTTPLoggingMiddleware_LogsCompletionAndStatusByLevel(t *testing.T) {
 			if len(lines) == 0 {
 				t.Fatal("expected at least one log line")
 			}
-			if err := json.Unmarshal(lines[len(lines)-1], &entry); err != nil {
+			decoder := json.NewDecoder(bytes.NewReader(lines[len(lines)-1]))
+			decoder.UseNumber()
+			if err := decoder.Decode(&entry); err != nil {
 				t.Fatalf("failed to parse completion log: %v", err)
 			}
 
@@ -58,10 +60,12 @@ func TestHTTPLoggingMiddleware_LogsCompletionAndStatusByLevel(t *testing.T) {
 			if entry["level"] != tt.wantLevel {
 				t.Errorf("expected level %s, got %v", tt.wantLevel, entry["level"])
 			}
-			if int(entry["status"].(float64)) != tt.statusCode {
+			status, err := entry["status"].(json.Number).Int64()
+			if err != nil || int(status) != tt.statusCode {
 				t.Errorf("expected status field %d, got %v", tt.statusCode, entry["status"])
 			}
-			if entry["bytes"].(float64) != 2 {
+			bytesWritten, err := entry["bytes"].(json.Number).Int64()
+			if err != nil || bytesWritten != 2 {
 				t.Errorf("expected bytes field 2, got %v", entry["bytes"])
 			}
 			if entry["method"] != http.MethodGet {
@@ -128,13 +132,17 @@ func TestHTTPLoggingMiddleware_TracksWriteWithoutExplicitHeader(t *testing.T) {
 
 	var entry map[string]any
 	lines := bytes.Split(bytes.TrimSpace(buf.Bytes()), []byte{'\n'})
-	if err := json.Unmarshal(lines[len(lines)-1], &entry); err != nil {
+	decoder := json.NewDecoder(bytes.NewReader(lines[len(lines)-1]))
+	decoder.UseNumber()
+	if err := decoder.Decode(&entry); err != nil {
 		t.Fatalf("failed to parse completion log: %v", err)
 	}
-	if int(entry["status"].(float64)) != http.StatusOK {
+	status, err := entry["status"].(json.Number).Int64()
+	if err != nil || int(status) != http.StatusOK {
 		t.Errorf("expected status field 200, got %v", entry["status"])
 	}
-	if int(entry["bytes"].(float64)) != len("implicit-200") {
+	bytesWritten, err := entry["bytes"].(json.Number).Int64()
+	if err != nil || int(bytesWritten) != len("implicit-200") {
 		t.Errorf("expected bytes field %d, got %v", len("implicit-200"), entry["bytes"])
 	}
 }

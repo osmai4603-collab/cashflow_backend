@@ -5,6 +5,9 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+
+	"cashflow_backend/internal/platform/money"
+	"github.com/shopspring/decimal"
 )
 
 // =============================================================================
@@ -67,6 +70,7 @@ func NewValidationEngine(customRules ...ValidationRule) *ValidationEngine {
 	e.RegisterRule(validateLoggerInvariants)
 	e.RegisterRule(validateDatabaseInvariants)
 	e.RegisterRule(validateAuthInvariants)
+	e.RegisterRule(validateAccountingInvariants)
 
 	for _, rule := range customRules {
 		e.RegisterRule(rule)
@@ -207,6 +211,17 @@ func validateAuthInvariants(cfg *Configuration, report *ValidationReport) {
 	}
 	if a.TokenTTL.Duration() <= 0 {
 		report.Add("auth.token_ttl", "must be strictly positive (e.g. '24h')")
+	}
+}
+
+func validateAccountingInvariants(cfg *Configuration, report *ValidationReport) {
+	threshold, err := decimal.NewFromString(strings.TrimSpace(cfg.Accounting.MakerCheckerThreshold))
+	if err != nil || threshold.IsNegative() {
+		report.Add("accounting.maker_checker_threshold", "must be a non-negative decimal amount")
+	}
+	currency := strings.ToUpper(strings.TrimSpace(cfg.Accounting.FunctionalCurrency))
+	if _, ok := money.SupportedCurrencies[currency]; !ok {
+		report.Add("accounting.functional_currency", "must be a supported ISO 4217 currency code")
 	}
 }
 

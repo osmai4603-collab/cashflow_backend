@@ -5,13 +5,14 @@ import (
 	"log/slog"
 	"net/http"
 
+	"cashflow_backend/internal/features/accounting"
 	"cashflow_backend/internal/infrastructure/health"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 )
 
-func NewRouter(logger *slog.Logger, healthChecker *health.HealthChecker) chi.Router {
+func NewRouter(logger *slog.Logger, healthChecker *health.HealthChecker, accountingUseCases *accounting.UseCases) chi.Router {
 	r := chi.NewRouter()
 
 	r.Use(middleware.RequestID)
@@ -34,6 +35,8 @@ func NewRouter(logger *slog.Logger, healthChecker *health.HealthChecker) chi.Rou
 			"version": "1.0.0",
 		})
 	})
+
+	accounting.RegisterRoutes(r, accountingUseCases, logger)
 
 	return r
 }

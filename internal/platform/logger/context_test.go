@@ -43,3 +43,15 @@ func TestContext_NilSafety(t *testing.T) {
 		t.Errorf("WithContext(nil, ...) = %v, want nil", ctx)
 	}
 }
+
+func TestFromContextOr(t *testing.T) {
+	fallback := slog.New(slog.NewTextHandler(&bytes.Buffer{}, nil))
+	if got := FromContextOr(context.Background(), fallback); got != fallback {
+		t.Fatal("FromContextOr() did not return fallback logger")
+	}
+	scoped := slog.New(slog.NewTextHandler(&bytes.Buffer{}, nil))
+	ctx := WithContext(context.Background(), scoped)
+	if got := FromContextOr(ctx, fallback); got != scoped {
+		t.Fatal("FromContextOr() did not prefer request-scoped logger")
+	}
+}

@@ -12,10 +12,11 @@ import (
 
 // Configuration defines the complete operational parameters for the service.
 type Configuration struct {
-	Server   ServerSettings   `json:"server"`
-	Logger   LoggerSettings   `json:"logger"`
-	Database DatabaseSettings `json:"database"`
-	Auth     AuthSettings     `json:"auth"`
+	Server     ServerSettings     `json:"server"`
+	Logger     LoggerSettings     `json:"logger"`
+	Database   DatabaseSettings   `json:"database"`
+	Auth       AuthSettings       `json:"auth"`
+	Accounting AccountingSettings `json:"accounting"`
 }
 
 // ServerSettings encapsulates HTTP listener and timeout parameters.
@@ -65,6 +66,12 @@ type AuthSettings struct {
 	TokenTTL  Duration `json:"token_ttl" env:"JWT_TOKEN_TTL" default:"24h" desc:"Time-to-live duration for JWT authentication tokens"`
 }
 
+// AccountingSettings controls accounting-specific governance.
+type AccountingSettings struct {
+	MakerCheckerThreshold string `json:"maker_checker_threshold" env:"ACCOUNTING_MAKER_CHECKER_THRESHOLD" default:"0" desc:"Maker-checker threshold in the functional currency; zero disables the control"`
+	FunctionalCurrency    string `json:"functional_currency" env:"ACCOUNTING_FUNCTIONAL_CURRENCY" default:"SAR" desc:"Functional currency used to interpret the maker-checker threshold"`
+}
+
 // DefaultConfiguration returns a fully populated, production-safe fallback configuration.
 func DefaultConfiguration() *Configuration {
 	return &Configuration{
@@ -105,6 +112,10 @@ func DefaultConfiguration() *Configuration {
 		Auth: AuthSettings{
 			JWTSecret: "default-development-jwt-secret-key-32-chars-min",
 			TokenTTL:  Duration(24 * time.Hour),
+		},
+		Accounting: AccountingSettings{
+			MakerCheckerThreshold: "0",
+			FunctionalCurrency:    "SAR",
 		},
 	}
 }

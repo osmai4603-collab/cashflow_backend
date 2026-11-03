@@ -14,6 +14,7 @@ import (
 	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/shopspring/decimal"
 )
 
 func TestConfig_DSN(t *testing.T) {
@@ -326,7 +327,7 @@ func TestWithRetry(t *testing.T) {
 			MaxRetries:      3,
 			InitialInterval: 2 * time.Millisecond,
 			MaxInterval:     10 * time.Millisecond,
-			Multiplier:      2.0,
+			Multiplier:      decimal.NewFromInt(2),
 		}
 
 		err := WithRetry(context.Background(), cfg, func(ctx context.Context) error {
@@ -371,7 +372,7 @@ func TestWithRetry(t *testing.T) {
 			MaxRetries:      2,
 			InitialInterval: 2 * time.Millisecond,
 			MaxInterval:     5 * time.Millisecond,
-			Multiplier:      1.5,
+			Multiplier:      decimal.RequireFromString("1.5"),
 		}
 
 		err := WithRetry(context.Background(), cfg, func(ctx context.Context) error {
