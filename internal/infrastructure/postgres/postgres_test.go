@@ -42,8 +42,8 @@ func TestConfig_DSN(t *testing.T) {
 			expectedDSN: "postgres://app_user:secret_password@127.0.0.1:5432/app_db?sslmode=verify-full",
 		},
 		{
-			name: "constructed dsn with defaults for empty fields",
-			cfg:  Config{},
+			name:        "constructed dsn with defaults for empty fields",
+			cfg:         Config{},
 			expectedDSN: "postgres://postgres@localhost:5432/postgres?sslmode=disable",
 		},
 	}

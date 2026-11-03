@@ -52,7 +52,7 @@ func (h *initPrettyHandler) Handle(_ context.Context, r slog.Record) error {
 	return nil
 }
 func (h *initPrettyHandler) WithAttrs(attrs []slog.Attr) slog.Handler { return h }
-func (h *initPrettyHandler) WithGroup(name string) slog.Handler      { return h }
+func (h *initPrettyHandler) WithGroup(name string) slog.Handler       { return h }
 
 // initPhaseLogger creates an environment-aware logger.
 // Best Practice: Colored Text for TTY, Structured JSON for Production.

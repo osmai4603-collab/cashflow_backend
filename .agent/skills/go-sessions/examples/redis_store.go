@@ -61,7 +61,7 @@ func (s *RedisSessionStore) Set(ctx context.Context, tokenHash string, data *Ses
 
 	pipe := s.client.Pipeline()
 	pipe.Set(ctx, s.sessionKey(tokenHash), payload, ttl)
-	
+
 	if data.UserID != "" {
 		pipe.SAdd(ctx, s.userKey(data.UserID), tokenHash)
 		// تعيين انتهاء صلاحية لمجموعة المستخدم مساوٍ للمهلة المطلقة

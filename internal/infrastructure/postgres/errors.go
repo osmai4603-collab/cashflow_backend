@@ -61,7 +61,7 @@ func TranslateError(op string, err error) error {
 
 		case pgerrcode.NumericValueOutOfRange, // 22003
 			pgerrcode.StringDataRightTruncationDataException, // 22001
-			pgerrcode.InvalidTextRepresentation:             // 22P02
+			pgerrcode.InvalidTextRepresentation:              // 22P02
 			return platformerr.Invalid(op, "invalid database data format or value range", err)
 
 		case pgerrcode.SerializationFailure: // 40001 -> UNAVAILABLE (503 retryable)
@@ -116,13 +116,13 @@ func IsTransient(err error) bool {
 	if pgErr, ok := ExtractPgError(err); ok {
 		switch pgErr.Code {
 		case pgerrcode.SerializationFailure, // 40001
-			pgerrcode.DeadlockDetected,    // 40P01
-			pgerrcode.AdminShutdown,       // 57P01
-			pgerrcode.CrashShutdown,       // 57P02
-			pgerrcode.CannotConnectNow,    // 57P03
-			pgerrcode.ConnectionFailure,   // 08006
+			pgerrcode.DeadlockDetected,       // 40P01
+			pgerrcode.AdminShutdown,          // 57P01
+			pgerrcode.CrashShutdown,          // 57P02
+			pgerrcode.CannotConnectNow,       // 57P03
+			pgerrcode.ConnectionFailure,      // 08006
 			pgerrcode.ConnectionDoesNotExist, // 08003
-			pgerrcode.ConnectionException: // 08000
+			pgerrcode.ConnectionException:    // 08000
 			return true
 		}
 	}

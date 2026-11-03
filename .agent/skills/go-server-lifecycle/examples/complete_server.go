@@ -144,7 +144,7 @@ func (h *prettyHandler) Handle(_ context.Context, r slog.Record) error {
 	return nil
 }
 func (h *prettyHandler) WithAttrs(attrs []slog.Attr) slog.Handler { return h }
-func (h *prettyHandler) WithGroup(name string) slog.Handler      { return h }
+func (h *prettyHandler) WithGroup(name string) slog.Handler       { return h }
 
 func initLogger() (*slog.Logger, io.Closer) {
 	out := os.Stderr

@@ -72,6 +72,33 @@ make build
 make test
 ```
 
+### تهيئة دور PostgreSQL
+
+يُنشئ الملف دور `cashflow` وقاعدة البيانات `train_db` عند غيابهما، ثم يمنح الدور
+الصلاحيات المطلوبة. نفّذه كمسؤول PostgreSQL متصلاً بقاعدة الصيانة `postgres`:
+
+```bash
+sudo -u postgres psql -d postgres -f scripts/bootstrap_cashflow_role.sql
+sudo -u postgres psql -d train_db
+```
+
+داخل `psql`، عيّن كلمة مرور للدور دون كتابتها في ملف:
+
+```text
+\password cashflow
+\q
+```
+
+مرّر كلمة المرور للتطبيق عبر متغير البيئة `DB_PASSWORD`، ثم شغّله:
+
+```bash
+read -rsp "PostgreSQL password: " DB_PASSWORD
+echo
+export DB_PASSWORD
+make run
+unset DB_PASSWORD
+```
+
 ### 4. إضافة Feature جديدة بسهولة
 
 يمكنك إنشاء موديول feature جديد وإضافته إلى مساحة العمل تلقائياً بأمر واحد:

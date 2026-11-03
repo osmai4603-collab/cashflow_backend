@@ -1,8 +1,8 @@
 package config
 
 import (
-	"fmt"
 	"net"
+	"net/url"
 	"time"
 )
 
@@ -142,14 +142,41 @@ func (c *Configuration) DSN() string {
 	if c.Database.DatabaseURL != "" {
 		return c.Database.DatabaseURL
 	}
+
+	host := c.Database.Host
+	if host == "" {
+		host = "localhost"
+	}
+	port := c.Database.Port
+	if port == "" {
+		port = "5432"
+	}
+	name := c.Database.Name
+	if name == "" {
+		name = "postgres"
+	}
+	user := c.Database.User
+	if user == "" {
+		user = "postgres"
+	}
 	sslMode := c.Database.SSLMode
 	if sslMode == "" {
 		sslMode = "disable"
 	}
+
+	userInfo := url.User(user)
 	if c.Database.Password != "" {
-		return fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=%s",
-			c.Database.User, c.Database.Password, c.Database.Host, c.Database.Port, c.Database.Name, sslMode)
+		userInfo = url.UserPassword(user, c.Database.Password)
 	}
-	return fmt.Sprintf("postgres://%s@%s:%s/%s?sslmode=%s",
-		c.Database.User, c.Database.Host, c.Database.Port, c.Database.Name, sslMode)
+
+	dsn := url.URL{
+		Scheme: "postgres",
+		User:   userInfo,
+		Host:   net.JoinHostPort(host, port),
+		Path:   name,
+	}
+	query := url.Values{}
+	query.Set("sslmode", sslMode)
+	dsn.RawQuery = query.Encode()
+	return dsn.String()
 }
