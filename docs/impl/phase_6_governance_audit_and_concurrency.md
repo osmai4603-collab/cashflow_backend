@@ -9,7 +9,7 @@
 > - `internal/features/accounting/internal/audit_chain.go`  
 > - `internal/features/accounting/subledger_handler.go`  
 > - `internal/features/accounting/ingest_subledger_event_usecase.go`  
-> - `internal/features/accounting/concurrency_test.go`
+> - `internal/features/accounting/internal/repository_integration_test.go`
 
 ---
 
@@ -221,7 +221,7 @@ func (uc *IngestSubledgerEventUseCase) Execute(ctx context.Context, req IngestSu
 
 ---
 
-### الخطوة 3: اختبار التزامن والترقيم غير المنقطع (`concurrency_test.go`)
+### الخطوة 3: اختبار التزامن والترقيم غير المنقطع (`internal/repository_integration_test.go`)
 
 ```go
 package accounting_test
