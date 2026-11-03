@@ -1,0 +1,15 @@
+{"time":"2026-11-03 02:58:23 AM","level":"INFO","msg":"phase 1 & 2 completed: listeners pre-bound synchronously","public_addr":"[::]:8070","management_addr":"[::]:8066"}
+{"time":"2026-11-03 02:58:23 AM","level":"INFO","msg":"phase 3 completed: servers configured with strict timeouts","read_timeout":"5s","read_header_timeout":"2s","write_timeout":"10s","idle_timeout":"2m0s","max_header_bytes":1048576}
+{"time":"2026-11-03 02:58:23 AM","level":"INFO","msg":"phase 4 & 5 completed: servers active and marked ready"}
+{"time":"2026-11-03 02:58:23 AM","level":"INFO","msg":"background worker started","worker":"system-heartbeat"}
+{"time":"2026-11-03 02:58:23 AM","level":"INFO","msg":"management server serving traffic","addr":"[::]:8066"}
+{"time":"2026-11-03 02:58:23 AM","level":"INFO","msg":"public server serving traffic","addr":"[::]:8070"}
+{"time":"2026-11-03 02:58:25 AM","level":"INFO","msg":"os termination signal received, initiating graceful shutdown"}
+{"time":"2026-11-03 02:58:25 AM","level":"INFO","msg":"phase 6: starting two-stage drain phase"}
+{"time":"2026-11-03 02:58:25 AM","level":"INFO","msg":"waiting for ingress traffic drain","duration":"5s"}
+{"time":"2026-11-03 02:58:30 AM","level":"INFO","msg":"phase 7: coordinated graceful teardown started","shutdown_timeout":"10s"}
+{"time":"2026-11-03 02:58:30 AM","level":"INFO","msg":"both http servers stopped accepting traffic"}
+{"time":"2026-11-03 02:58:30 AM","level":"INFO","msg":"phase 8: executing reverse-order cleanup"}
+{"time":"2026-11-03 02:58:30 AM","level":"INFO","msg":"stopping all background workers..."}
+{"time":"2026-11-03 02:58:30 AM","level":"INFO","msg":"background worker terminated cleanly","worker":"system-heartbeat"}
+{"time":"2026-11-03 02:58:30 AM","level":"INFO","msg":"all background workers stopped successfully"}
