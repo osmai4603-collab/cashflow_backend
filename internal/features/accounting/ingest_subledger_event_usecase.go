@@ -11,50 +11,39 @@ import (
 	"github.com/shopspring/decimal"
 )
 
-var subledgerJournalID = uuid.MustParse("00000000-0000-0000-0000-000000000001")
-
-type subledgerAccountMapping struct {
-	debitCode  string
-	debitType  AccountType
-	creditCode string
-	creditType AccountType
-}
-
-var subledgerMappings = map[string]subledgerAccountMapping{
-	"goods_delivered": {
-		debitCode: "501000", debitType: AccountTypeExpense,
-		creditCode: "140000", creditType: AccountTypeAsset,
-	},
-	"customer_invoice_issued": {
-		debitCode: "105000", debitType: AccountTypeAsset,
-		creditCode: "401000", creditType: AccountTypeIncome,
-	},
-	"payment_received": {
-		debitCode: "102000", debitType: AccountTypeAsset,
-		creditCode: "105000", creditType: AccountTypeAsset,
-	},
-}
-
 type IngestSubledgerEventUseCase struct {
-	repo   AccountingRepository
-	logger *slog.Logger
+	repo               AccountingRepository
+	rates              FXClosingRateProvider
+	functionalCurrency string
+	logger             *slog.Logger
 }
 
 func NewIngestSubledgerEventUseCase(repo AccountingRepository, logger *slog.Logger) *IngestSubledgerEventUseCase {
+	return NewIngestSubledgerEventUseCaseWithRates(repo, nil, "SAR", logger)
+}
+
+func NewIngestSubledgerEventUseCaseWithRates(
+	repo AccountingRepository,
+	rates FXClosingRateProvider,
+	functionalCurrency string,
+	logger *slog.Logger,
+) *IngestSubledgerEventUseCase {
 	if logger == nil {
 		logger = slog.Default()
 	}
-	return &IngestSubledgerEventUseCase{repo: repo, logger: logger}
+	currency, err := normalizeCurrency(functionalCurrency, "SAR")
+	if err != nil {
+		currency = "SAR"
+	}
+	return &IngestSubledgerEventUseCase{
+		repo: repo, rates: rates, functionalCurrency: currency, logger: logger,
+	}
 }
 
 func (uc *IngestSubledgerEventUseCase) Execute(ctx context.Context, request IngestSubledgerEventRequest) (*MoveResponse, error) {
 	logger := useCaseLogger(ctx, uc.logger, "ingest_subledger_event")
 	if err := request.Validate(); err != nil {
 		return nil, err
-	}
-	mapping, ok := subledgerMappings[request.EventType]
-	if !ok {
-		return nil, fmt.Errorf("unknown subledger event_type: %s", request.EventType)
 	}
 	existing, err := uc.repo.GetProcessedEventMove(ctx, request.IdempotencyKey)
 	if err != nil {
@@ -66,13 +55,26 @@ func (uc *IngestSubledgerEventUseCase) Execute(ctx context.Context, request Inge
 		return &response, nil
 	}
 
-	debitAccount, err := uc.getMappedAccount(ctx, mapping.debitCode, mapping.debitType)
+	mapping, err := uc.repo.GetSubledgerEventMapping(ctx, request.EventType)
 	if err != nil {
-		return nil, fmt.Errorf("resolve debit account: %w", err)
+		return nil, fmt.Errorf("%w: event_type %q", ErrSubledgerMappingNotFound, request.EventType)
 	}
-	creditAccount, err := uc.getMappedAccount(ctx, mapping.creditCode, mapping.creditType)
+	if mapping == nil || !mapping.IsActive {
+		return nil, fmt.Errorf("%w: event_type %q", ErrSubledgerMappingNotFound, request.EventType)
+	}
+	debitAccount, err := uc.repo.GetAccountByID(ctx, mapping.DebitAccountID)
 	if err != nil {
-		return nil, fmt.Errorf("resolve credit account: %w", err)
+		return nil, fmt.Errorf("resolve mapped debit account: %w", err)
+	}
+	if debitAccount == nil || !debitAccount.IsActive {
+		return nil, fmt.Errorf("mapped debit account %s must be active", mapping.DebitAccountID)
+	}
+	creditAccount, err := uc.repo.GetAccountByID(ctx, mapping.CreditAccountID)
+	if err != nil {
+		return nil, fmt.Errorf("resolve mapped credit account: %w", err)
+	}
+	if creditAccount == nil || !creditAccount.IsActive {
+		return nil, fmt.Errorf("mapped credit account %s must be active", mapping.CreditAccountID)
 	}
 	eventDate, err := parseDate(request.Date, "date")
 	if err != nil {
@@ -88,13 +90,27 @@ func (uc *IngestSubledgerEventUseCase) Execute(ctx context.Context, request Inge
 	if err := period.CanPost(); err != nil {
 		return nil, err
 	}
-	journal, err := uc.repo.GetJournalByID(ctx, subledgerJournalID)
+	journal, err := uc.repo.GetJournalByID(ctx, mapping.JournalID)
 	if err != nil {
 		return nil, fmt.Errorf("get subledger journal: %w", err)
 	}
 	if journal == nil || !journal.IsActive {
 		return nil, errors.New("subledger journal must exist and be active")
 	}
+	rate := decimal.NewFromInt(1)
+	if request.Currency != uc.functionalCurrency {
+		if uc.rates == nil {
+			return nil, fmt.Errorf("%w: no rate provider configured for currency %s on date %s", ErrExchangeRateMissing, request.Currency, eventDate.Format(dateLayout))
+		}
+		rate, err = uc.rates.GetClosingRate(ctx, request.Currency, uc.functionalCurrency, eventDate)
+		if err != nil {
+			return nil, fmt.Errorf("convert subledger event to %s: %w", uc.functionalCurrency, err)
+		}
+		if !rate.IsPositive() {
+			return nil, fmt.Errorf("exchange rate %s/%s on %s must be positive", request.Currency, uc.functionalCurrency, eventDate.Format(dateLayout))
+		}
+	}
+	functionalAmount := request.Amount.Mul(rate).Round(4)
 
 	now := time.Now().UTC()
 	moveID := uuid.New()
@@ -109,13 +125,13 @@ func (uc *IngestSubledgerEventUseCase) Execute(ctx context.Context, request Inge
 		Lines: []AccountMoveLine{
 			{
 				ID: uuid.New(), MoveID: moveID, AccountID: debitAccount.ID,
-				Debit: request.Amount, Credit: decimal.Zero,
+				Debit: functionalAmount, Credit: decimal.Zero,
 				AmountCurrency: request.Amount, CurrencyID: request.Currency,
 				Date: eventDate, CreatedAt: now,
 			},
 			{
 				ID: uuid.New(), MoveID: moveID, AccountID: creditAccount.ID,
-				Debit: decimal.Zero, Credit: request.Amount,
+				Debit: decimal.Zero, Credit: functionalAmount,
 				AmountCurrency: request.Amount.Neg(), CurrencyID: request.Currency,
 				Date: eventDate, CreatedAt: now,
 			},
@@ -142,15 +158,4 @@ func (uc *IngestSubledgerEventUseCase) Execute(ctx context.Context, request Inge
 	logger.InfoContext(ctx, "subledger event posted", slog.String("move_id", move.ID.String()), slog.String("idempotency_key", request.IdempotencyKey))
 	response := ToMoveResponse(move)
 	return &response, nil
-}
-
-func (uc *IngestSubledgerEventUseCase) getMappedAccount(ctx context.Context, code string, expectedType AccountType) (*Account, error) {
-	account, err := uc.repo.GetAccountByCode(ctx, code)
-	if err != nil {
-		return nil, fmt.Errorf("account %s is not configured: %w", code, err)
-	}
-	if account == nil || !account.IsActive || account.Type != expectedType {
-		return nil, fmt.Errorf("account %s must be active and have type %s", code, expectedType)
-	}
-	return account, nil
 }

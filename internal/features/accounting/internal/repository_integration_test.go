@@ -32,6 +32,17 @@ func TestPostgresRepositoryIntegration(t *testing.T) {
 		t.Fatal(err)
 	}
 	repository := NewPostgresRepository(pool)
+	rates := NewPostgresFXRateProvider(pool)
+	rate, err := rates.GetClosingRate(ctx, "USD", "SAR", time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC))
+	if err != nil {
+		t.Fatalf("GetClosingRate(USD/SAR): %v", err)
+	}
+	if !rate.Equal(decimal.RequireFromString("3.750000")) {
+		t.Fatalf("USD/SAR rate = %s, want 3.750000", rate)
+	}
+	if _, err := rates.GetClosingRate(ctx, "EUR", "SAR", time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)); !errors.Is(err, accounting.ErrExchangeRateMissing) {
+		t.Fatalf("GetClosingRate(EUR/SAR) error = %v, want ErrExchangeRateMissing", err)
+	}
 
 	year := &accounting.FiscalYear{
 		Year: 2026, StartDate: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC),
@@ -76,6 +87,25 @@ func TestPostgresRepositoryIntegration(t *testing.T) {
 	if err := repository.CreateAccount(ctx, inventoryAccount); err != nil {
 		t.Fatalf("CreateAccount(inventory): %v", err)
 	}
+	parentID := debitAccount.ID
+	creditAccount.ParentID = &parentID
+	if err := repository.UpdateAccount(ctx, creditAccount); err != nil {
+		t.Fatalf("UpdateAccount(set parent): %v", err)
+	}
+	parentID = creditAccount.ID
+	debitAccount.ParentID = &parentID
+	if err := repository.UpdateAccount(ctx, debitAccount); err == nil {
+		t.Fatal("UpdateAccount() created a cycle in the account hierarchy")
+	}
+	debitAccount.ParentID = nil
+
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO subledger_event_mappings (event_type, journal_id, debit_account_id, credit_account_id)
+		VALUES ('goods_delivered', $1, $2, $3)`,
+		subledgerJournalID, costAccount.ID, inventoryAccount.ID,
+	); err != nil {
+		t.Fatalf("insert subledger mapping: %v", err)
+	}
 	subledger := accounting.NewIngestSubledgerEventUseCase(repository, nil)
 	eventRequest := accounting.IngestSubledgerEventRequest{
 		IdempotencyKey: "integration-event-1", EventType: "goods_delivered",
@@ -106,6 +136,24 @@ func TestPostgresRepositoryIntegration(t *testing.T) {
 	postIntegrationMove(t, ctx, repository, priorMove)
 	periodMove := integrationMove(journalID, period.ID, reportDate, debitAccount.ID, creditAccount.ID, 20)
 	postIntegrationMove(t, ctx, repository, periodMove)
+
+	staleDraft := integrationMove(journalID, period.ID, reportDate, debitAccount.ID, creditAccount.ID, 3)
+	if err := repository.SaveDraftMove(ctx, staleDraft); err != nil {
+		t.Fatalf("SaveDraftMove(stale case): %v", err)
+	}
+	staleSnapshot, err := repository.GetMoveByID(ctx, staleDraft.ID)
+	if err != nil {
+		t.Fatalf("GetMoveByID(stale case): %v", err)
+	}
+	if _, err := pool.Exec(ctx, `
+		UPDATE account_moves SET updated_at = updated_at + INTERVAL '1 second' WHERE id = $1`,
+		staleDraft.ID,
+	); err != nil {
+		t.Fatalf("change draft timestamp: %v", err)
+	}
+	if err := repository.PostMoveAtomic(ctx, staleSnapshot, integrationAudit(staleDraft.ID)); !errors.Is(err, accounting.ErrMoveChanged) {
+		t.Fatalf("PostMoveAtomic(stale draft) error = %v, want ErrMoveChanged", err)
+	}
 
 	const concurrentMoves = 50
 	moves := make([]*accounting.AccountMove, concurrentMoves)
@@ -226,6 +274,21 @@ func TestPostgresRepositoryIntegration(t *testing.T) {
 	if got := ledger[len(ledger)-1].RunningBalance.String(); got != "169" {
 		t.Fatalf("ending running balance = %s, want 169", got)
 	}
+	if err := repository.UpdatePeriodState(ctx, period.ID, accounting.PeriodStateSoftClosed, uuid.New()); err != nil {
+		t.Fatalf("UpdatePeriodState(open to soft closed): %v", err)
+	}
+	if err := repository.UpdatePeriodState(ctx, period.ID, accounting.PeriodStateHardClosed, uuid.New()); err != nil {
+		t.Fatalf("UpdatePeriodState(soft to hard closed): %v", err)
+	}
+	if err := repository.UpdatePeriodState(ctx, period.ID, accounting.PeriodStateOpen, uuid.New()); !errors.Is(err, accounting.ErrInvalidPeriodTransition) {
+		t.Fatalf("UpdatePeriodState(hard closed to open) error = %v, want ErrInvalidPeriodTransition", err)
+	}
+	if _, err := pool.Exec(ctx, `UPDATE fiscal_years SET state = 'closed' WHERE id = $1`, year.ID); err != nil {
+		t.Fatalf("close fiscal year fixture: %v", err)
+	}
+	if err := repository.UpdatePeriodState(ctx, period.ID, accounting.PeriodStateOpen, uuid.New()); !errors.Is(err, accounting.ErrPeriodClosed) {
+		t.Fatalf("UpdatePeriodState() for a closed year error = %v, want ErrPeriodClosed", err)
+	}
 }
 
 func newIntegrationPool(ctx context.Context, t *testing.T, databaseURL string) (*pgxpool.Pool, error) {
@@ -271,6 +334,7 @@ func newIntegrationPool(ctx context.Context, t *testing.T, databaseURL string) (
 	for _, name := range []string{
 		"000002_create_accounting_schema.up.sql",
 		"000003_accounting_governance.up.sql",
+		"000004_accounting_controls.up.sql",
 	} {
 		migration, err := migrations.FS.ReadFile(name)
 		if err != nil {

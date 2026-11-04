@@ -50,3 +50,26 @@ func (h *AccountHandler) HandleTree(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, response)
 }
+
+func (h *AccountHandler) HandleUpdate(w http.ResponseWriter, r *http.Request) {
+	accountID, err := parseRouteUUID(r, "id")
+	if err != nil {
+		writeBadRequest(w, r, h.logger, err)
+		return
+	}
+	var request UpdateAccountRequest
+	if err := decodeJSON(r, &request); err != nil {
+		writeBadRequest(w, r, h.logger, err)
+		return
+	}
+	if err := request.Validate(); err != nil {
+		writeValidationError(w, r, h.logger, err)
+		return
+	}
+	response, err := h.uc.UpdateAccount.Execute(r.Context(), accountID, request)
+	if err != nil {
+		writeAccountingError(w, r, h.logger, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, response)
+}

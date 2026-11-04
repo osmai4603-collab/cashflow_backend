@@ -48,17 +48,20 @@ func (uc *CreateAccountUseCase) Execute(ctx context.Context, request CreateAccou
 
 	now := time.Now().UTC()
 	account := &Account{
-		ID:             uuid.New(),
-		Code:           request.Code,
-		Name:           request.Name,
-		Type:           AccountType(request.Type),
-		NormalBalance:  NormalBalance(request.NormalBalance),
-		CurrencyID:     request.CurrencyID,
-		ParentID:       cloneUUID(request.ParentID),
-		IsReconcilable: request.IsReconcilable,
-		IsActive:       true,
-		CreatedAt:      now,
-		UpdatedAt:      now,
+		ID:                  uuid.New(),
+		Code:                request.Code,
+		Name:                request.Name,
+		Type:                AccountType(request.Type),
+		NormalBalance:       NormalBalance(request.NormalBalance),
+		CurrencyID:          request.CurrencyID,
+		ParentID:            cloneUUID(request.ParentID),
+		IsReconcilable:      request.IsReconcilable,
+		IsActive:            true,
+		IsCashEquivalent:    request.IsCashEquivalent,
+		IsNonCashAdjustment: request.IsNonCashAdjustment,
+		CashFlowActivity:    request.CashFlowActivity,
+		CreatedAt:           now,
+		UpdatedAt:           now,
 	}
 	if err := uc.repo.CreateAccount(ctx, account); err != nil {
 		logger.ErrorContext(ctx, "account creation failed", slog.String("account_code", account.Code), slog.Any("error", err))

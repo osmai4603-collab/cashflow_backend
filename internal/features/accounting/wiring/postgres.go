@@ -10,7 +10,9 @@ import (
 )
 
 func NewPostgresUseCases(pool *pgxpool.Pool, publisher accounting.EventPublisher, logger *slog.Logger) *accounting.UseCases {
-	return accounting.NewUseCases(accountingrepo.NewPostgresRepository(pool), publisher, logger)
+	repo := accountingrepo.NewPostgresRepository(pool)
+	rates := accountingrepo.NewPostgresFXRateProvider(pool)
+	return accounting.NewUseCasesWithFXRateProvider(repo, publisher, rates, logger)
 }
 
 func NewPostgresUseCasesWithMakerChecker(
@@ -19,8 +21,11 @@ func NewPostgresUseCasesWithMakerChecker(
 	settings accounting.MakerCheckerSettings,
 	logger *slog.Logger,
 ) (*accounting.UseCases, error) {
-	useCases, err := accounting.NewUseCasesWithMakerChecker(
-		accountingrepo.NewPostgresRepository(pool), publisher, settings, logger,
+	repo := accountingrepo.NewPostgresRepository(pool)
+	rates := accountingrepo.NewPostgresFXRateProvider(pool)
+	useCases, err := accounting.NewUseCasesWithFXRatesAndMakerChecker(
+		repo, publisher, rates, settings,
+		logger,
 	)
 	if err != nil {
 		return nil, err

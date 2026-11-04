@@ -250,7 +250,7 @@ func TestPostMoveUseCaseMakerChecker(t *testing.T) {
 		uc := newPostMoveUseCase(repo, nil, settings, nil)
 
 		_, err := uc.Execute(context.Background(), repo.move.ID, uuid.Nil)
-		if !errors.Is(err, ErrMakerCheckerActorRequired) || repo.postCalls != 0 {
+		if !errors.Is(err, ErrAccountingActorRequired) || repo.postCalls != 0 {
 			t.Fatalf("Execute() error = %v, atomic calls = %d", err, repo.postCalls)
 		}
 	})
@@ -470,9 +470,14 @@ func TestRevalueFXUseCaseUsesCorrectGainAndLossSides(t *testing.T) {
 
 func TestIngestSubledgerEventUseCaseIsIdempotent(t *testing.T) {
 	repo := newMockAccountingRepository()
-	repo.accountsByCode["501000"] = &Account{ID: uuid.New(), Code: "501000", Type: AccountTypeExpense, IsActive: true}
-	repo.accountsByCode["140000"] = &Account{ID: uuid.New(), Code: "140000", Type: AccountTypeAsset, IsActive: true}
-	repo.journal = &Journal{ID: subledgerJournalID, IsActive: true}
+	debitAccountID, creditAccountID, journalID := uuid.New(), uuid.New(), uuid.New()
+	repo.accountsByID[debitAccountID] = &Account{ID: debitAccountID, Type: AccountTypeExpense, IsActive: true}
+	repo.accountsByID[creditAccountID] = &Account{ID: creditAccountID, Type: AccountTypeAsset, IsActive: true}
+	repo.eventMappings["goods_delivered"] = &SubledgerEventMapping{
+		EventType: "goods_delivered", JournalID: journalID,
+		DebitAccountID: debitAccountID, CreditAccountID: creditAccountID, IsActive: true,
+	}
+	repo.journal = &Journal{ID: journalID, IsActive: true}
 	repo.period = &FiscalPeriod{ID: uuid.New(), State: PeriodStateOpen}
 	request := IngestSubledgerEventRequest{
 		IdempotencyKey: "event-001", EventType: "goods_delivered", Date: "2026-11-03",
@@ -489,6 +494,47 @@ func TestIngestSubledgerEventUseCaseIsIdempotent(t *testing.T) {
 	}
 	if first.ID != second.ID || first.State != string(MoveStatePosted) || repo.postNewCalls != 1 {
 		t.Fatalf("idempotent responses = %s and %s; atomic create calls = %d", first.ID, second.ID, repo.postNewCalls)
+	}
+}
+
+func TestIngestSubledgerEventUseCaseRejectsUnmappedEvent(t *testing.T) {
+	repo := newMockAccountingRepository()
+	request := IngestSubledgerEventRequest{
+		IdempotencyKey: "unmapped-event-001", EventType: "unconfigured_event",
+		Date: "2026-11-03", Amount: decimal.NewFromInt(50), Currency: "SAR",
+	}
+
+	_, err := NewIngestSubledgerEventUseCase(repo, nil).Execute(context.Background(), request)
+	if !errors.Is(err, ErrSubledgerMappingNotFound) {
+		t.Fatalf("Execute() error = %v, want ErrSubledgerMappingNotFound", err)
+	}
+	if repo.postNewCalls != 0 {
+		t.Fatalf("unmapped event attempted %d postings, want none", repo.postNewCalls)
+	}
+}
+
+func TestIngestSubledgerEventUseCaseRejectsForeignCurrencyWithoutRate(t *testing.T) {
+	repo := newMockAccountingRepository()
+	debitAccountID, creditAccountID, journalID := uuid.New(), uuid.New(), uuid.New()
+	repo.accountsByID[debitAccountID] = &Account{ID: debitAccountID, Type: AccountTypeExpense, IsActive: true}
+	repo.accountsByID[creditAccountID] = &Account{ID: creditAccountID, Type: AccountTypeAsset, IsActive: true}
+	repo.eventMappings["goods_delivered"] = &SubledgerEventMapping{
+		EventType: "goods_delivered", JournalID: journalID,
+		DebitAccountID: debitAccountID, CreditAccountID: creditAccountID, IsActive: true,
+	}
+	repo.journal = &Journal{ID: journalID, IsActive: true}
+	repo.period = &FiscalPeriod{ID: uuid.New(), State: PeriodStateOpen}
+	request := IngestSubledgerEventRequest{
+		IdempotencyKey: "missing-rate-event-001", EventType: "goods_delivered",
+		Date: "2026-11-03", Amount: decimal.NewFromInt(50), Currency: "EUR",
+	}
+
+	_, err := NewIngestSubledgerEventUseCase(repo, nil).Execute(context.Background(), request)
+	if !errors.Is(err, ErrExchangeRateMissing) {
+		t.Fatalf("Execute() error = %v, want ErrExchangeRateMissing", err)
+	}
+	if repo.postNewCalls != 0 {
+		t.Fatalf("event without an exchange rate attempted %d postings, want none", repo.postNewCalls)
 	}
 }
 

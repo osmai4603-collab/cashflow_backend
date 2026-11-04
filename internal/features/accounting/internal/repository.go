@@ -4,8 +4,10 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 	"time"
 
 	"cashflow_backend/internal/features/accounting"
@@ -42,12 +44,14 @@ func (r *PostgresRepository) CreateAccount(ctx context.Context, acc *accounting.
 	const query = `
 		INSERT INTO accounts (
 			id, code, name, account_type, normal_balance, currency_id, parent_id,
-			is_reconcilable, is_active, created_at, updated_at
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`
+			is_reconcilable, is_active, is_cash_equivalent, is_non_cash_adjustment,
+			cash_flow_activity, created_at, updated_at
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`
 
 	_, err := r.pool.Exec(ctx, query,
 		acc.ID, acc.Code, acc.Name, acc.Type, acc.NormalBalance, acc.CurrencyID,
-		acc.ParentID, acc.IsReconcilable, acc.IsActive, acc.CreatedAt, acc.UpdatedAt,
+		acc.ParentID, acc.IsReconcilable, acc.IsActive, acc.IsCashEquivalent,
+		acc.IsNonCashAdjustment, acc.CashFlowActivity, acc.CreatedAt, acc.UpdatedAt,
 	)
 	if err != nil {
 		var pgErr *pgconn.PgError
@@ -59,10 +63,97 @@ func (r *PostgresRepository) CreateAccount(ctx context.Context, acc *accounting.
 	return nil
 }
 
+func (r *PostgresRepository) UpdateAccount(ctx context.Context, account *accounting.Account) error {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin account update: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	if account.ParentID != nil {
+		if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock($1, $2)`, int32(0x41434354), int32(1)); err != nil {
+			return fmt.Errorf("lock account hierarchy: %w", err)
+		}
+		var parentIsDescendant bool
+		if err := tx.QueryRow(ctx, `
+			WITH RECURSIVE descendants(id) AS (
+				SELECT $1::uuid
+				UNION
+				SELECT child.id
+				FROM accounts child
+				JOIN descendants parent ON child.parent_id = parent.id
+			)
+			SELECT EXISTS (SELECT 1 FROM descendants WHERE id = $2)`,
+			account.ID, *account.ParentID,
+		).Scan(&parentIsDescendant); err != nil {
+			return fmt.Errorf("check account hierarchy: %w", err)
+		}
+		if parentIsDescendant {
+			return errors.New("an account cannot be moved under one of its descendants")
+		}
+	}
+
+	var oldCode string
+	var oldType accounting.AccountType
+	const lockQuery = `
+		SELECT code, account_type
+		FROM accounts
+		WHERE id = $1
+		FOR UPDATE`
+	if err := tx.QueryRow(ctx, lockQuery, account.ID).Scan(&oldCode, &oldType); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return accounting.ErrAccountNotFound
+		}
+		return fmt.Errorf("lock account for update: %w", err)
+	}
+	if oldCode != account.Code || oldType != account.Type {
+		var hasPostedMoves bool
+		if err := tx.QueryRow(ctx, `
+			SELECT EXISTS (
+				SELECT 1
+				FROM account_move_lines l
+				JOIN account_moves m ON m.id = l.move_id
+				WHERE l.account_id = $1 AND m.state IN ('posted', 'reversed')
+			)`, account.ID).Scan(&hasPostedMoves); err != nil {
+			return fmt.Errorf("check account posting history: %w", err)
+		}
+		if hasPostedMoves {
+			return accounting.ErrAccountHasPostedMoves
+		}
+	}
+	const updateQuery = `
+		UPDATE accounts SET
+			code = $2, name = $3, account_type = $4, normal_balance = $5,
+			currency_id = $6, parent_id = $7, is_reconcilable = $8, is_active = $9,
+			is_cash_equivalent = $10, is_non_cash_adjustment = $11,
+			cash_flow_activity = $12, updated_at = $13
+		WHERE id = $1`
+	tag, err := tx.Exec(ctx, updateQuery,
+		account.ID, account.Code, account.Name, account.Type, account.NormalBalance,
+		account.CurrencyID, account.ParentID, account.IsReconcilable, account.IsActive,
+		account.IsCashEquivalent, account.IsNonCashAdjustment, account.CashFlowActivity, account.UpdatedAt,
+	)
+	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.ConstraintName == "uq_accounts_code" {
+			return fmt.Errorf("%w: %s", accounting.ErrDuplicateAccountCode, account.Code)
+		}
+		return fmt.Errorf("update account: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return accounting.ErrAccountNotFound
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit account update: %w", err)
+	}
+	return nil
+}
+
 func (r *PostgresRepository) GetAccountByID(ctx context.Context, id uuid.UUID) (*accounting.Account, error) {
 	const query = `
 		SELECT id, code, name, account_type, normal_balance, currency_id, parent_id,
-			is_reconcilable, is_active, created_at, updated_at
+			is_reconcilable, is_active, is_cash_equivalent, is_non_cash_adjustment,
+			cash_flow_activity, created_at, updated_at
 		FROM accounts WHERE id = $1`
 	account, err := scanAccount(r.pool.QueryRow(ctx, query, id))
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -77,7 +168,8 @@ func (r *PostgresRepository) GetAccountByID(ctx context.Context, id uuid.UUID) (
 func (r *PostgresRepository) GetAccountByCode(ctx context.Context, code string) (*accounting.Account, error) {
 	const query = `
 		SELECT id, code, name, account_type, normal_balance, currency_id, parent_id,
-			is_reconcilable, is_active, created_at, updated_at
+			is_reconcilable, is_active, is_cash_equivalent, is_non_cash_adjustment,
+			cash_flow_activity, created_at, updated_at
 		FROM accounts WHERE code = $1`
 	account, err := scanAccount(r.pool.QueryRow(ctx, query, code))
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -92,7 +184,8 @@ func (r *PostgresRepository) GetAccountByCode(ctx context.Context, code string) 
 func (r *PostgresRepository) ListAccounts(ctx context.Context) ([]*accounting.Account, error) {
 	const query = `
 		SELECT id, code, name, account_type, normal_balance, currency_id, parent_id,
-			is_reconcilable, is_active, created_at, updated_at
+			is_reconcilable, is_active, is_cash_equivalent, is_non_cash_adjustment,
+			cash_flow_activity, created_at, updated_at
 		FROM accounts ORDER BY code ASC`
 	rows, err := r.pool.Query(ctx, query)
 	if err != nil {
@@ -112,6 +205,46 @@ func (r *PostgresRepository) ListAccounts(ctx context.Context) ([]*accounting.Ac
 		return nil, fmt.Errorf("iterate accounts: %w", err)
 	}
 	return accounts, nil
+}
+
+func (r *PostgresRepository) GetSubledgerEventMapping(ctx context.Context, eventType string) (*accounting.SubledgerEventMapping, error) {
+	const query = `
+		SELECT event_type, journal_id, debit_account_id, credit_account_id,
+			COALESCE(description, ''), is_active
+		FROM subledger_event_mappings
+		WHERE event_type = $1 AND is_active = TRUE`
+	var mapping accounting.SubledgerEventMapping
+	if err := r.pool.QueryRow(ctx, query, eventType).Scan(
+		&mapping.EventType, &mapping.JournalID, &mapping.DebitAccountID,
+		&mapping.CreditAccountID, &mapping.Description, &mapping.IsActive,
+	); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, accounting.ErrSubledgerMappingNotFound
+		}
+		return nil, fmt.Errorf("get subledger event mapping: %w", err)
+	}
+	return &mapping, nil
+}
+
+func (r *PostgresRepository) GetAccountingConfiguration(ctx context.Context) (*accounting.AccountingConfiguration, error) {
+	const query = `
+		SELECT retained_earnings_account_id, fx_gain_account_id, fx_loss_account_id,
+			fx_reconciliation_journal_id, functional_currency
+		FROM accounting_configurations
+		ORDER BY updated_at DESC
+		LIMIT 1`
+	var configuration accounting.AccountingConfiguration
+	if err := r.pool.QueryRow(ctx, query).Scan(
+		&configuration.RetainedEarningsAccountID, &configuration.FXGainAccountID,
+		&configuration.FXLossAccountID, &configuration.FXReconciliationJournalID,
+		&configuration.FunctionalCurrency,
+	); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, accounting.ErrAccountingConfigurationMissing
+		}
+		return nil, fmt.Errorf("get accounting configuration: %w", err)
+	}
+	return &configuration, nil
 }
 
 func (r *PostgresRepository) CreateFiscalYear(ctx context.Context, year *accounting.FiscalYear, periods []*accounting.FiscalPeriod) error {
@@ -188,20 +321,114 @@ func (r *PostgresRepository) GetPeriodByID(ctx context.Context, id uuid.UUID) (*
 }
 
 func (r *PostgresRepository) UpdatePeriodState(ctx context.Context, id uuid.UUID, state accounting.PeriodState, actorID uuid.UUID) error {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin fiscal period state update: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	var yearState string
+	var periodState accounting.PeriodState
+	if err := tx.QueryRow(ctx, `
+		SELECT fy.state, fp.state
+		FROM fiscal_periods fp
+		JOIN fiscal_years fy ON fy.id = fp.fiscal_year_id
+		WHERE fp.id = $1
+		FOR UPDATE OF fy, fp`,
+		id,
+	).Scan(&yearState, &periodState); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return accounting.ErrPeriodNotFound
+		}
+		return fmt.Errorf("lock fiscal year for period state update: %w", err)
+	}
+	if yearState != "open" {
+		return accounting.ErrPeriodClosed
+	}
+	if periodState == state {
+		return nil
+	}
+	switch periodState {
+	case accounting.PeriodStateOpen:
+		if state != accounting.PeriodStateSoftClosed && state != accounting.PeriodStateHardClosed {
+			return accounting.ErrInvalidPeriodTransition
+		}
+	case accounting.PeriodStateSoftClosed:
+		if state != accounting.PeriodStateOpen && state != accounting.PeriodStateHardClosed {
+			return accounting.ErrInvalidPeriodTransition
+		}
+	default:
+		return accounting.ErrInvalidPeriodTransition
+	}
+
 	const query = `
 		UPDATE fiscal_periods
 		SET state = $2,
 			closed_at = CASE WHEN $2 = 'open' THEN NULL ELSE NOW() END,
 			closed_by = CASE WHEN $2 = 'open' THEN NULL ELSE $3 END
 		WHERE id = $1`
-	tag, err := r.pool.Exec(ctx, query, id, state, actorID)
+	tag, err := tx.Exec(ctx, query, id, state, actorID)
 	if err != nil {
 		return fmt.Errorf("update fiscal period state: %w", err)
 	}
 	if tag.RowsAffected() == 0 {
 		return accounting.ErrPeriodNotFound
 	}
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit fiscal period state update: %w", err)
+	}
 	return nil
+}
+
+func (r *PostgresRepository) ListFiscalYears(ctx context.Context) ([]*accounting.FiscalYearSummary, error) {
+	const yearsQuery = `
+		SELECT id, year, start_date, end_date, state, created_at
+		FROM fiscal_years
+		ORDER BY start_date DESC`
+	rows, err := r.pool.Query(ctx, yearsQuery)
+	if err != nil {
+		return nil, fmt.Errorf("list fiscal years: %w", err)
+	}
+	defer rows.Close()
+	summaries := make([]*accounting.FiscalYearSummary, 0)
+	for rows.Next() {
+		year := &accounting.FiscalYear{}
+		if err := rows.Scan(&year.ID, &year.Year, &year.StartDate, &year.EndDate, &year.State, &year.CreatedAt); err != nil {
+			return nil, fmt.Errorf("scan fiscal year: %w", err)
+		}
+		summaries = append(summaries, &accounting.FiscalYearSummary{
+			Year: year, Periods: make([]*accounting.FiscalPeriod, 0),
+		})
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate fiscal years: %w", err)
+	}
+	for _, summary := range summaries {
+		const periodsQuery = `
+			SELECT id, fiscal_year_id, period_number, name, start_date, end_date, state,
+				closed_at, closed_by, created_at
+			FROM fiscal_periods
+			WHERE fiscal_year_id = $1
+			ORDER BY period_number`
+		periodRows, err := r.pool.Query(ctx, periodsQuery, summary.Year.ID)
+		if err != nil {
+			return nil, fmt.Errorf("list fiscal year periods: %w", err)
+		}
+		for periodRows.Next() {
+			period, err := scanPeriod(periodRows)
+			if err != nil {
+				periodRows.Close()
+				return nil, fmt.Errorf("scan fiscal period: %w", err)
+			}
+			summary.Periods = append(summary.Periods, period)
+		}
+		if err := periodRows.Err(); err != nil {
+			periodRows.Close()
+			return nil, fmt.Errorf("iterate fiscal periods: %w", err)
+		}
+		periodRows.Close()
+	}
+	return summaries, nil
 }
 
 func (r *PostgresRepository) GetJournalByID(ctx context.Context, id uuid.UUID) (*accounting.Journal, error) {
@@ -220,6 +447,33 @@ func (r *PostgresRepository) GetJournalByID(ctx context.Context, id uuid.UUID) (
 		return nil, fmt.Errorf("get journal by id: %w", err)
 	}
 	return &journal, nil
+}
+
+func (r *PostgresRepository) ListJournals(ctx context.Context) ([]*accounting.Journal, error) {
+	const query = `
+		SELECT id, code, name, type, sequence_prefix, next_number, is_active, created_at
+		FROM journals
+		ORDER BY code`
+	rows, err := r.pool.Query(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("list journals: %w", err)
+	}
+	defer rows.Close()
+	journals := make([]*accounting.Journal, 0)
+	for rows.Next() {
+		journal := &accounting.Journal{}
+		if err := rows.Scan(
+			&journal.ID, &journal.Code, &journal.Name, &journal.Type, &journal.SequencePrefix,
+			&journal.NextNumber, &journal.IsActive, &journal.CreatedAt,
+		); err != nil {
+			return nil, fmt.Errorf("scan journal: %w", err)
+		}
+		journals = append(journals, journal)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate journals: %w", err)
+	}
+	return journals, nil
 }
 
 func (r *PostgresRepository) GetNextSequenceWithLock(ctx context.Context, tx pgx.Tx, journalID uuid.UUID) (string, error) {
@@ -263,7 +517,7 @@ func (r *PostgresRepository) SaveDraftMove(ctx context.Context, move *accounting
 	if move.CreatedAt.IsZero() {
 		move.CreatedAt = time.Now().UTC()
 	}
-	move.UpdatedAt = time.Now().UTC()
+	move.UpdatedAt = time.Now().UTC().Truncate(time.Microsecond)
 
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
@@ -307,6 +561,31 @@ func (r *PostgresRepository) SaveDraftMove(ctx context.Context, move *accounting
 	return nil
 }
 
+func (r *PostgresRepository) DeleteDraftMove(ctx context.Context, id uuid.UUID) error {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin delete draft move: %w", err)
+	}
+	defer tx.Rollback(ctx)
+	var state accounting.MoveState
+	if err := tx.QueryRow(ctx, `SELECT state FROM account_moves WHERE id = $1 FOR UPDATE`, id).Scan(&state); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return accounting.ErrMoveNotFound
+		}
+		return fmt.Errorf("lock draft move for delete: %w", err)
+	}
+	if state != accounting.MoveStateDraft {
+		return accounting.ErrMoveAlreadyPosted
+	}
+	if _, err := tx.Exec(ctx, `DELETE FROM account_moves WHERE id = $1 AND state = 'draft'`, id); err != nil {
+		return fmt.Errorf("delete draft move: %w", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit draft move deletion: %w", err)
+	}
+	return nil
+}
+
 func (r *PostgresRepository) GetMoveByID(ctx context.Context, id uuid.UUID) (*accounting.AccountMove, error) {
 	move, err := r.getMoveByID(ctx, r.pool, id)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -316,6 +595,60 @@ func (r *PostgresRepository) GetMoveByID(ctx context.Context, id uuid.UUID) (*ac
 		return nil, fmt.Errorf("get move by id: %w", err)
 	}
 	return move, nil
+}
+
+func (r *PostgresRepository) ListMoves(ctx context.Context, filter accounting.MoveFilter) ([]*accounting.AccountMove, int, error) {
+	const countQuery = `
+		SELECT count(*)
+		FROM account_moves
+		WHERE ($1::uuid IS NULL OR journal_id = $1)
+			AND ($2::date IS NULL OR date >= $2)
+			AND ($3::date IS NULL OR date <= $3)
+			AND ($4::text = '' OR state = $4)`
+	var total int
+	if err := r.pool.QueryRow(ctx, countQuery,
+		filter.JournalID, filter.FromDate, filter.ToDate, string(filter.State),
+	).Scan(&total); err != nil {
+		return nil, 0, fmt.Errorf("count accounting moves: %w", err)
+	}
+	const query = `
+		SELECT id
+		FROM account_moves
+		WHERE ($1::uuid IS NULL OR journal_id = $1)
+			AND ($2::date IS NULL OR date >= $2)
+			AND ($3::date IS NULL OR date <= $3)
+			AND ($4::text = '' OR state = $4)
+		ORDER BY date DESC, created_at DESC, id DESC
+		LIMIT $5 OFFSET $6`
+	rows, err := r.pool.Query(ctx, query,
+		filter.JournalID, filter.FromDate, filter.ToDate, string(filter.State), filter.Limit, filter.Offset,
+	)
+	if err != nil {
+		return nil, 0, fmt.Errorf("query accounting moves: %w", err)
+	}
+	ids := make([]uuid.UUID, 0)
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			rows.Close()
+			return nil, 0, fmt.Errorf("scan accounting move id: %w", err)
+		}
+		ids = append(ids, id)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return nil, 0, fmt.Errorf("iterate accounting moves: %w", err)
+	}
+	rows.Close()
+	moves := make([]*accounting.AccountMove, 0, len(ids))
+	for _, id := range ids {
+		move, err := r.GetMoveByID(ctx, id)
+		if err != nil {
+			return nil, 0, fmt.Errorf("load accounting move %s: %w", id, err)
+		}
+		moves = append(moves, move)
+	}
+	return moves, total, nil
 }
 
 func (r *PostgresRepository) getMoveByID(ctx context.Context, db dbtx, id uuid.UUID) (*accounting.AccountMove, error) {
@@ -418,18 +751,14 @@ func (r *PostgresRepository) postMoveAtomic(
 			return fmt.Errorf("insert new draft move: %w", err)
 		}
 	}
-	sequence, err := r.GetNextSequenceWithLock(ctx, tx, move.JournalID)
-	if err != nil {
-		return err
-	}
-
 	const lockMoveQuery = `
-		SELECT state, journal_id, period_id, date
+		SELECT state, journal_id, period_id, date, updated_at
 		FROM account_moves WHERE id = $1 FOR UPDATE`
 	var state accounting.MoveState
 	var journalID, periodID uuid.UUID
 	var moveDate time.Time
-	if err := tx.QueryRow(ctx, lockMoveQuery, move.ID).Scan(&state, &journalID, &periodID, &moveDate); err != nil {
+	var updatedAt time.Time
+	if err := tx.QueryRow(ctx, lockMoveQuery, move.ID).Scan(&state, &journalID, &periodID, &moveDate, &updatedAt); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return accounting.ErrMoveNotFound
 		}
@@ -439,11 +768,28 @@ func (r *PostgresRepository) postMoveAtomic(
 		return accounting.ErrMoveAlreadyPosted
 	}
 	if journalID != move.JournalID || periodID != move.PeriodID || !sameDate(moveDate, move.Date) {
-		return errors.New("move fields changed since the draft was loaded")
+		return accounting.ErrMoveChanged
 	}
-
+	if !createMove && !move.UpdatedAt.IsZero() && !move.UpdatedAt.Equal(updatedAt) {
+		return accounting.ErrMoveChanged
+	}
+	lines := append([]accounting.AccountMoveLine(nil), move.Lines...)
+	if _, err := tx.Exec(ctx, `DELETE FROM account_move_lines WHERE move_id = $1`, move.ID); err != nil {
+		return fmt.Errorf("replace posted move lines: %w", err)
+	}
+	if err := insertMoveLines(ctx, tx, move.ID, move.Date, lines); err != nil {
+		return err
+	}
+	sequence, err := r.GetNextSequenceWithLock(ctx, tx, move.JournalID)
+	if err != nil {
+		return err
+	}
+	previousMoveHash, err := previousPostedMoveHash(ctx, tx, move.JournalID)
+	if err != nil {
+		return err
+	}
+	hash := hashMove(move.ID, sequence, move.Date, move.JournalID, lines, previousMoveHash)
 	postedAt := time.Now().UTC()
-	hash := hashMove(move.ID, sequence, move.Date, move.JournalID)
 	const updateQuery = `
 		UPDATE account_moves
 		SET name = $1, state = 'posted', hash_signature = $2,
@@ -455,12 +801,6 @@ func (r *PostgresRepository) postMoveAtomic(
 	}
 	if tag.RowsAffected() != 1 {
 		return accounting.ErrMoveAlreadyPosted
-	}
-	if _, err := tx.Exec(ctx, `DELETE FROM account_move_lines WHERE move_id = $1`, move.ID); err != nil {
-		return fmt.Errorf("replace posted move lines: %w", err)
-	}
-	if err := insertMoveLines(ctx, tx, move.ID, move.Date, move.Lines); err != nil {
-		return err
 	}
 	if err := insertAuditLog(ctx, tx, audit); err != nil {
 		return err
@@ -482,11 +822,8 @@ func (r *PostgresRepository) postMoveAtomic(
 	move.HashSignature = hash
 	move.PostedAt = &postedAt
 	move.UpdatedAt = postedAt
+	move.Lines = lines
 	for i := range move.Lines {
-		move.Lines[i].MoveID = move.ID
-		if move.Lines[i].Date.IsZero() {
-			move.Lines[i].Date = move.Date
-		}
 		if move.Lines[i].CreatedAt.IsZero() {
 			move.Lines[i].CreatedAt = postedAt
 		}
@@ -542,7 +879,6 @@ func (r *PostgresRepository) ReverseMoveAtomic(ctx context.Context, originalMove
 
 	now := time.Now().UTC()
 	reversalID := ensureUUID(reversalMove.ID)
-	reversalHash := hashMove(reversalID, sequence, reversalMove.Date, reversalMove.JournalID)
 	postedBy := auditActor(audit)
 	createdAt := reversalMove.CreatedAt
 	if createdAt.IsZero() {
@@ -556,19 +892,6 @@ func (r *PostgresRepository) ReverseMoveAtomic(ctx context.Context, originalMove
 		} else {
 			lineIDs[i] = uuid.New()
 		}
-	}
-
-	const insertMoveQuery = `
-		INSERT INTO account_moves (
-			id, name, journal_id, period_id, date, state, ref, reversed_move_id,
-			hash_signature, posted_at, posted_by, created_at, updated_at
-		) VALUES ($1, $2, $3, $4, $5, 'posted', $6, $7, $8, $9, $10, $11, $12)`
-	if _, err := tx.Exec(ctx, insertMoveQuery,
-		reversalID, sequence, reversalMove.JournalID, reversalMove.PeriodID, reversalMove.Date,
-		reversalMove.Ref, originalMoveID, reversalHash, now, postedBy,
-		createdAt, now,
-	); err != nil {
-		return fmt.Errorf("insert reversal move: %w", err)
 	}
 
 	reversalLines := make([]accounting.AccountMoveLine, len(originalLines))
@@ -587,6 +910,23 @@ func (r *PostgresRepository) ReverseMoveAtomic(ctx context.Context, originalMove
 			Date:           reversalMove.Date,
 			CreatedAt:      now,
 		}
+	}
+	previousMoveHash, err := previousPostedMoveHash(ctx, tx, reversalMove.JournalID)
+	if err != nil {
+		return err
+	}
+	reversalHash := hashMove(reversalID, sequence, reversalMove.Date, reversalMove.JournalID, reversalLines, previousMoveHash)
+	const insertMoveQuery = `
+		INSERT INTO account_moves (
+			id, name, journal_id, period_id, date, state, ref, reversed_move_id,
+			hash_signature, posted_at, posted_by, created_at, updated_at
+		) VALUES ($1, $2, $3, $4, $5, 'posted', $6, $7, $8, $9, $10, $11, $12)`
+	if _, err := tx.Exec(ctx, insertMoveQuery,
+		reversalID, sequence, reversalMove.JournalID, reversalMove.PeriodID, reversalMove.Date,
+		reversalMove.Ref, originalMoveID, reversalHash, now, postedBy,
+		createdAt, now,
+	); err != nil {
+		return fmt.Errorf("insert reversal move: %w", err)
 	}
 	if err := insertMoveLines(ctx, tx, reversalID, reversalMove.Date, reversalLines); err != nil {
 		return err
@@ -642,6 +982,7 @@ func scanAccount(row pgx.Row) (*accounting.Account, error) {
 	err := row.Scan(
 		&account.ID, &account.Code, &account.Name, &account.Type, &account.NormalBalance,
 		&account.CurrencyID, &parentID, &account.IsReconcilable, &account.IsActive,
+		&account.IsCashEquivalent, &account.IsNonCashAdjustment, &account.CashFlowActivity,
 		&account.CreatedAt, &account.UpdatedAt,
 	)
 	if err != nil {
@@ -724,6 +1065,7 @@ func insertMoveLines(ctx context.Context, tx dbtx, moveID uuid.UUID, moveDate ti
 		if line.ID == uuid.Nil {
 			line.ID = uuid.New()
 		}
+		line.MoveID = moveID
 		if line.Date.IsZero() {
 			line.Date = moveDate
 		}
@@ -832,10 +1174,79 @@ func loadMoveLines(ctx context.Context, tx pgx.Tx, moveID uuid.UUID) ([]accounti
 	return lines, nil
 }
 
-func hashMove(id uuid.UUID, name string, date time.Time, journalID uuid.UUID) string {
-	payload := fmt.Sprintf("%s:%s:%s:%s", id, name, date.Format("2006-01-02"), journalID)
-	hash := sha256.Sum256([]byte(payload))
+func hashMove(
+	id uuid.UUID,
+	name string,
+	date time.Time,
+	journalID uuid.UUID,
+	lines []accounting.AccountMoveLine,
+	previousHash string,
+) string {
+	type moveLineHashPayload struct {
+		ID             string `json:"id"`
+		MoveID         string `json:"move_id"`
+		AccountID      string `json:"account_id"`
+		Debit          string `json:"debit"`
+		Credit         string `json:"credit"`
+		AmountCurrency string `json:"amount_currency"`
+		CurrencyID     string `json:"currency_id"`
+		MatchingNumber string `json:"matching_number"`
+		Date           string `json:"date"`
+		PartnerID      string `json:"partner_id,omitempty"`
+		CostCenterID   string `json:"cost_center_id,omitempty"`
+	}
+	linePayloads := make([]moveLineHashPayload, len(lines))
+	for i, line := range lines {
+		entry := moveLineHashPayload{
+			ID: line.ID.String(), MoveID: line.MoveID.String(),
+			AccountID: line.AccountID.String(), Debit: line.Debit.String(),
+			Credit: line.Credit.String(), AmountCurrency: line.AmountCurrency.String(),
+			CurrencyID: line.CurrencyID, MatchingNumber: line.MatchingNumber,
+			Date: line.Date.Format("2006-01-02"),
+		}
+		if line.PartnerID != nil {
+			entry.PartnerID = line.PartnerID.String()
+		}
+		if line.CostCenterID != nil {
+			entry.CostCenterID = line.CostCenterID.String()
+		}
+		linePayloads[i] = entry
+	}
+	sort.Slice(linePayloads, func(i, j int) bool {
+		left, _ := json.Marshal(linePayloads[i])
+		right, _ := json.Marshal(linePayloads[j])
+		return string(left) < string(right)
+	})
+	payload, _ := json.Marshal(struct {
+		ID           string                `json:"id"`
+		Name         string                `json:"name"`
+		Date         string                `json:"date"`
+		JournalID    string                `json:"journal_id"`
+		Lines        []moveLineHashPayload `json:"lines"`
+		PreviousHash string                `json:"previous_hash"`
+	}{
+		ID: id.String(), Name: name, Date: date.Format("2006-01-02"),
+		JournalID: journalID.String(), Lines: linePayloads, PreviousHash: previousHash,
+	})
+	hash := sha256.Sum256(payload)
 	return hex.EncodeToString(hash[:])
+}
+
+func previousPostedMoveHash(ctx context.Context, tx pgx.Tx, journalID uuid.UUID) (string, error) {
+	var previousHash string
+	err := tx.QueryRow(ctx, `
+		SELECT COALESCE(hash_signature, '')
+		FROM account_moves
+		WHERE journal_id = $1 AND state IN ('posted', 'reversed')
+		ORDER BY name DESC
+		LIMIT 1`, journalID).Scan(&previousHash)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("get previous journal move hash: %w", err)
+	}
+	return previousHash, nil
 }
 
 func auditActor(audit *accounting.FinancialAuditLog) *uuid.UUID {

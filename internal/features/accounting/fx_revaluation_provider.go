@@ -16,6 +16,52 @@ type fxBalanceRepository interface {
 	GetFXMonetaryBalances(ctx context.Context, asOf time.Time) ([]*FXMonetaryBalance, error)
 }
 
+type fxConfigurationRepository interface {
+	fxBalanceRepository
+	GetAccountingConfiguration(ctx context.Context) (*AccountingConfiguration, error)
+}
+
+type configuredFXRevaluationProvider struct {
+	repository fxConfigurationRepository
+	rates      FXClosingRateProvider
+	base       string
+}
+
+func newConfiguredFXRevaluationProvider(
+	repository fxConfigurationRepository,
+	rates FXClosingRateProvider,
+	baseCurrency string,
+) (*configuredFXRevaluationProvider, error) {
+	if repository == nil || rates == nil {
+		return nil, errors.New("FX configuration repository and rate provider are required")
+	}
+	baseCurrency = strings.ToUpper(strings.TrimSpace(baseCurrency))
+	if _, ok := money.SupportedCurrencies[baseCurrency]; !ok {
+		return nil, fmt.Errorf("unsupported FX base currency %q", baseCurrency)
+	}
+	return &configuredFXRevaluationProvider{repository: repository, rates: rates, base: baseCurrency}, nil
+}
+
+func (p *configuredFXRevaluationProvider) GetFXRevaluationSnapshot(
+	ctx context.Context,
+	asOf time.Time,
+) (*FXRevaluationSnapshot, error) {
+	configuration, err := p.repository.GetAccountingConfiguration(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("load accounting FX configuration: %w", err)
+	}
+	provider, err := NewRepositoryFXRevaluationProvider(p.repository, p.rates, FXRevaluationSettings{
+		JournalID:     configuration.FXReconciliationJournalID,
+		GainAccountID: configuration.FXGainAccountID,
+		LossAccountID: configuration.FXLossAccountID,
+		BaseCurrency:  p.base,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("configure accounting FX revaluation: %w", err)
+	}
+	return provider.GetFXRevaluationSnapshot(ctx, asOf)
+}
+
 // FXRevaluationSettings contains the accounts and journal used for generated
 // unrealized foreign-exchange adjustments.
 type FXRevaluationSettings struct {
@@ -109,3 +155,4 @@ func (p *RepositoryFXRevaluationProvider) GetFXRevaluationSnapshot(
 }
 
 var _ FXRevaluationProvider = (*RepositoryFXRevaluationProvider)(nil)
+var _ FXRevaluationProvider = (*configuredFXRevaluationProvider)(nil)

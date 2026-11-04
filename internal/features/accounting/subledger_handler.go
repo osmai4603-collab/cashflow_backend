@@ -1,7 +1,6 @@
 package accounting
 
 import (
-	"errors"
 	"log/slog"
 	"net/http"
 )
@@ -25,11 +24,6 @@ func (h *SubledgerHandler) HandleIngest(w http.ResponseWriter, r *http.Request) 
 		writeValidationError(w, r, h.logger, err)
 		return
 	}
-	if _, ok := subledgerMappings[request.EventType]; !ok {
-		writeValidationError(w, r, h.logger, errors.New("unknown subledger event_type"))
-		return
-	}
-
 	response, err := h.uc.IngestSubledgerEvent.Execute(r.Context(), request)
 	if err != nil {
 		writeAccountingError(w, r, h.logger, err)

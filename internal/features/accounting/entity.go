@@ -43,37 +43,50 @@ const (
 )
 
 var (
-	ErrAccountNotFound             = errors.New("accounting: account not found")
-	ErrDuplicateAccountCode        = errors.New("accounting: duplicate account code")
-	ErrPeriodClosed                = errors.New("accounting: fiscal period is closed for posting")
-	ErrPeriodNotFound              = errors.New("accounting: no active fiscal period for date")
-	ErrInvalidPeriodTransition     = errors.New("accounting: invalid fiscal period state transition")
-	ErrJournalNotFound             = errors.New("accounting: journal not found")
-	ErrMoveNotFound                = errors.New("accounting: journal entry not found")
-	ErrMoveAlreadyReversed         = errors.New("accounting: journal entry has already been reversed")
-	ErrMoveRequiresAtLeastTwoLines = errors.New("accounting: a journal entry requires at least two lines")
-	ErrNegativeAmountsNotAllowed   = errors.New("accounting: negative debit or credit amounts are prohibited")
-	ErrZeroAmountLine              = errors.New("accounting: move line must have non-zero debit or credit")
-	ErrUnbalancedMove              = errors.New("accounting: move is unbalanced; debits must strictly equal credits")
-	ErrMoveAlreadyPosted           = errors.New("accounting: move is already posted and immutable")
-	ErrCannotReverseUnpostedMove   = errors.New("accounting: only posted moves can be reversed")
-	ErrMakerCheckerCreatorRequired = errors.New("accounting: creator attribution is required to post a move above the configured threshold")
-	ErrMakerCheckerViolation       = errors.New("accounting: move creator cannot post a move above the configured threshold")
-	ErrMakerCheckerActorRequired   = errors.New("accounting: authenticated actor is required to post a move above the configured threshold")
+	ErrAccountNotFound                = errors.New("accounting: account not found")
+	ErrDuplicateAccountCode           = errors.New("accounting: duplicate account code")
+	ErrPeriodClosed                   = errors.New("accounting: fiscal period is closed for posting")
+	ErrPeriodNotFound                 = errors.New("accounting: no active fiscal period for date")
+	ErrInvalidPeriodTransition        = errors.New("accounting: invalid fiscal period state transition")
+	ErrJournalNotFound                = errors.New("accounting: journal not found")
+	ErrMoveNotFound                   = errors.New("accounting: journal entry not found")
+	ErrMoveChanged                      = errors.New("accounting: journal entry changed since it was loaded")
+	ErrMoveAlreadyReversed            = errors.New("accounting: journal entry has already been reversed")
+	ErrMoveRequiresAtLeastTwoLines    = errors.New("accounting: a journal entry requires at least two lines")
+	ErrNegativeAmountsNotAllowed      = errors.New("accounting: negative debit or credit amounts are prohibited")
+	ErrZeroAmountLine                 = errors.New("accounting: move line must have non-zero debit or credit")
+	ErrUnbalancedMove                 = errors.New("accounting: move is unbalanced; debits must strictly equal credits")
+	ErrMoveAlreadyPosted              = errors.New("accounting: move is already posted and immutable")
+	ErrCannotReverseUnpostedMove      = errors.New("accounting: only posted moves can be reversed")
+	ErrMakerCheckerCreatorRequired    = errors.New("accounting: creator attribution is required to post a move above the configured threshold")
+	ErrMakerCheckerViolation          = errors.New("accounting: move creator cannot post a move above the configured threshold")
+	ErrMakerCheckerActorRequired      = errors.New("accounting: authenticated actor is required to post a move above the configured threshold")
+	ErrSubledgerMappingNotFound       = errors.New("accounting: subledger event mapping is not configured")
+	ErrExchangeRateMissing            = errors.New("accounting: exchange rate is not configured")
+	ErrAccountingConfigurationMissing = errors.New("accounting: required system accounts are not configured")
+	ErrAccountNotReconcilable         = errors.New("accounting: account is not reconcilable")
+	ErrReconciliationNotFound         = errors.New("accounting: reconciliation not found")
+	ErrFiscalYearNotFound             = errors.New("accounting: fiscal year not found")
+	ErrFiscalYearNotClosable          = errors.New("accounting: fiscal year cannot be closed")
+	ErrAccountHasPostedMoves          = errors.New("accounting: account code and type are immutable after posting")
+	ErrAccountingActorRequired        = errors.New("accounting: authenticated actor is required")
 )
 
 type Account struct {
-	ID             uuid.UUID
-	Code           string
-	Name           string
-	Type           AccountType
-	NormalBalance  NormalBalance
-	CurrencyID     string
-	ParentID       *uuid.UUID
-	IsReconcilable bool
-	IsActive       bool
-	CreatedAt      time.Time
-	UpdatedAt      time.Time
+	ID                  uuid.UUID
+	Code                string
+	Name                string
+	Type                AccountType
+	NormalBalance       NormalBalance
+	CurrencyID          string
+	ParentID            *uuid.UUID
+	IsReconcilable      bool
+	IsActive            bool
+	IsCashEquivalent    bool
+	IsNonCashAdjustment bool
+	CashFlowActivity    string
+	CreatedAt           time.Time
+	UpdatedAt           time.Time
 }
 
 type FiscalYear struct {
@@ -98,6 +111,27 @@ type FiscalPeriod struct {
 	CreatedAt    time.Time
 }
 
+type FiscalYearSummary struct {
+	Year    *FiscalYear
+	Periods []*FiscalPeriod
+}
+
+type MoveFilter struct {
+	JournalID *uuid.UUID
+	FromDate  *time.Time
+	ToDate    *time.Time
+	State     MoveState
+	Limit     int
+	Offset    int
+}
+
+type CashFlowMovement struct {
+	MoveID          uuid.UUID
+	Amount          decimal.Decimal
+	Activities      []string
+	HasUnclassified bool
+}
+
 // CanPost returns an error unless the fiscal period is open.
 func (p *FiscalPeriod) CanPost() error {
 	if p.State != PeriodStateOpen {
@@ -115,6 +149,57 @@ type Journal struct {
 	NextNumber     int64
 	IsActive       bool
 	CreatedAt      time.Time
+}
+
+type SubledgerEventMapping struct {
+	EventType       string
+	JournalID       uuid.UUID
+	DebitAccountID  uuid.UUID
+	CreditAccountID uuid.UUID
+	Description     string
+	IsActive        bool
+}
+
+type AccountingConfiguration struct {
+	RetainedEarningsAccountID uuid.UUID
+	FXGainAccountID           uuid.UUID
+	FXLossAccountID           uuid.UUID
+	FXReconciliationJournalID uuid.UUID
+	FunctionalCurrency        string
+}
+
+type ReconciliationAllocation struct {
+	MoveLineID uuid.UUID
+	Amount     decimal.Decimal
+}
+
+type UnreconciledLine struct {
+	MoveLineID     uuid.UUID
+	MoveID         uuid.UUID
+	MoveName       string
+	Date           time.Time
+	AccountID      uuid.UUID
+	AccountCode    string
+	AccountName    string
+	Debit          decimal.Decimal
+	Credit         decimal.Decimal
+	AmountCurrency decimal.Decimal
+	CurrencyID     string
+	ResidualAmount decimal.Decimal
+	PartnerID      *uuid.UUID
+}
+
+type UnreconciledLineFilter struct {
+	AccountID  *uuid.UUID
+	CurrencyID string
+	Limit      int
+	Offset     int
+}
+
+type YearCloseResult struct {
+	ClosingMoveID   *uuid.UUID
+	OpeningMoveID   *uuid.UUID
+	SuccessorYearID uuid.UUID
 }
 
 type AccountMoveLine struct {

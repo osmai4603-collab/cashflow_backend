@@ -17,13 +17,16 @@ const dateLayout = "2006-01-02"
 
 // CreateAccountRequest contains the fields accepted when creating an account.
 type CreateAccountRequest struct {
-	Code           string     `json:"code"`
-	Name           string     `json:"name"`
-	Type           string     `json:"account_type"`
-	NormalBalance  string     `json:"normal_balance"`
-	CurrencyID     string     `json:"currency_id"`
-	ParentID       *uuid.UUID `json:"parent_id,omitempty"`
-	IsReconcilable bool       `json:"is_reconcilable"`
+	Code                string     `json:"code"`
+	Name                string     `json:"name"`
+	Type                string     `json:"account_type"`
+	NormalBalance       string     `json:"normal_balance"`
+	CurrencyID          string     `json:"currency_id"`
+	ParentID            *uuid.UUID `json:"parent_id,omitempty"`
+	IsReconcilable      bool       `json:"is_reconcilable"`
+	IsCashEquivalent    bool       `json:"is_cash_equivalent"`
+	IsNonCashAdjustment bool       `json:"is_non_cash_adjustment"`
+	CashFlowActivity    string     `json:"cash_flow_activity"`
 }
 
 // Validate normalizes and validates the requested account values.
@@ -62,21 +65,72 @@ func (r *CreateAccountRequest) Validate() error {
 		return errors.New("currency_id must be a supported ISO 4217 currency code")
 	}
 	r.CurrencyID = currencyID
+	activity, err := normalizeCashFlowActivity(r.CashFlowActivity)
+	if err != nil {
+		return err
+	}
+	r.CashFlowActivity = activity
 	return nil
+}
+
+type UpdateAccountRequest struct {
+	Code                string     `json:"code"`
+	Name                string     `json:"name"`
+	Type                string     `json:"account_type"`
+	NormalBalance       string     `json:"normal_balance"`
+	CurrencyID          string     `json:"currency_id"`
+	ParentID            *uuid.UUID `json:"parent_id,omitempty"`
+	IsReconcilable      bool       `json:"is_reconcilable"`
+	IsActive            bool       `json:"is_active"`
+	IsCashEquivalent    bool       `json:"is_cash_equivalent"`
+	IsNonCashAdjustment bool       `json:"is_non_cash_adjustment"`
+	CashFlowActivity    string     `json:"cash_flow_activity"`
+}
+
+func (r *UpdateAccountRequest) Validate() error {
+	create := CreateAccountRequest{
+		Code: r.Code, Name: r.Name, Type: r.Type, NormalBalance: r.NormalBalance,
+		CurrencyID: r.CurrencyID, ParentID: r.ParentID,
+		IsReconcilable: r.IsReconcilable, IsCashEquivalent: r.IsCashEquivalent,
+		IsNonCashAdjustment: r.IsNonCashAdjustment, CashFlowActivity: r.CashFlowActivity,
+	}
+	if err := create.Validate(); err != nil {
+		return err
+	}
+	r.Code, r.Name, r.Type = create.Code, create.Name, create.Type
+	r.NormalBalance, r.CurrencyID, r.CashFlowActivity =
+		create.NormalBalance, create.CurrencyID, create.CashFlowActivity
+	return nil
+}
+
+func normalizeCashFlowActivity(value string) (string, error) {
+	activity := strings.ToLower(strings.TrimSpace(value))
+	if activity == "" {
+		activity = "unclassified"
+	}
+	switch activity {
+	case "operating", "investing", "financing", "none", "unclassified":
+		return activity, nil
+	default:
+		return "", errors.New("cash_flow_activity must be operating, investing, financing, none, or unclassified")
+	}
 }
 
 // AccountResponse is the public representation of an account.
 type AccountResponse struct {
-	ID             uuid.UUID  `json:"id"`
-	Code           string     `json:"code"`
-	Name           string     `json:"name"`
-	Type           string     `json:"account_type"`
-	NormalBalance  string     `json:"normal_balance"`
-	CurrencyID     string     `json:"currency_id"`
-	ParentID       *uuid.UUID `json:"parent_id,omitempty"`
-	IsReconcilable bool       `json:"is_reconcilable"`
-	IsActive       bool       `json:"is_active"`
-	CreatedAt      time.Time  `json:"created_at"`
+	ID                  uuid.UUID  `json:"id"`
+	Code                string     `json:"code"`
+	Name                string     `json:"name"`
+	Type                string     `json:"account_type"`
+	NormalBalance       string     `json:"normal_balance"`
+	CurrencyID          string     `json:"currency_id"`
+	ParentID            *uuid.UUID `json:"parent_id,omitempty"`
+	IsReconcilable      bool       `json:"is_reconcilable"`
+	IsActive            bool       `json:"is_active"`
+	IsCashEquivalent    bool       `json:"is_cash_equivalent"`
+	IsNonCashAdjustment bool       `json:"is_non_cash_adjustment"`
+	CashFlowActivity    string     `json:"cash_flow_activity"`
+	CreatedAt           time.Time  `json:"created_at"`
 }
 
 // AccountTreeNode represents an account and its descendants.
@@ -88,16 +142,19 @@ type AccountTreeNode struct {
 // ToAccountResponse maps an account entity to its public representation.
 func ToAccountResponse(a *Account) AccountResponse {
 	return AccountResponse{
-		ID:             a.ID,
-		Code:           a.Code,
-		Name:           a.Name,
-		Type:           string(a.Type),
-		NormalBalance:  string(a.NormalBalance),
-		CurrencyID:     a.CurrencyID,
-		ParentID:       cloneUUID(a.ParentID),
-		IsReconcilable: a.IsReconcilable,
-		IsActive:       a.IsActive,
-		CreatedAt:      a.CreatedAt,
+		ID:                  a.ID,
+		Code:                a.Code,
+		Name:                a.Name,
+		Type:                string(a.Type),
+		NormalBalance:       string(a.NormalBalance),
+		CurrencyID:          a.CurrencyID,
+		ParentID:            cloneUUID(a.ParentID),
+		IsReconcilable:      a.IsReconcilable,
+		IsActive:            a.IsActive,
+		IsCashEquivalent:    a.IsCashEquivalent,
+		IsNonCashAdjustment: a.IsNonCashAdjustment,
+		CashFlowActivity:    a.CashFlowActivity,
+		CreatedAt:           a.CreatedAt,
 	}
 }
 
@@ -170,6 +227,29 @@ type FiscalYearResponse struct {
 	EndDate   string                 `json:"end_date"`
 	State     string                 `json:"state"`
 	Periods   []FiscalPeriodResponse `json:"periods"`
+}
+
+type CloseFiscalYearRequest struct {
+	JournalID                 uuid.UUID  `json:"journal_id"`
+	RetainedEarningsAccountID *uuid.UUID `json:"retained_earnings_account_id,omitempty"`
+}
+
+func (r *CloseFiscalYearRequest) Validate() error {
+	if r.JournalID == uuid.Nil {
+		return errors.New("journal_id is required")
+	}
+	if r.RetainedEarningsAccountID != nil && *r.RetainedEarningsAccountID == uuid.Nil {
+		return errors.New("retained_earnings_account_id must be a non-zero UUID")
+	}
+	return nil
+}
+
+type CloseFiscalYearResponse struct {
+	FiscalYearID    uuid.UUID  `json:"fiscal_year_id"`
+	SuccessorYearID uuid.UUID  `json:"successor_year_id"`
+	ClosingMoveID   *uuid.UUID `json:"closing_move_id,omitempty"`
+	OpeningMoveID   *uuid.UUID `json:"opening_move_id,omitempty"`
+	State           string     `json:"state"`
 }
 
 // ToFiscalPeriodResponse maps a fiscal period entity to its public representation.
@@ -290,6 +370,31 @@ type MoveResponse struct {
 	Lines          []MoveLineResponse `json:"lines"`
 }
 
+type ListMovesResponse struct {
+	Moves  []MoveResponse `json:"moves"`
+	Total  int            `json:"total"`
+	Limit  int            `json:"limit"`
+	Offset int            `json:"offset"`
+}
+
+type JournalResponse struct {
+	ID             uuid.UUID `json:"id"`
+	Code           string    `json:"code"`
+	Name           string    `json:"name"`
+	Type           string    `json:"type"`
+	SequencePrefix string    `json:"sequence_prefix"`
+	NextNumber     int64     `json:"next_number"`
+	IsActive       bool      `json:"is_active"`
+}
+
+func ToJournalResponse(journal *Journal) JournalResponse {
+	return JournalResponse{
+		ID: journal.ID, Code: journal.Code, Name: journal.Name, Type: journal.Type,
+		SequencePrefix: journal.SequencePrefix, NextNumber: journal.NextNumber,
+		IsActive: journal.IsActive,
+	}
+}
+
 // ToMoveResponse maps a journal entry entity and its lines to a public response.
 func ToMoveResponse(m *AccountMove) MoveResponse {
 	lines := make([]MoveLineResponse, len(m.Lines))
@@ -340,6 +445,134 @@ type TrialBalanceResponse struct {
 	TotalCredit decimal.Decimal           `json:"total_credit"`
 	IsBalanced  bool                      `json:"is_balanced"`
 	Accounts    []TrialBalanceRowResponse `json:"accounts"`
+}
+
+type StatementAccountLine struct {
+	AccountID uuid.UUID       `json:"account_id"`
+	Code      string          `json:"account_code"`
+	Name      string          `json:"account_name"`
+	Amount    decimal.Decimal `json:"amount"`
+}
+
+type IncomeStatementResponse struct {
+	FromDate      string                 `json:"from_date"`
+	ToDate        string                 `json:"to_date"`
+	Revenue       []StatementAccountLine `json:"revenue"`
+	Expenses      []StatementAccountLine `json:"expenses"`
+	TotalRevenue  decimal.Decimal        `json:"total_revenue"`
+	TotalExpenses decimal.Decimal        `json:"total_expenses"`
+	NetIncome     decimal.Decimal        `json:"net_income"`
+}
+
+type BalanceSheetResponse struct {
+	AsOfDate            string                 `json:"as_of_date"`
+	Assets              []StatementAccountLine `json:"assets"`
+	Liabilities         []StatementAccountLine `json:"liabilities"`
+	Equity              []StatementAccountLine `json:"equity"`
+	CurrentPeriodIncome decimal.Decimal        `json:"current_period_income"`
+	TotalAssets         decimal.Decimal        `json:"total_assets"`
+	TotalLiabilities    decimal.Decimal        `json:"total_liabilities"`
+	TotalEquity         decimal.Decimal        `json:"total_equity"`
+	IsBalanced          bool                   `json:"is_balanced"`
+	BalanceDifference   decimal.Decimal        `json:"balance_difference"`
+}
+
+type CashFlowStatementResponse struct {
+	FromDate                 string          `json:"from_date"`
+	ToDate                   string          `json:"to_date"`
+	NetIncome                decimal.Decimal `json:"net_income"`
+	NonCashAdjustments       decimal.Decimal `json:"non_cash_adjustments"`
+	WorkingCapitalChanges    decimal.Decimal `json:"working_capital_changes"`
+	OperatingCashFlow        decimal.Decimal `json:"operating_cash_flow"`
+	InvestingCashFlow        decimal.Decimal `json:"investing_cash_flow"`
+	FinancingCashFlow        decimal.Decimal `json:"financing_cash_flow"`
+	UnclassifiedCashMovement decimal.Decimal `json:"unclassified_cash_movement"`
+	NetChangeInCash          decimal.Decimal `json:"net_change_in_cash"`
+	ReconciliationDifference decimal.Decimal `json:"reconciliation_difference"`
+	IsReconciled             bool            `json:"is_reconciled"`
+}
+
+type ReconcileAllocationRequest struct {
+	MoveLineID uuid.UUID       `json:"move_line_id"`
+	Amount     decimal.Decimal `json:"amount"`
+}
+
+type ReconcileMoveLinesRequest struct {
+	Date        string                       `json:"date"`
+	Allocations []ReconcileAllocationRequest `json:"allocations"`
+}
+
+func (r *ReconcileMoveLinesRequest) Validate() error {
+	if _, err := parseDate(r.Date, "date"); err != nil {
+		return err
+	}
+	if len(r.Allocations) < 2 {
+		return errors.New("at least two reconciliation allocations are required")
+	}
+	seen := make(map[uuid.UUID]struct{}, len(r.Allocations))
+	for _, allocation := range r.Allocations {
+		if allocation.MoveLineID == uuid.Nil {
+			return errors.New("move_line_id is required on all allocations")
+		}
+		if !allocation.Amount.IsPositive() {
+			return errors.New("allocated amount must be positive")
+		}
+		if _, ok := seen[allocation.MoveLineID]; ok {
+			return errors.New("a move line cannot be allocated more than once in one request")
+		}
+		seen[allocation.MoveLineID] = struct{}{}
+	}
+	return nil
+}
+
+type ReconciliationResponse struct {
+	ID   uuid.UUID `json:"id"`
+	Date string    `json:"date"`
+}
+
+type UnreconcileMoveLinesRequest struct {
+	ReconciliationID uuid.UUID `json:"reconciliation_id"`
+	Date             string    `json:"date"`
+}
+
+func (r *UnreconcileMoveLinesRequest) Validate() error {
+	if r.ReconciliationID == uuid.Nil {
+		return errors.New("reconciliation_id is required")
+	}
+	if r.Date == "" {
+		r.Date = time.Now().UTC().Format(dateLayout)
+	}
+	if _, err := parseDate(r.Date, "date"); err != nil {
+		return err
+	}
+	return nil
+}
+
+type UnreconciledLineResponse struct {
+	MoveLineID     uuid.UUID       `json:"move_line_id"`
+	MoveID         uuid.UUID       `json:"move_id"`
+	MoveName       string          `json:"move_name"`
+	Date           string          `json:"date"`
+	AccountID      uuid.UUID       `json:"account_id"`
+	AccountCode    string          `json:"account_code"`
+	AccountName    string          `json:"account_name"`
+	Debit          decimal.Decimal `json:"debit"`
+	Credit         decimal.Decimal `json:"credit"`
+	AmountCurrency decimal.Decimal `json:"amount_currency"`
+	CurrencyID     string          `json:"currency_id"`
+	ResidualAmount decimal.Decimal `json:"residual_amount"`
+	PartnerID      *uuid.UUID      `json:"partner_id,omitempty"`
+}
+
+func ToUnreconciledLineResponse(line *UnreconciledLine) UnreconciledLineResponse {
+	return UnreconciledLineResponse{
+		MoveLineID: line.MoveLineID, MoveID: line.MoveID, MoveName: line.MoveName,
+		Date: line.Date.Format(dateLayout), AccountID: line.AccountID,
+		AccountCode: line.AccountCode, AccountName: line.AccountName,
+		Debit: line.Debit, Credit: line.Credit, AmountCurrency: line.AmountCurrency,
+		CurrencyID: line.CurrencyID, ResidualAmount: line.ResidualAmount,
+		PartnerID: cloneUUID(line.PartnerID),
+	}
 }
 
 // ToTrialBalanceResponse maps trial balance data to its public representation.

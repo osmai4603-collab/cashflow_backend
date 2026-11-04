@@ -35,6 +35,52 @@ func (h *PeriodHandler) HandleCreateYear(w http.ResponseWriter, r *http.Request)
 	writeJSON(w, http.StatusCreated, response)
 }
 
+func (h *PeriodHandler) HandleListYears(w http.ResponseWriter, r *http.Request) {
+	response, err := h.uc.ListFiscalYears.Execute(r.Context())
+	if err != nil {
+		writeAccountingError(w, r, h.logger, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, response)
+}
+
+func (h *PeriodHandler) HandleListJournals(w http.ResponseWriter, r *http.Request) {
+	response, err := h.uc.ListJournals.Execute(r.Context())
+	if err != nil {
+		writeAccountingError(w, r, h.logger, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, response)
+}
+
+func (h *PeriodHandler) HandleCloseYear(w http.ResponseWriter, r *http.Request) {
+	fiscalYearID, err := parseRouteUUID(r, "id")
+	if err != nil {
+		writeBadRequest(w, r, h.logger, err)
+		return
+	}
+	var request CloseFiscalYearRequest
+	if err := decodeJSON(r, &request); err != nil {
+		writeBadRequest(w, r, h.logger, err)
+		return
+	}
+	if err := request.Validate(); err != nil {
+		writeValidationError(w, r, h.logger, err)
+		return
+	}
+	actorID, err := actorIDFromRequest(r)
+	if err != nil {
+		platformerr.WriteHTTPError(w, r, platformerr.Unauthorized("accounting.actor", "invalid authenticated user", err), h.logger)
+		return
+	}
+	response, err := h.uc.CloseFiscalYear.Execute(r.Context(), fiscalYearID, actorID, request)
+	if err != nil {
+		writeAccountingError(w, r, h.logger, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, response)
+}
+
 func (h *PeriodHandler) HandleChangeState(w http.ResponseWriter, r *http.Request) {
 	periodID, err := parseRouteUUID(r, "id")
 	if err != nil {

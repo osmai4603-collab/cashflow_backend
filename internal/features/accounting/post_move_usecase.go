@@ -48,6 +48,9 @@ func (uc *PostMoveUseCase) Execute(ctx context.Context, moveID, actorID uuid.UUI
 		logger.WarnContext(ctx, "unbalanced move rejected", slog.String("move_id", moveID.String()), slog.Any("error", err))
 		return nil, err
 	}
+	if actorID == uuid.Nil {
+		return nil, ErrAccountingActorRequired
+	}
 	if uc.governance.enabled() {
 		var totalDebit decimal.Decimal
 		for _, line := range move.Lines {

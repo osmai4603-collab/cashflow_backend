@@ -423,7 +423,17 @@ func newFakeTx() *fakeTx {
 
 func (tx *fakeTx) QueryRow(_ context.Context, query string, _ ...any) pgx.Row {
 	tx.rowQueries = append(tx.rowQueries, query)
-	return tx.row(query)
+	if strings.Contains(query, "SELECT COALESCE(hash_signature, '')") {
+		return fakeRow{values: []any{""}}
+	}
+	row := tx.row(query)
+	if strings.Contains(query, "SELECT state, journal_id, period_id, date, updated_at") {
+		if result, ok := row.(fakeRow); ok && len(result.values) == 4 {
+			result.values = append(result.values, time.Time{})
+			return result
+		}
+	}
+	return row
 }
 
 func (tx *fakeTx) Query(_ context.Context, query string, _ ...any) (pgx.Rows, error) {

@@ -26,22 +26,37 @@ func RegisterRoutes(r chi.Router, uc *UseCases, logger *slog.Logger) {
 	moveHandler := NewMoveHandler(uc, logger)
 	reportHandler := NewReportHandler(uc, logger)
 	subledgerHandler := NewSubledgerHandler(uc, logger)
+	reconciliationHandler := NewReconciliationHandler(uc, logger)
 
 	r.Route("/api/v1/accounting", func(sub chi.Router) {
 		sub.Post("/accounts", accountHandler.HandleCreate)
 		sub.Get("/accounts", accountHandler.HandleList)
 		sub.Get("/accounts/tree", accountHandler.HandleTree)
+		sub.Put("/accounts/{id}", accountHandler.HandleUpdate)
 
 		sub.Post("/fiscal-years", periodHandler.HandleCreateYear)
+		sub.Get("/fiscal-years", periodHandler.HandleListYears)
+		sub.Post("/fiscal-years/{id}/close", periodHandler.HandleCloseYear)
 		sub.Post("/fiscal-periods/{id}/state", periodHandler.HandleChangeState)
+		sub.Get("/journals", periodHandler.HandleListJournals)
 
 		sub.Post("/moves", moveHandler.HandleCreateDraft)
+		sub.Get("/moves", moveHandler.HandleList)
 		sub.Get("/moves/{id}", moveHandler.HandleGet)
+		sub.Put("/moves/{id}", moveHandler.HandleUpdateDraft)
+		sub.Delete("/moves/{id}", moveHandler.HandleDeleteDraft)
 		sub.Post("/moves/{id}/post", moveHandler.HandlePost)
 		sub.Post("/moves/{id}/reverse", moveHandler.HandleReverse)
 
 		sub.Get("/reports/trial-balance", reportHandler.HandleTrialBalance)
+		sub.Get("/reports/income-statement", reportHandler.HandleIncomeStatement)
+		sub.Get("/reports/balance-sheet", reportHandler.HandleBalanceSheet)
+		sub.Get("/reports/cash-flow", reportHandler.HandleCashFlow)
+		sub.Get("/reports/general-ledger", reportHandler.HandleGeneralLedger)
 		sub.Post("/subledger/events", subledgerHandler.HandleIngest)
+		sub.Post("/reconcile", reconciliationHandler.HandleReconcile)
+		sub.Post("/unreconcile", reconciliationHandler.HandleUnreconcile)
+		sub.Get("/unreconciled-lines", reconciliationHandler.HandleListUnreconciled)
 	})
 }
 
@@ -58,14 +73,28 @@ func registerUnavailableRoutes(r chi.Router, logger *slog.Logger) {
 			{http.MethodPost, "/accounts"},
 			{http.MethodGet, "/accounts"},
 			{http.MethodGet, "/accounts/tree"},
+			{http.MethodPut, "/accounts/{id}"},
 			{http.MethodPost, "/fiscal-years"},
+			{http.MethodGet, "/fiscal-years"},
+			{http.MethodPost, "/fiscal-years/{id}/close"},
 			{http.MethodPost, "/fiscal-periods/{id}/state"},
+			{http.MethodGet, "/journals"},
 			{http.MethodPost, "/moves"},
+			{http.MethodGet, "/moves"},
 			{http.MethodGet, "/moves/{id}"},
+			{http.MethodPut, "/moves/{id}"},
+			{http.MethodDelete, "/moves/{id}"},
 			{http.MethodPost, "/moves/{id}/post"},
 			{http.MethodPost, "/moves/{id}/reverse"},
 			{http.MethodGet, "/reports/trial-balance"},
+			{http.MethodGet, "/reports/income-statement"},
+			{http.MethodGet, "/reports/balance-sheet"},
+			{http.MethodGet, "/reports/cash-flow"},
+			{http.MethodGet, "/reports/general-ledger"},
 			{http.MethodPost, "/subledger/events"},
+			{http.MethodPost, "/reconcile"},
+			{http.MethodPost, "/unreconcile"},
+			{http.MethodGet, "/unreconciled-lines"},
 		} {
 			sub.Method(route.method, route.path, http.HandlerFunc(unavailable))
 		}
@@ -110,10 +139,18 @@ func writeAccountingError(w http.ResponseWriter, r *http.Request, logger *slog.L
 		err = platformerr.NotFound("accounting", "requested accounting resource was not found", err)
 	case errors.Is(err, ErrDuplicateAccountCode), errors.Is(err, ErrPeriodClosed),
 		errors.Is(err, ErrMoveAlreadyPosted), errors.Is(err, ErrMoveAlreadyReversed),
+		errors.Is(err, ErrMoveChanged),
 		errors.Is(err, ErrCannotReverseUnpostedMove), errors.Is(err, ErrInvalidPeriodTransition),
-		errors.Is(err, ErrMakerCheckerViolation), errors.Is(err, ErrMakerCheckerCreatorRequired):
+		errors.Is(err, ErrMakerCheckerViolation), errors.Is(err, ErrMakerCheckerCreatorRequired),
+		errors.Is(err, ErrAccountHasPostedMoves), errors.Is(err, ErrSubledgerMappingNotFound),
+		errors.Is(err, ErrExchangeRateMissing), errors.Is(err, ErrAccountingConfigurationMissing),
+		errors.Is(err, ErrAccountNotReconcilable), errors.Is(err, ErrFiscalYearNotClosable):
 		err = platformerr.Conflict("accounting", "accounting resource state conflicts with this operation", err)
+	case errors.Is(err, ErrReconciliationNotFound), errors.Is(err, ErrFiscalYearNotFound):
+		err = platformerr.NotFound("accounting", "requested accounting resource was not found", err)
 	case errors.Is(err, ErrMakerCheckerActorRequired):
+		err = platformerr.Unauthorized("accounting.actor", "authenticated actor is required", err)
+	case errors.Is(err, ErrAccountingActorRequired):
 		err = platformerr.Unauthorized("accounting.actor", "authenticated actor is required", err)
 	case errors.Is(err, ErrUnbalancedMove), errors.Is(err, ErrNegativeAmountsNotAllowed),
 		errors.Is(err, ErrZeroAmountLine), errors.Is(err, ErrMoveRequiresAtLeastTwoLines):

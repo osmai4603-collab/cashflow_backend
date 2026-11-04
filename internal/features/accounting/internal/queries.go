@@ -66,6 +66,93 @@ func (r *PostgresRepository) GetTrialBalanceData(ctx context.Context, fromDate, 
 	return results, nil
 }
 
+func (r *PostgresRepository) GetAccountBalancesAsOf(ctx context.Context, asOf time.Time) ([]*accounting.TrialBalanceRow, error) {
+	const query = `
+		SELECT a.id, a.code, a.name, 0::numeric, 0::numeric, 0::numeric, 0::numeric,
+			COALESCE(SUM(l.debit), 0), COALESCE(SUM(l.credit), 0)
+		FROM accounts a
+		LEFT JOIN account_move_lines l ON l.account_id = a.id AND l.date <= $1
+		LEFT JOIN account_moves m ON m.id = l.move_id AND m.state = 'posted'
+		WHERE l.id IS NULL OR m.id IS NOT NULL
+		GROUP BY a.id, a.code, a.name
+		ORDER BY a.code`
+	rows, err := r.pool.Query(ctx, query, asOf)
+	if err != nil {
+		return nil, fmt.Errorf("query account balances as of date: %w", err)
+	}
+	defer rows.Close()
+	results := make([]*accounting.TrialBalanceRow, 0)
+	for rows.Next() {
+		var row accounting.TrialBalanceRow
+		if err := rows.Scan(
+			&row.AccountID, &row.AccountCode, &row.AccountName,
+			&row.InitialDebit, &row.InitialCredit, &row.PeriodDebit, &row.PeriodCredit,
+			&row.EndingDebit, &row.EndingCredit,
+		); err != nil {
+			return nil, fmt.Errorf("scan account balance: %w", err)
+		}
+		results = append(results, &row)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate account balances: %w", err)
+	}
+	return results, nil
+}
+
+func (r *PostgresRepository) GetCashFlowMovements(
+	ctx context.Context,
+	fromDate, toDate time.Time,
+) ([]*accounting.CashFlowMovement, error) {
+	if fromDate.After(toDate) {
+		return nil, errors.New("from date must not be after to date")
+	}
+	const query = `
+		WITH cash_movements AS (
+			SELECT m.id AS move_id, SUM(l.debit - l.credit) AS amount
+			FROM account_move_lines l
+			JOIN account_moves m ON m.id = l.move_id
+			JOIN accounts cash ON cash.id = l.account_id
+			WHERE m.state = 'posted'
+				AND m.date >= $1 AND m.date <= $2
+				AND cash.is_cash_equivalent = TRUE
+			GROUP BY m.id
+			HAVING SUM(l.debit - l.credit) <> 0
+		)
+		SELECT cm.move_id, cm.amount,
+			COALESCE(
+				ARRAY_AGG(DISTINCT counterpart.cash_flow_activity)
+					FILTER (WHERE counterpart.cash_flow_activity IN ('operating', 'investing', 'financing')),
+				ARRAY[]::text[]
+			),
+			COALESCE(BOOL_OR(counterpart.cash_flow_activity IN ('none', 'unclassified')), FALSE)
+		FROM cash_movements cm
+		LEFT JOIN account_move_lines other_line ON other_line.move_id = cm.move_id
+		LEFT JOIN accounts counterpart
+			ON counterpart.id = other_line.account_id
+			AND counterpart.is_cash_equivalent = FALSE
+		GROUP BY cm.move_id, cm.amount
+		ORDER BY cm.move_id`
+	rows, err := r.pool.Query(ctx, query, fromDate, toDate)
+	if err != nil {
+		return nil, fmt.Errorf("query classified cash movements: %w", err)
+	}
+	defer rows.Close()
+	movements := make([]*accounting.CashFlowMovement, 0)
+	for rows.Next() {
+		var movement accounting.CashFlowMovement
+		if err := rows.Scan(
+			&movement.MoveID, &movement.Amount, &movement.Activities, &movement.HasUnclassified,
+		); err != nil {
+			return nil, fmt.Errorf("scan cash flow movement: %w", err)
+		}
+		movements = append(movements, &movement)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate cash flow movements: %w", err)
+	}
+	return movements, nil
+}
+
 func (r *PostgresRepository) GetGeneralLedgerLines(ctx context.Context, accountID uuid.UUID, fromDate, toDate time.Time) ([]*accounting.GeneralLedgerLineRow, error) {
 	if fromDate.After(toDate) {
 		return nil, errors.New("from date must not be after to date")
