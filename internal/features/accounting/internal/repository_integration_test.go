@@ -1,6 +1,8 @@
 package internal
 
 import (
+	"cashflow_backend/internal/features/accounting"
+	"cashflow_backend/migrations"
 	"context"
 	"errors"
 	"fmt"
@@ -9,9 +11,6 @@ import (
 	"sync"
 	"testing"
 	"time"
-
-	"cashflow_backend/internal/features/accounting"
-	"cashflow_backend/migrations"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"

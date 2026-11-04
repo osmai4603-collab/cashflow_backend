@@ -17,9 +17,9 @@
    - [الخطوة 2: المنافذ والأنواع المجردة (ports.go)](#الخطوة-2-المنافذ-والأنواع-المجردة-portsgo)
    - [الخطوة 3: كائنات النطاق وقواعد الكيان (entity.go)](#الخطوة-3-كائنات-النطاق-وقواعد-الكيان-entitygo)
    - [الخطوة 4: كائنات نقل البيانات وعقود الـ API والتحويل (dto.go)](#الخطوة-4-كائنات-نقل-البيانات-وعقود-الـ-api-والتحويل-dtogo)
-   - [الخطوة 5: حالات الاستخدام المستقلة (usecases.go & <action>_usecase.go)](#الخطوة-5-حالات-الاستخدام-المستقلة-usecasesgo--action_usecasego)
+   - [الخطوة 5: حالات الاستخدام المستقلة (usecases.go & usecase_<action>.go)](#الخطوة-5-حالات-الاستخدام-المستقلة-usecasesgo--action_usecasego)
    - [الخطوة 6: طبقة البيانات والمستودع (internal/repository.go)](#الخطوة-6-طبقة-البيانات-والمستودع-internalrepositorygo)
-   - [الخطوة 7: معالجات الـ HTTP المستقلة (handler.go & <action>_handler.go)](#الخطوة-7-معالجات-الـ-http-المستقلة-handlergo--action_handlergo)
+   - [الخطوة 7: معالجات الـ HTTP المستقلة (handler.go & handler_<action>.go)](#الخطوة-7-معالجات-الـ-http-المستقلة-handlergo--action_handlergo)
    - [الخطوة 8: ربط الميزة في نقطة التجميع (Composition Root / App Wiring)](#الخطوة-8-ربط-الميزة-في-نقطة-التجميع-composition-root--app-wiring)
 4. [قواعد الاتصال بين الميزات وحظر الاعتماديات الدائرية (Inter-Feature Communication)](#4-قواعد-الاتصال-بين-الميزات-وحظر-الاعتماديات-الدائرية-inter-feature-communication)
 5. [معايير التعامل مع الأخطاء والتسجيل والأمان (Platform Standards)](#5-معايير-التعامل-مع-الأخطاء-والتسجيل-والأمان-platform-standards)
@@ -39,9 +39,9 @@
 3. **تجريد المنافذ في `ports.go` (Ports & Adapters):**  
    تُعرف جميع الواجهات المجردة (Interfaces) التي تتطلبها الميزة (مثل مستودع البيانات، وناقل الأحداث، وعقود الخدمات الخارجية) في ملف `ports.go` كعقود صريحة.
 4. **مبدأ المسؤولية الواحدة لكل حالة استخدام (Single Responsibility per Use Case):**  
-   بدلاً من وضع كل حالات الاستخدام داخل ملف ضخم، تُجمع البنية العامة في `usecases.go`، بينما تُفرد كل حالة استخدام وظيفية بملف مستقل يحمل اللاحقة `_usecase.go`.
+   بدلاً من وضع كل حالات الاستخدام داخل ملف ضخم، تُجمع البنية العامة في `usecases.go`، بينما تُفرد كل حالة استخدام وظيفية بملف مستقل يحمل البادئة `usecase_`.
 5. **معالج مستقل لكل طلب API (Dedicated Request Handler):**  
-   الملف الرئيسي `handler.go` مسؤول عن تعريف البنية العامة للراوتر وتسجيل المسارات، بينما يُفرد معالج كل طلب بنقطة نهاية مستقلة في ملف ينتهي بـ `_handler.go`.
+   الملف الرئيسي `handlers.go` مسؤول عن تعريف البنية العامة للراوتر وتسجيل المسارات، بينما يُفرد معالج كل طلب بنقطة نهاية مستقلة في ملف يبدأ اسمه بـ `handler_`.
 6. **التوثيق الإلزامي للميزة عبر `doc.go`:**  
    تتضمن كل ميزة ملف `doc.go` يشرح نطاقها الوظيفي، مسؤولياتها، وحدودها المعمارية.
 7. **عزل التخزين وحظر الاستعلام المباشر عبر الجداول:**  
@@ -60,10 +60,10 @@ internal/features/<feature_name>/
 ├── entity.go                      # كائنات النطاق وقواعد الأعمال وحالات الكيان (Domain Entities & Invariants)
 ├── dto.go                         # كائنات نقل البيانات (Requests / Responses) والتحقق ودوال التحويل (Mappers)
 ├── usecases.go                    # البنية المركزية المجمعة لحالات الاستخدام ومصنع التهيئة (UseCases Coordinator)
-├── <action>_usecase.go            # ملف مستقل لكل حالة استخدام (مثال: open_account_usecase.go)
-├── <action>_usecase_test.go       # اختبارات الوحدة المعزولة لكل حالة استخدام
-├── handler.go                     # البنية الرئيسية للـ HTTP Handler وتسجيل المسارات (Chi Router)
-├── <action>_handler.go            # معالج مستقل لكل طلب API محدد (مثال: create_account_handler.go)
+├── usecase_<action>.go            # ملف مستقل لكل حالة استخدام (مثال: usecase_open_account.go)
+├── usecase_<action>test.go       # اختبارات الوحدة المعزولة لكل حالة استخدام
+├── handlers.go                     # البنية الرئيسية للـ HTTP Handler وتسجيل المسارات (Chi Router)
+├── handler_<action>.go            # معالج مستقل لكل طلب API محدد (مثال: handler_create_account.go)
 └── internal/                      # تغليف كامل لتفاصيل الوصول للبيانات (محمي من الاستيراد الخارجي)
     ├── repository.go              # تنفيذ الـ Port المعرف في ports.go باستخدام pgxpool
     └── queries.go                 # استعلامات SQL وتعيين صفوف قاعدة البيانات
@@ -78,9 +78,9 @@ internal/features/<feature_name>/
 | `entity.go` | نماذج النطاق النقية وقواعد العمل الصلبة (Invariants) دون أي وسوم JSON أو تبعيات HTTP. |
 | `dto.go` | هياكل الإدخال والإخراج الخاصة ببروتوكول الـ API، وسوم الـ JSON، ودوال التحقق `Validate()`. |
 | `usecases.go` | الحاوية المجمعة لجميع حالات الاستخدام ومصنع التهيئة المركزي `NewUseCases()`. |
-| `*_usecase.go` | تنفيذ حالة استخدام واحدة محددة (`Execute`) مع كامل منطق الأعمال والتنسيق. |
+| `*usecase_<action>.go` | تنفيذ حالة استخدام واحدة محددة (`Execute`) مع كامل منطق الأعمال والتنسيق. |
 | `handler.go` | البنية المركزية لطبقة النقل، وتعريف الراوتر، ودالة `RegisterRoutes(r chi.Router)`. |
-| `*_handler.go` | معالجة طلب HTTP محدد: قراءة المدخلات، التحقق، استدعاء الـ UseCase، وتنسيق كود الاستجابة. |
+| `*handler_<action>.go` | معالجة طلب HTTP محدد: قراءة المدخلات، التحقق، استدعاء الـ UseCase، وتنسيق كود الاستجابة. |
 | `internal/repository.go` | المحول الواقعي (Adapter) الذي ينفذ واجهة الـ Port في قاعدة البيانات Postgres. |
 
 ---
@@ -268,7 +268,7 @@ func ToResponse(a *Account) AccountResponse {
 
 ---
 
-### الخطوة 5: حالات الاستخدام المستقلة (`usecases.go` & `<action>_usecase.go`)
+### الخطوة 5: حالات الاستخدام المستقلة (`usecases.go` & `usecase_<action>.go`)
 
 #### 1. الملف الرئيسي المجمع (`usecases.go`)
 
@@ -295,7 +295,7 @@ func NewUseCases(repo AccountRepository, logger *slog.Logger) *UseCases {
 }
 ```
 
-#### 2. حالة استخدام فتح حساب (`open_account_usecase.go`)
+#### 2. حالة استخدام فتح حساب (`usecase_open_account.go`)
 
 ```go
 package accounts
@@ -356,7 +356,7 @@ func generateAccountNumber() string {
 }
 ```
 
-#### 3. حالة استخدام الاستعلام عن حساب (`get_account_usecase.go`)
+#### 3. حالة استخدام الاستعلام عن حساب (`usecase_get_account.go`)
 
 ```go
 package accounts
@@ -501,7 +501,7 @@ func (r *postgresRepo) UpdateBalance(ctx context.Context, id uuid.UUID, delta fl
 
 ---
 
-### الخطوة 7: معالجات الـ HTTP المستقلة (`handler.go` & `<action>_handler.go`)
+### الخطوة 7: معالجات الـ HTTP المستقلة (`handler.go` & `handler_<action>.go`)
 
 #### 1. الهيكل الرئيسي للراوتر (`handler.go`)
 
@@ -530,7 +530,7 @@ func (h *Handler) RegisterRoutes(r chi.Router) {
 }
 ```
 
-#### 2. معالج إنشاء حساب (`create_account_handler.go`)
+#### 2. معالج إنشاء حساب (`handler_create_account.go`)
 
 ملف مخصص بالكامل لمعالجة هذا الطلب:
 
@@ -563,7 +563,7 @@ func (h *Handler) handleCreateAccount(w http.ResponseWriter, r *http.Request) {
 }
 ```
 
-#### 3. معالج استعلام الحساب (`get_account_handler.go`)
+#### 3. معالج استعلام الحساب (`handler_get_account.go`)
 
 ملف مخصص بالكامل لمعالجة طلب الاستعلام:
 
@@ -761,8 +761,8 @@ func TestOpenAccountUseCase_InvalidCurrency(t *testing.T) {
 - [ ] **ملف التوثيق:** توفر ملف `doc.go` يوثق حدود ومسؤوليات الميزة.
 - [ ] **المنافذ:** توفر ملف `ports.go` يحتوي على جميع الأنواع والواجهات المجردة (`Interfaces`).
 - [ ] **عزل كائنات النطاق والـ DTOs:** كائنات النطاق في `entity.go` معزولة تماماً عن كائنات الـ DTO في `dto.go`.
-- [ ] **تنسيق حالات الاستخدام:** تجميع الحالات في `usecases.go` مع تخصيص ملف مستقل لكل حالة ينتهي بـ `_usecase.go`.
-- [ ] **معالجات الطلبات:** تنظيم موجه الراوتر في `handler.go` مع تخصيص ملف مستقل لكل طلب ينتهي بـ `_handler.go`.
+- [ ] **تنسيق حالات الاستخدام:** تجميع الحالات في `usecases.go` مع تخصيص ملف مستقل لكل حالة ينتهي بـ `usecase_<action>.go`.
+- [ ] **معالجات الطلبات:** تنظيم موجه الراوتر في `handler.go` مع تخصيص ملف مستقل لكل طلب ينتهي بـ `handler_<action>.go`.
 - [ ] **عزل طبقة البيانات:** وضع استعلامات قاعدة البيانات و `pgxpool` داخل مجلد `internal/` الخاص بالميزة.
 - [ ] **قاعدة البيانات:** لا توجد استعلامات `JOIN` مباشرة مع جداول تابعة لميزات أخرى؛ الربط يتم عبر المعرفات UUID.
 - [ ] **واجهات المستهلك:** الالتزام بقاعدة `Accept interfaces, return structs` لمنع أي Import Cycle.
