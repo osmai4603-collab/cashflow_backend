@@ -70,6 +70,9 @@ var (
 	ErrFiscalYearNotClosable          = errors.New("accounting: fiscal year cannot be closed")
 	ErrAccountHasPostedMoves          = errors.New("accounting: account code and type are immutable after posting")
 	ErrAccountingActorRequired        = errors.New("accounting: authenticated actor is required")
+	ErrDuplicateJournalCode           = errors.New("accounting: duplicate journal code")
+	ErrJournalHasPostedMoves          = errors.New("accounting: journal code and type are immutable after posting moves")
+	ErrAuditIntegrityTampered         = errors.New("accounting: cryptographic audit chain integrity violation detected")
 )
 
 type Account struct {
@@ -158,6 +161,14 @@ type SubledgerEventMapping struct {
 	CreditAccountID uuid.UUID
 	Description     string
 	IsActive        bool
+}
+
+type ProcessedEventSummary struct {
+	ID             uuid.UUID
+	IdempotencyKey string
+	EventType      string
+	MoveID         uuid.UUID
+	ProcessedAt    time.Time
 }
 
 type AccountingConfiguration struct {

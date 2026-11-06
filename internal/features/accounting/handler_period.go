@@ -53,6 +53,47 @@ func (h *PeriodHandler) HandleListJournals(w http.ResponseWriter, r *http.Reques
 	writeJSON(w, http.StatusOK, response)
 }
 
+func (h *PeriodHandler) HandleCreateJournal(w http.ResponseWriter, r *http.Request) {
+	var request CreateJournalRequest
+	if err := decodeJSON(r, &request); err != nil {
+		writeBadRequest(w, r, h.logger, err)
+		return
+	}
+	if err := request.Validate(); err != nil {
+		writeValidationError(w, r, h.logger, err)
+		return
+	}
+	response, err := h.uc.CreateJournal.Execute(r.Context(), request)
+	if err != nil {
+		writeAccountingError(w, r, h.logger, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, response)
+}
+
+func (h *PeriodHandler) HandleUpdateJournal(w http.ResponseWriter, r *http.Request) {
+	journalID, err := parseRouteUUID(r, "id")
+	if err != nil {
+		writeBadRequest(w, r, h.logger, err)
+		return
+	}
+	var request UpdateJournalRequest
+	if err := decodeJSON(r, &request); err != nil {
+		writeBadRequest(w, r, h.logger, err)
+		return
+	}
+	if err := request.Validate(); err != nil {
+		writeValidationError(w, r, h.logger, err)
+		return
+	}
+	response, err := h.uc.UpdateJournal.Execute(r.Context(), journalID, request)
+	if err != nil {
+		writeAccountingError(w, r, h.logger, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, response)
+}
+
 func (h *PeriodHandler) HandleCloseYear(w http.ResponseWriter, r *http.Request) {
 	fiscalYearID, err := parseRouteUUID(r, "id")
 	if err != nil {

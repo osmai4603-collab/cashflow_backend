@@ -206,3 +206,49 @@ func (h *MoveHandler) HandleReverse(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, response)
 }
+
+func (h *MoveHandler) HandleRevalueFX(w http.ResponseWriter, r *http.Request) {
+	var request RevalueFXRequest
+	if err := decodeJSON(r, &request); err != nil {
+		writeBadRequest(w, r, h.logger, err)
+		return
+	}
+	if err := request.Validate(); err != nil {
+		writeValidationError(w, r, h.logger, err)
+		return
+	}
+	asOf, err := parseDate(request.AsOf, "as_of")
+	if err != nil {
+		writeBadRequest(w, r, h.logger, err)
+		return
+	}
+	response, err := h.uc.RevalueFX.Execute(r.Context(), asOf)
+	if err != nil {
+		writeAccountingError(w, r, h.logger, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, response)
+}
+
+func (h *MoveHandler) HandleBulkPost(w http.ResponseWriter, r *http.Request) {
+	actorID, err := actorIDFromRequest(r)
+	if err != nil {
+		platformerr.WriteHTTPError(w, r, platformerr.Unauthorized("accounting.actor", "invalid authenticated user", err), h.logger)
+		return
+	}
+	var request BulkPostMovesRequest
+	if err := decodeJSON(r, &request); err != nil {
+		writeBadRequest(w, r, h.logger, err)
+		return
+	}
+	if err := request.Validate(); err != nil {
+		writeValidationError(w, r, h.logger, err)
+		return
+	}
+	response, err := h.uc.BulkPostMoves.Execute(r.Context(), actorID, request.MoveIDs)
+	if err != nil {
+		writeAccountingError(w, r, h.logger, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, response)
+}

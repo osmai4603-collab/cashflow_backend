@@ -284,3 +284,50 @@ func (r *mockAccountingRepository) SaveProcessedEvent(_ context.Context, key, _ 
 	r.processedMoves[key] = r.move
 	return nil
 }
+
+func (r *mockAccountingRepository) CreateJournal(_ context.Context, journal *Journal) error {
+	r.journal = journal
+	return nil
+}
+
+func (r *mockAccountingRepository) UpdateJournal(_ context.Context, journal *Journal) error {
+	r.journal = journal
+	return nil
+}
+
+func (r *mockAccountingRepository) GetJournalByCode(_ context.Context, code string) (*Journal, error) {
+	if r.journal != nil && r.journal.Code == code {
+		return r.journal, nil
+	}
+	return nil, ErrJournalNotFound
+}
+
+func (r *mockAccountingRepository) UpdateAccountingConfiguration(_ context.Context, config *AccountingConfiguration) error {
+	r.configuration = config
+	return nil
+}
+
+func (r *mockAccountingRepository) ListProcessedEvents(_ context.Context, limit, offset int) ([]*ProcessedEventSummary, int, error) {
+	return nil, 0, nil
+}
+
+func (r *mockAccountingRepository) ListSubledgerEventMappings(_ context.Context) ([]*SubledgerEventMapping, error) {
+	mappings := make([]*SubledgerEventMapping, 0, len(r.eventMappings))
+	for _, m := range r.eventMappings {
+		mappings = append(mappings, m)
+	}
+	return mappings, nil
+}
+
+func (r *mockAccountingRepository) SaveSubledgerEventMapping(_ context.Context, mapping *SubledgerEventMapping) error {
+	r.eventMappings[mapping.EventType] = mapping
+	return nil
+}
+
+func (r *mockAccountingRepository) VerifyAuditIntegrity(_ context.Context) (bool, error) {
+	return true, nil
+}
+
+func (r *mockAccountingRepository) ListFinancialAuditLogs(_ context.Context, limit, offset int) ([]*FinancialAuditLog, int, error) {
+	return nil, 0, nil
+}

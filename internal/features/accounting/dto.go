@@ -708,3 +708,257 @@ func cloneTime(value *time.Time) *time.Time {
 	copy := *value
 	return &copy
 }
+
+type CreateJournalRequest struct {
+	Code           string `json:"code"`
+	Name           string `json:"name"`
+	Type           string `json:"type"`
+	SequencePrefix string `json:"sequence_prefix"`
+}
+
+func (r *CreateJournalRequest) Validate() error {
+	r.Code = strings.ToUpper(strings.TrimSpace(r.Code))
+	r.Name = strings.TrimSpace(r.Name)
+	r.Type = strings.ToLower(strings.TrimSpace(r.Type))
+	r.SequencePrefix = strings.TrimSpace(r.SequencePrefix)
+	if r.Code == "" {
+		return errors.New("code is required")
+	}
+	if len(r.Code) > 10 {
+		return errors.New("code must not exceed 10 characters")
+	}
+	if r.Name == "" {
+		return errors.New("name is required")
+	}
+	switch r.Type {
+	case "general", "bank", "cash", "sale", "purchase":
+	default:
+		return errors.New("invalid journal type; must be one of: general, bank, cash, sale, purchase")
+	}
+	if r.SequencePrefix == "" {
+		return errors.New("sequence_prefix is required")
+	}
+	return nil
+}
+
+type UpdateJournalRequest struct {
+	Name           string `json:"name"`
+	SequencePrefix string `json:"sequence_prefix"`
+	IsActive       *bool  `json:"is_active,omitempty"`
+}
+
+func (r *UpdateJournalRequest) Validate() error {
+	r.Name = strings.TrimSpace(r.Name)
+	r.SequencePrefix = strings.TrimSpace(r.SequencePrefix)
+	if r.Name == "" {
+		return errors.New("name is required")
+	}
+	if r.SequencePrefix == "" {
+		return errors.New("sequence_prefix is required")
+	}
+	return nil
+}
+
+type AccountingConfigurationResponse struct {
+	RetainedEarningsAccountID uuid.UUID `json:"retained_earnings_account_id"`
+	FXGainAccountID           uuid.UUID `json:"fx_gain_account_id"`
+	FXLossAccountID           uuid.UUID `json:"fx_loss_account_id"`
+	FXReconciliationJournalID uuid.UUID `json:"fx_reconciliation_journal_id"`
+	FunctionalCurrency        string    `json:"functional_currency"`
+}
+
+func ToAccountingConfigurationResponse(c *AccountingConfiguration) AccountingConfigurationResponse {
+	if c == nil {
+		return AccountingConfigurationResponse{}
+	}
+	return AccountingConfigurationResponse{
+		RetainedEarningsAccountID: c.RetainedEarningsAccountID,
+		FXGainAccountID:           c.FXGainAccountID,
+		FXLossAccountID:           c.FXLossAccountID,
+		FXReconciliationJournalID: c.FXReconciliationJournalID,
+		FunctionalCurrency:        c.FunctionalCurrency,
+	}
+}
+
+type UpdateAccountingConfigurationRequest struct {
+	RetainedEarningsAccountID uuid.UUID `json:"retained_earnings_account_id"`
+	FXGainAccountID           uuid.UUID `json:"fx_gain_account_id"`
+	FXLossAccountID           uuid.UUID `json:"fx_loss_account_id"`
+	FXReconciliationJournalID uuid.UUID `json:"fx_reconciliation_journal_id"`
+	FunctionalCurrency        string    `json:"functional_currency"`
+}
+
+func (r *UpdateAccountingConfigurationRequest) Validate() error {
+	if r.RetainedEarningsAccountID == uuid.Nil {
+		return errors.New("retained_earnings_account_id is required")
+	}
+	if r.FXGainAccountID == uuid.Nil {
+		return errors.New("fx_gain_account_id is required")
+	}
+	if r.FXLossAccountID == uuid.Nil {
+		return errors.New("fx_loss_account_id is required")
+	}
+	if r.FXReconciliationJournalID == uuid.Nil {
+		return errors.New("fx_reconciliation_journal_id is required")
+	}
+	currency, err := normalizeCurrency(r.FunctionalCurrency, "SAR")
+	if err != nil {
+		return err
+	}
+	r.FunctionalCurrency = currency
+	return nil
+}
+
+type AuditIntegrityResponse struct {
+	IsValid   bool      `json:"is_valid"`
+	Reason    string    `json:"reason,omitempty"`
+	CheckedAt time.Time `json:"checked_at"`
+}
+
+type FinancialAuditLogResponse struct {
+	ID              int64     `json:"id"`
+	EntityType      string    `json:"entity_type"`
+	EntityID        uuid.UUID `json:"entity_id"`
+	Action          string    `json:"action"`
+	ActorID         uuid.UUID `json:"actor_id"`
+	PayloadAfter    string    `json:"payload_after,omitempty"`
+	PreviousLogHash string    `json:"previous_log_hash,omitempty"`
+	CurrentLogHash  string    `json:"current_log_hash"`
+	Timestamp       time.Time `json:"timestamp"`
+}
+
+type ListAuditLogsResponse struct {
+	Logs   []FinancialAuditLogResponse `json:"logs"`
+	Total  int                         `json:"total"`
+	Limit  int                         `json:"limit"`
+	Offset int                         `json:"offset"`
+}
+
+func ToFinancialAuditLogResponse(l *FinancialAuditLog) FinancialAuditLogResponse {
+	if l == nil {
+		return FinancialAuditLogResponse{}
+	}
+	return FinancialAuditLogResponse{
+		ID:              l.ID,
+		EntityType:      l.EntityType,
+		EntityID:        l.EntityID,
+		Action:          l.Action,
+		ActorID:         l.ActorID,
+		PayloadAfter:    string(l.PayloadAfter),
+		PreviousLogHash: l.PreviousLogHash,
+		CurrentLogHash:  l.CurrentLogHash,
+		Timestamp:       l.Timestamp,
+	}
+}
+
+type SubledgerEventMappingResponse struct {
+	EventType       string    `json:"event_type"`
+	JournalID       uuid.UUID `json:"journal_id"`
+	DebitAccountID  uuid.UUID `json:"debit_account_id"`
+	CreditAccountID uuid.UUID `json:"credit_account_id"`
+	Description     string    `json:"description,omitempty"`
+	IsActive        bool      `json:"is_active"`
+}
+
+func ToSubledgerEventMappingResponse(m *SubledgerEventMapping) SubledgerEventMappingResponse {
+	if m == nil {
+		return SubledgerEventMappingResponse{}
+	}
+	return SubledgerEventMappingResponse{
+		EventType:       m.EventType,
+		JournalID:       m.JournalID,
+		DebitAccountID:  m.DebitAccountID,
+		CreditAccountID: m.CreditAccountID,
+		Description:     m.Description,
+		IsActive:        m.IsActive,
+	}
+}
+
+type SaveSubledgerEventMappingRequest struct {
+	EventType       string    `json:"event_type"`
+	JournalID       uuid.UUID `json:"journal_id"`
+	DebitAccountID  uuid.UUID `json:"debit_account_id"`
+	CreditAccountID uuid.UUID `json:"credit_account_id"`
+	Description     string    `json:"description,omitempty"`
+	IsActive        bool      `json:"is_active"`
+}
+
+func (r *SaveSubledgerEventMappingRequest) Validate() error {
+	r.EventType = strings.TrimSpace(r.EventType)
+	if r.EventType == "" {
+		return errors.New("event_type is required")
+	}
+	if r.JournalID == uuid.Nil {
+		return errors.New("journal_id is required")
+	}
+	if r.DebitAccountID == uuid.Nil {
+		return errors.New("debit_account_id is required")
+	}
+	if r.CreditAccountID == uuid.Nil {
+		return errors.New("credit_account_id is required")
+	}
+	return nil
+}
+
+type ProcessedEventSummaryResponse struct {
+	ID             uuid.UUID `json:"id"`
+	IdempotencyKey string    `json:"idempotency_key"`
+	EventType      string    `json:"event_type"`
+	MoveID         uuid.UUID `json:"move_id"`
+	ProcessedAt    time.Time `json:"processed_at"`
+}
+
+type ListProcessedEventsResponse struct {
+	Events []ProcessedEventSummaryResponse `json:"events"`
+	Total  int                             `json:"total"`
+	Limit  int                             `json:"limit"`
+	Offset int                             `json:"offset"`
+}
+
+func ToProcessedEventSummaryResponse(e *ProcessedEventSummary) ProcessedEventSummaryResponse {
+	if e == nil {
+		return ProcessedEventSummaryResponse{}
+	}
+	return ProcessedEventSummaryResponse{
+		ID:             e.ID,
+		IdempotencyKey: e.IdempotencyKey,
+		EventType:      e.EventType,
+		MoveID:         e.MoveID,
+		ProcessedAt:    e.ProcessedAt,
+	}
+}
+
+type RevalueFXRequest struct {
+	AsOf string `json:"as_of"`
+}
+
+func (r *RevalueFXRequest) Validate() error {
+	if strings.TrimSpace(r.AsOf) == "" {
+		return errors.New("as_of date is required")
+	}
+	if _, err := parseDate(r.AsOf, "as_of"); err != nil {
+		return err
+	}
+	return nil
+}
+
+type BulkPostMovesRequest struct {
+	MoveIDs []uuid.UUID `json:"move_ids"`
+}
+
+func (r *BulkPostMovesRequest) Validate() error {
+	if len(r.MoveIDs) == 0 {
+		return errors.New("move_ids cannot be empty")
+	}
+	for _, id := range r.MoveIDs {
+		if id == uuid.Nil {
+			return errors.New("move_id must be a valid UUID")
+		}
+	}
+	return nil
+}
+
+type BulkPostMovesResponse struct {
+	PostedCount int            `json:"posted_count"`
+	Moves       []MoveResponse `json:"moves"`
+}

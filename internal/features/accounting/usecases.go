@@ -15,6 +15,8 @@ type UseCases struct {
 	DeleteDraftMove         *DeleteDraftMoveUseCase
 	ListMoves               *ListMovesUseCase
 	ListJournals            *ListJournalsUseCase
+	CreateJournal           *CreateJournalUseCase
+	UpdateJournal           *UpdateJournalUseCase
 	ListFiscalYears         *ListFiscalYearsUseCase
 	CloseFiscalYear         *CloseFiscalYearUseCase
 	ListAccounts            *ListAccountsUseCase
@@ -24,6 +26,7 @@ type UseCases struct {
 	ChangePeriodState       *ChangePeriodStateUseCase
 	CreateDraftMove         *CreateDraftMoveUseCase
 	PostMove                *PostMoveUseCase
+	BulkPostMoves           *BulkPostMovesUseCase
 	ReverseMove             *ReverseMoveUseCase
 	RevalueFX               *RevalueFXUseCase
 	GenerateTrialBalance    *GenerateTrialBalanceUseCase
@@ -35,6 +38,13 @@ type UseCases struct {
 	UnreconcileMoveLines    *UnreconcileMoveLinesUseCase
 	ListUnreconciledLines   *ListUnreconciledLinesUseCase
 	IngestSubledgerEvent    *IngestSubledgerEventUseCase
+	GetAccountingConfiguration    *GetAccountingConfigurationUseCase
+	UpdateAccountingConfiguration *UpdateAccountingConfigurationUseCase
+	VerifyAuditIntegrity          *VerifyAuditIntegrityUseCase
+	ListAuditLogs                 *ListAuditLogsUseCase
+	ListSubledgerMappings         *ListSubledgerMappingsUseCase
+	SaveSubledgerMapping          *SaveSubledgerMappingUseCase
+	ListSubledgerEvents           *ListSubledgerEventsUseCase
 }
 
 func NewUseCases(repo AccountingRepository, publisher EventPublisher, logger *slog.Logger) *UseCases {
@@ -87,6 +97,7 @@ func newUseCases(
 		logger = slog.Default()
 	}
 	logger = logger.With(slog.String("feature", "accounting"))
+	postMoveUC := newPostMoveUseCase(repo, publisher, settings, logger)
 	return &UseCases{
 		CreateAccount:           NewCreateAccountUseCase(repo, logger),
 		UpdateAccount:           NewUpdateAccountUseCase(repo, logger),
@@ -94,6 +105,8 @@ func newUseCases(
 		DeleteDraftMove:         NewDeleteDraftMoveUseCase(repo),
 		ListMoves:               NewListMovesUseCase(repo),
 		ListJournals:            NewListJournalsUseCase(repo),
+		CreateJournal:           NewCreateJournalUseCase(repo, logger),
+		UpdateJournal:           NewUpdateJournalUseCase(repo, logger),
 		ListFiscalYears:         NewListFiscalYearsUseCase(repo),
 		CloseFiscalYear:         NewCloseFiscalYearUseCase(repo),
 		ListAccounts:            NewListAccountsUseCase(repo, logger),
@@ -102,7 +115,8 @@ func newUseCases(
 		CreateFiscalYear:        NewCreateFiscalYearUseCase(repo, logger),
 		ChangePeriodState:       NewChangePeriodStateUseCase(repo, logger),
 		CreateDraftMove:         NewCreateDraftMoveUseCase(repo, logger),
-		PostMove:                newPostMoveUseCase(repo, publisher, settings, logger),
+		PostMove:                postMoveUC,
+		BulkPostMoves:           NewBulkPostMovesUseCase(postMoveUC, logger),
 		ReverseMove:             NewReverseMoveUseCase(repo, publisher, logger),
 		RevalueFX:               NewRevalueFXUseCase(repo, fxProvider, logger),
 		GenerateTrialBalance:    NewGenerateTrialBalanceUseCase(repo, logger),
@@ -114,6 +128,13 @@ func newUseCases(
 		UnreconcileMoveLines:    NewUnreconcileMoveLinesUseCase(repo),
 		ListUnreconciledLines:   NewListUnreconciledLinesUseCase(repo),
 		IngestSubledgerEvent:    NewIngestSubledgerEventUseCaseWithRates(repo, rates, settings.FunctionalCurrency, logger),
+		GetAccountingConfiguration:    NewGetAccountingConfigurationUseCase(repo),
+		UpdateAccountingConfiguration: NewUpdateAccountingConfigurationUseCase(repo, logger),
+		VerifyAuditIntegrity:          NewVerifyAuditIntegrityUseCase(repo),
+		ListAuditLogs:                 NewListAuditLogsUseCase(repo),
+		ListSubledgerMappings:         NewListSubledgerMappingsUseCase(repo),
+		SaveSubledgerMapping:          NewSaveSubledgerMappingUseCase(repo),
+		ListSubledgerEvents:           NewListSubledgerEventsUseCase(repo),
 	}
 }
 

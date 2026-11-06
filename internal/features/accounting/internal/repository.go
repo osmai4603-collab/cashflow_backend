@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strings"
 	"time"
 
 	"cashflow_backend/internal/features/accounting"
@@ -226,6 +227,56 @@ func (r *PostgresRepository) GetSubledgerEventMapping(ctx context.Context, event
 	return &mapping, nil
 }
 
+func (r *PostgresRepository) ListSubledgerEventMappings(ctx context.Context) ([]*accounting.SubledgerEventMapping, error) {
+	const query = `
+		SELECT event_type, journal_id, debit_account_id, credit_account_id,
+			COALESCE(description, ''), is_active
+		FROM subledger_event_mappings
+		ORDER BY event_type`
+	rows, err := r.pool.Query(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("list subledger event mappings: %w", err)
+	}
+	defer rows.Close()
+	mappings := make([]*accounting.SubledgerEventMapping, 0)
+	for rows.Next() {
+		var m accounting.SubledgerEventMapping
+		if err := rows.Scan(
+			&m.EventType, &m.JournalID, &m.DebitAccountID,
+			&m.CreditAccountID, &m.Description, &m.IsActive,
+		); err != nil {
+			return nil, fmt.Errorf("scan subledger event mapping: %w", err)
+		}
+		mappings = append(mappings, &m)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate subledger event mappings: %w", err)
+	}
+	return mappings, nil
+}
+
+func (r *PostgresRepository) SaveSubledgerEventMapping(ctx context.Context, mapping *accounting.SubledgerEventMapping) error {
+	const query = `
+		INSERT INTO subledger_event_mappings (
+			event_type, journal_id, debit_account_id, credit_account_id, description, is_active, updated_at
+		) VALUES ($1, $2, $3, $4, $5, $6, NOW())
+		ON CONFLICT (event_type) DO UPDATE SET
+			journal_id = EXCLUDED.journal_id,
+			debit_account_id = EXCLUDED.debit_account_id,
+			credit_account_id = EXCLUDED.credit_account_id,
+			description = EXCLUDED.description,
+			is_active = EXCLUDED.is_active,
+			updated_at = NOW()`
+	_, err := r.pool.Exec(ctx, query,
+		mapping.EventType, mapping.JournalID, mapping.DebitAccountID,
+		mapping.CreditAccountID, mapping.Description, mapping.IsActive,
+	)
+	if err != nil {
+		return fmt.Errorf("save subledger event mapping: %w", err)
+	}
+	return nil
+}
+
 func (r *PostgresRepository) GetAccountingConfiguration(ctx context.Context) (*accounting.AccountingConfiguration, error) {
 	const query = `
 		SELECT retained_earnings_account_id, fx_gain_account_id, fx_loss_account_id,
@@ -245,6 +296,23 @@ func (r *PostgresRepository) GetAccountingConfiguration(ctx context.Context) (*a
 		return nil, fmt.Errorf("get accounting configuration: %w", err)
 	}
 	return &configuration, nil
+}
+
+func (r *PostgresRepository) UpdateAccountingConfiguration(ctx context.Context, config *accounting.AccountingConfiguration) error {
+	const query = `
+		INSERT INTO accounting_configurations (
+			retained_earnings_account_id, fx_gain_account_id, fx_loss_account_id,
+			fx_reconciliation_journal_id, functional_currency, updated_at
+		) VALUES ($1, $2, $3, $4, $5, $6)`
+	now := time.Now().UTC()
+	_, err := r.pool.Exec(ctx, query,
+		config.RetainedEarningsAccountID, config.FXGainAccountID, config.FXLossAccountID,
+		config.FXReconciliationJournalID, config.FunctionalCurrency, now,
+	)
+	if err != nil {
+		return fmt.Errorf("update accounting configuration: %w", err)
+	}
+	return nil
 }
 
 func (r *PostgresRepository) CreateFiscalYear(ctx context.Context, year *accounting.FiscalYear, periods []*accounting.FiscalPeriod) error {
@@ -429,6 +497,65 @@ func (r *PostgresRepository) ListFiscalYears(ctx context.Context) ([]*accounting
 		periodRows.Close()
 	}
 	return summaries, nil
+}
+
+func (r *PostgresRepository) CreateJournal(ctx context.Context, journal *accounting.Journal) error {
+	if journal.ID == uuid.Nil {
+		journal.ID = uuid.New()
+	}
+	if journal.CreatedAt.IsZero() {
+		journal.CreatedAt = time.Now().UTC()
+	}
+	if journal.NextNumber < 1 {
+		journal.NextNumber = 1
+	}
+	const query = `
+		INSERT INTO journals (id, code, name, type, sequence_prefix, next_number, is_active, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`
+	_, err := r.pool.Exec(ctx, query,
+		journal.ID, journal.Code, journal.Name, journal.Type,
+		journal.SequencePrefix, journal.NextNumber, journal.IsActive, journal.CreatedAt,
+	)
+	if err != nil {
+		if strings.Contains(err.Error(), "duplicate key") || strings.Contains(err.Error(), "unique constraint") {
+			return accounting.ErrDuplicateJournalCode
+		}
+		return fmt.Errorf("create journal: %w", err)
+	}
+	return nil
+}
+
+func (r *PostgresRepository) UpdateJournal(ctx context.Context, journal *accounting.Journal) error {
+	const query = `
+		UPDATE journals
+		SET name = $2, sequence_prefix = $3, is_active = $4
+		WHERE id = $1`
+	tag, err := r.pool.Exec(ctx, query, journal.ID, journal.Name, journal.SequencePrefix, journal.IsActive)
+	if err != nil {
+		return fmt.Errorf("update journal: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return accounting.ErrJournalNotFound
+	}
+	return nil
+}
+
+func (r *PostgresRepository) GetJournalByCode(ctx context.Context, code string) (*accounting.Journal, error) {
+	const query = `
+		SELECT id, code, name, type, sequence_prefix, next_number, is_active, created_at
+		FROM journals WHERE code = $1`
+	var journal accounting.Journal
+	err := r.pool.QueryRow(ctx, query, code).Scan(
+		&journal.ID, &journal.Code, &journal.Name, &journal.Type, &journal.SequencePrefix,
+		&journal.NextNumber, &journal.IsActive, &journal.CreatedAt,
+	)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, accounting.ErrJournalNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("get journal by code: %w", err)
+	}
+	return &journal, nil
 }
 
 func (r *PostgresRepository) GetJournalByID(ctx context.Context, id uuid.UUID) (*accounting.Journal, error) {
@@ -974,6 +1101,91 @@ func (r *PostgresRepository) SaveProcessedEvent(ctx context.Context, key, eventT
 		return fmt.Errorf("save processed event: %w", err)
 	}
 	return nil
+}
+
+func (r *PostgresRepository) ListProcessedEvents(ctx context.Context, limit, offset int) ([]*accounting.ProcessedEventSummary, int, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+	if limit > 200 {
+		limit = 200
+	}
+	if offset < 0 {
+		offset = 0
+	}
+	var total int
+	if err := r.pool.QueryRow(ctx, `SELECT COUNT(*) FROM subledger_processed_events`).Scan(&total); err != nil {
+		return nil, 0, fmt.Errorf("count processed events: %w", err)
+	}
+	const query = `
+		SELECT id, idempotency_key, event_type, move_id, processed_at
+		FROM subledger_processed_events
+		ORDER BY processed_at DESC
+		LIMIT $1 OFFSET $2`
+	rows, err := r.pool.Query(ctx, query, limit, offset)
+	if err != nil {
+		return nil, 0, fmt.Errorf("list processed events: %w", err)
+	}
+	defer rows.Close()
+	events := make([]*accounting.ProcessedEventSummary, 0)
+	for rows.Next() {
+		var e accounting.ProcessedEventSummary
+		if err := rows.Scan(&e.ID, &e.IdempotencyKey, &e.EventType, &e.MoveID, &e.ProcessedAt); err != nil {
+			return nil, 0, fmt.Errorf("scan processed event: %w", err)
+		}
+		events = append(events, &e)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, fmt.Errorf("iterate processed events: %w", err)
+	}
+	return events, total, nil
+}
+
+func (r *PostgresRepository) ListFinancialAuditLogs(ctx context.Context, limit, offset int) ([]*accounting.FinancialAuditLog, int, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+	if limit > 200 {
+		limit = 200
+	}
+	if offset < 0 {
+		offset = 0
+	}
+	var total int
+	if err := r.pool.QueryRow(ctx, `SELECT COUNT(*) FROM financial_audit_logs`).Scan(&total); err != nil {
+		return nil, 0, fmt.Errorf("count financial audit logs: %w", err)
+	}
+	const query = `
+		SELECT id, entity_type, entity_id, action, actor_id,
+			COALESCE(payload_after::text, ''),
+			COALESCE(previous_log_hash, ''), current_log_hash, timestamp
+		FROM financial_audit_logs
+		ORDER BY id DESC
+		LIMIT $1 OFFSET $2`
+	rows, err := r.pool.Query(ctx, query, limit, offset)
+	if err != nil {
+		return nil, 0, fmt.Errorf("list financial audit logs: %w", err)
+	}
+	defer rows.Close()
+	logs := make([]*accounting.FinancialAuditLog, 0)
+	for rows.Next() {
+		var log accounting.FinancialAuditLog
+		var payloadText string
+		if err := rows.Scan(
+			&log.ID, &log.EntityType, &log.EntityID, &log.Action, &log.ActorID,
+			&payloadText, &log.PreviousLogHash, &log.CurrentLogHash, &log.Timestamp,
+		); err != nil {
+			return nil, 0, fmt.Errorf("scan financial audit log: %w", err)
+		}
+		if payloadText != "" {
+			log.PayloadAfter = []byte(payloadText)
+		}
+		logs = append(logs, &log)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, fmt.Errorf("iterate financial audit logs: %w", err)
+	}
+	return logs, total, nil
 }
 
 func scanAccount(row pgx.Row) (*accounting.Account, error) {

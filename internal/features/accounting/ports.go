@@ -25,7 +25,10 @@ type AccountingRepository interface {
 	GetPeriodByID(ctx context.Context, id uuid.UUID) (*FiscalPeriod, error)
 	UpdatePeriodState(ctx context.Context, id uuid.UUID, state PeriodState, actorID uuid.UUID) error
 
+	CreateJournal(ctx context.Context, journal *Journal) error
+	UpdateJournal(ctx context.Context, journal *Journal) error
 	GetJournalByID(ctx context.Context, id uuid.UUID) (*Journal, error)
+	GetJournalByCode(ctx context.Context, code string) (*Journal, error)
 	ListJournals(ctx context.Context) ([]*Journal, error)
 	GetNextSequenceWithLock(ctx context.Context, tx pgx.Tx, journalID uuid.UUID) (string, error)
 
@@ -43,12 +46,20 @@ type AccountingRepository interface {
 	GetGeneralLedgerLines(ctx context.Context, accountID uuid.UUID, fromDate, toDate time.Time) ([]*GeneralLedgerLineRow, error)
 	GetFXMonetaryBalances(ctx context.Context, asOf time.Time) ([]*FXMonetaryBalance, error)
 	GetAccountingConfiguration(ctx context.Context) (*AccountingConfiguration, error)
+	UpdateAccountingConfiguration(ctx context.Context, config *AccountingConfiguration) error
 	ReconcileMoveLines(ctx context.Context, date time.Time, actorID, accountID uuid.UUID, currencyID string, allocations []ReconciliationAllocation) (uuid.UUID, error)
 	UnreconcileMoveLines(ctx context.Context, reconciliationID uuid.UUID, date time.Time, actorID uuid.UUID) error
 	ListUnreconciledLines(ctx context.Context, filter UnreconciledLineFilter) ([]*UnreconciledLine, int, error)
 
 	GetProcessedEventMove(ctx context.Context, idempotencyKey string) (*AccountMove, error)
 	SaveProcessedEvent(ctx context.Context, key, eventType string, moveID uuid.UUID) error
+	ListProcessedEvents(ctx context.Context, limit, offset int) ([]*ProcessedEventSummary, int, error)
+
+	ListSubledgerEventMappings(ctx context.Context) ([]*SubledgerEventMapping, error)
+	SaveSubledgerEventMapping(ctx context.Context, mapping *SubledgerEventMapping) error
+
+	VerifyAuditIntegrity(ctx context.Context) (bool, error)
+	ListFinancialAuditLogs(ctx context.Context, limit, offset int) ([]*FinancialAuditLog, int, error)
 }
 
 // FXRevaluationProvider supplies the monetary positions and closing rates used

@@ -27,6 +27,8 @@ func RegisterRoutes(r chi.Router, uc *UseCases, logger *slog.Logger) {
 	reportHandler := NewReportHandler(uc, logger)
 	subledgerHandler := NewSubledgerHandler(uc, logger)
 	reconciliationHandler := NewReconciliationHandler(uc, logger)
+	configHandler := NewConfigurationHandler(uc, logger)
+	governanceHandler := NewGovernanceHandler(uc, logger)
 
 	r.Route("/api/v1/accounting", func(sub chi.Router) {
 		sub.Post("/accounts", accountHandler.HandleCreate)
@@ -39,6 +41,8 @@ func RegisterRoutes(r chi.Router, uc *UseCases, logger *slog.Logger) {
 		sub.Post("/fiscal-years/{id}/close", periodHandler.HandleCloseYear)
 		sub.Post("/fiscal-periods/{id}/state", periodHandler.HandleChangeState)
 		sub.Get("/journals", periodHandler.HandleListJournals)
+		sub.Post("/journals", periodHandler.HandleCreateJournal)
+		sub.Put("/journals/{id}", periodHandler.HandleUpdateJournal)
 
 		sub.Post("/moves", moveHandler.HandleCreateDraft)
 		sub.Get("/moves", moveHandler.HandleList)
@@ -47,16 +51,29 @@ func RegisterRoutes(r chi.Router, uc *UseCases, logger *slog.Logger) {
 		sub.Delete("/moves/{id}", moveHandler.HandleDeleteDraft)
 		sub.Post("/moves/{id}/post", moveHandler.HandlePost)
 		sub.Post("/moves/{id}/reverse", moveHandler.HandleReverse)
+		sub.Post("/moves/bulk-post", moveHandler.HandleBulkPost)
+		sub.Post("/fx/revalue", moveHandler.HandleRevalueFX)
 
 		sub.Get("/reports/trial-balance", reportHandler.HandleTrialBalance)
 		sub.Get("/reports/income-statement", reportHandler.HandleIncomeStatement)
 		sub.Get("/reports/balance-sheet", reportHandler.HandleBalanceSheet)
 		sub.Get("/reports/cash-flow", reportHandler.HandleCashFlow)
 		sub.Get("/reports/general-ledger", reportHandler.HandleGeneralLedger)
+
 		sub.Post("/subledger/events", subledgerHandler.HandleIngest)
+		sub.Get("/subledger/events", subledgerHandler.HandleListEvents)
+		sub.Get("/subledger/mappings", subledgerHandler.HandleListMappings)
+		sub.Post("/subledger/mappings", subledgerHandler.HandleSaveMapping)
+
 		sub.Post("/reconcile", reconciliationHandler.HandleReconcile)
 		sub.Post("/unreconcile", reconciliationHandler.HandleUnreconcile)
 		sub.Get("/unreconciled-lines", reconciliationHandler.HandleListUnreconciled)
+
+		sub.Get("/configurations", configHandler.HandleGet)
+		sub.Put("/configurations", configHandler.HandleUpdate)
+
+		sub.Get("/governance/verify-integrity", governanceHandler.HandleVerifyIntegrity)
+		sub.Get("/governance/audit-logs", governanceHandler.HandleListAuditLogs)
 	})
 }
 
@@ -79,6 +96,8 @@ func registerUnavailableRoutes(r chi.Router, logger *slog.Logger) {
 			{http.MethodPost, "/fiscal-years/{id}/close"},
 			{http.MethodPost, "/fiscal-periods/{id}/state"},
 			{http.MethodGet, "/journals"},
+			{http.MethodPost, "/journals"},
+			{http.MethodPut, "/journals/{id}"},
 			{http.MethodPost, "/moves"},
 			{http.MethodGet, "/moves"},
 			{http.MethodGet, "/moves/{id}"},
@@ -86,15 +105,24 @@ func registerUnavailableRoutes(r chi.Router, logger *slog.Logger) {
 			{http.MethodDelete, "/moves/{id}"},
 			{http.MethodPost, "/moves/{id}/post"},
 			{http.MethodPost, "/moves/{id}/reverse"},
+			{http.MethodPost, "/moves/bulk-post"},
+			{http.MethodPost, "/fx/revalue"},
 			{http.MethodGet, "/reports/trial-balance"},
 			{http.MethodGet, "/reports/income-statement"},
 			{http.MethodGet, "/reports/balance-sheet"},
 			{http.MethodGet, "/reports/cash-flow"},
 			{http.MethodGet, "/reports/general-ledger"},
 			{http.MethodPost, "/subledger/events"},
+			{http.MethodGet, "/subledger/events"},
+			{http.MethodGet, "/subledger/mappings"},
+			{http.MethodPost, "/subledger/mappings"},
 			{http.MethodPost, "/reconcile"},
 			{http.MethodPost, "/unreconcile"},
 			{http.MethodGet, "/unreconciled-lines"},
+			{http.MethodGet, "/configurations"},
+			{http.MethodPut, "/configurations"},
+			{http.MethodGet, "/governance/verify-integrity"},
+			{http.MethodGet, "/governance/audit-logs"},
 		} {
 			sub.Method(route.method, route.path, http.HandlerFunc(unavailable))
 		}
@@ -144,7 +172,9 @@ func writeAccountingError(w http.ResponseWriter, r *http.Request, logger *slog.L
 		errors.Is(err, ErrMakerCheckerViolation), errors.Is(err, ErrMakerCheckerCreatorRequired),
 		errors.Is(err, ErrAccountHasPostedMoves), errors.Is(err, ErrSubledgerMappingNotFound),
 		errors.Is(err, ErrExchangeRateMissing), errors.Is(err, ErrAccountingConfigurationMissing),
-		errors.Is(err, ErrAccountNotReconcilable), errors.Is(err, ErrFiscalYearNotClosable):
+		errors.Is(err, ErrAccountNotReconcilable), errors.Is(err, ErrFiscalYearNotClosable),
+		errors.Is(err, ErrDuplicateJournalCode), errors.Is(err, ErrJournalHasPostedMoves),
+		errors.Is(err, ErrAuditIntegrityTampered):
 		err = platformerr.Conflict("accounting", "accounting resource state conflicts with this operation", err)
 	case errors.Is(err, ErrReconciliationNotFound), errors.Is(err, ErrFiscalYearNotFound):
 		err = platformerr.NotFound("accounting", "requested accounting resource was not found", err)
